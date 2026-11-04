@@ -1044,7 +1044,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         }
                       }
                     },
-                    child: const Text('İnstagram kimi Paylaş', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    child: const Text('Paylaş', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -1173,7 +1173,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'Gördüyünüz işlərin şəkillərini İnstagram kimi paylaşaraq müştəri toplayın!',
+                      'Gördüyünüz işlərin foto və nümunələrini əlavə edərək müştəri toplayın!',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.grey, fontSize: 12),
                     ),
