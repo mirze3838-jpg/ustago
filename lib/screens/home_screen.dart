@@ -25,6 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedCity = 'Bakı';
   String? _currentUserRole;
   final TextEditingController _searchController = TextEditingController();
+  int _adminSecretTap = 0;
 
   @override
   void initState() {
@@ -1668,16 +1669,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 30),
           const Divider(),
-
-          // Admin Girişi
-          ListTile(
-            leading: const Icon(Icons.admin_panel_settings, color: Colors.amber, size: 26),
-            title: const Text('Admin Paneli Girişi', style: TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: const Text('Tətbiq rəhbərliyi üçün idarəetmə'),
-            trailing: const Icon(Icons.lock_outline, color: Colors.amber),
-            onTap: _showAdminAccessDialog,
-          ),
-          const Divider(),
           ListTile(
             leading: const Icon(Icons.help_outline),
             title: const Text('Kömək və Dəstək'),
@@ -1778,28 +1769,26 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 24),
 
-            // Admin Paneli
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.amber.shade300),
-              ),
-              child: ListTile(
-                leading: const Icon(Icons.security, color: Colors.amber, size: 26),
-                title: const Text('Admin İdarəetmə Paneli', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('Ustaları təsdiqlə və sistemi idarə et'),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.amber),
-                onTap: () {
-                  if (isAdmin) {
+            // Yalnız sistem rəhbəri (mirze3838@gmail.com və ya admin rolu olan) üçün Admin Paneli
+            if (isAdmin || (user.email != null && user.email!.toLowerCase() == 'mirze3838@gmail.com') || (userData?['role'] == 'admin')) ...[
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.shade300),
+                ),
+                child: ListTile(
+                  leading: const Icon(Icons.security, color: Colors.amber, size: 26),
+                  title: const Text('Admin İdarəetmə Paneli', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Ustaları təsdiqlə və sistemi idarə et'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.amber),
+                  onTap: () {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminScreen()));
-                  } else {
-                    _showAdminAccessDialog();
-                  }
-                },
+                  },
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
+            ],
 
             // İnstagram tərzi Portfólio / İşlərim bölməsi
             _buildInstagramGallery(user.uid, displayName, userRole),
@@ -1834,7 +1823,13 @@ class _HomeScreenState extends State<HomeScreen> {
               leading: const Icon(Icons.help_outline),
               title: const Text('Kömək və Dəstək'),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () {},
+              onTap: () {
+                _adminSecretTap++;
+                if (_adminSecretTap >= 5) {
+                  _adminSecretTap = 0;
+                  _showAdminAccessDialog();
+                }
+              },
             ),
             const Divider(),
             ListTile(
