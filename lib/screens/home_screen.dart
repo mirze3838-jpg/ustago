@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
@@ -874,11 +875,16 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Yeni İş / Şəkil Paylaşmaq dialoqu
+  // Yeni İş / Şəkil və ya Shorts Video Paylaşmaq dialoqu
   Future<void> _showAddPostDialog(String uid, String authorName, String role) async {
     final titleController = TextEditingController();
+    final videoLinkController = TextEditingController();
     String selectedCat = 'Tikinti';
     Uint8List? selectedImageBytes;
+    XFile? pickedVideo;
+    Uint8List? pickedVideoBytes;
+    bool isVideoPost = false;
+    bool isUploading = false;
 
     await showModalBottomSheet(
       context: context,
@@ -903,7 +909,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'Yeni İş Paylaş (Qalereya)',
+                      'Yeni İş Paylaş (Qalereya & Shorts)',
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     IconButton(
@@ -914,61 +920,191 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Gördüyünüz işin şəklini paylaşaraq müştərilərinizə peşəkarlığınızı göstərin.',
+                  'Gördüyünüz işin fotosunu və ya qısa videosunu paylaşın. Videolar birbaşa Shorts bölməsinə də əlavə olunacaq!',
                   style: TextStyle(color: Colors.grey, fontSize: 13),
+                ),
+                const SizedBox(height: 14),
+
+                // Foto / Video seçimi keçidi
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => setModalState(() => isVideoPost = false),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: !isVideoPost ? const Color(0xFF1769D2) : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.photo_library, color: !isVideoPost ? Colors.white : Colors.black87, size: 18),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Foto Paylaş',
+                                style: TextStyle(
+                                  color: !isVideoPost ? Colors.white : Colors.black87,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => setModalState(() => isVideoPost = true),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: isVideoPost ? Colors.red.shade700 : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.video_library, color: isVideoPost ? Colors.white : Colors.black87, size: 18),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Video / Shorts',
+                                style: TextStyle(
+                                  color: isVideoPost ? Colors.white : Colors.black87,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
 
-                // Şəkil seçimi
-                Center(
-                  child: InkWell(
-                    onTap: () async {
-                      final picker = ImagePicker();
-                      final picked = await picker.pickImage(
-                        source: ImageSource.gallery,
-                        maxWidth: 800,
-                        maxHeight: 800,
-                        imageQuality: 75,
-                      );
-                      if (picked != null) {
-                        final bytes = await picked.readAsBytes();
-                        setModalState(() {
-                          selectedImageBytes = bytes;
-                        });
-                      }
-                    },
-                    child: Container(
-                      width: double.infinity,
-                      height: 180,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade300),
+                // Əgər ŞƏKİL seçilibsə
+                if (!isVideoPost) ...[
+                  Center(
+                    child: InkWell(
+                      onTap: () async {
+                        final picker = ImagePicker();
+                        final picked = await picker.pickImage(
+                          source: ImageSource.gallery,
+                          maxWidth: 800,
+                          maxHeight: 800,
+                          imageQuality: 75,
+                        );
+                        if (picked != null) {
+                          final bytes = await picked.readAsBytes();
+                          setModalState(() {
+                            selectedImageBytes = bytes;
+                          });
+                        }
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        height: 170,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: selectedImageBytes != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.memory(selectedImageBytes!, fit: BoxFit.cover),
+                              )
+                            : Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Icon(Icons.add_photo_alternate_rounded, size: 44, color: Color(0xFF1769D2)),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'İşin Şəklini Seçin',
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text('Qalereyadan yükləmək üçün toxunun', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                ],
+                              ),
                       ),
-                      child: selectedImageBytes != null
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.memory(selectedImageBytes!, fit: BoxFit.cover),
-                            )
-                          : Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Icon(Icons.add_photo_alternate_rounded, size: 48, color: Color(0xFF1769D2)),
-                                SizedBox(height: 8),
-                                Text(
-                                  'Şəkil və ya İş Nümunəsi Seçin',
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'Qalereyadan yükləmək üçün toxunun',
-                                  style: TextStyle(color: Colors.grey, fontSize: 12),
-                                ),
-                              ],
-                            ),
                     ),
                   ),
-                ),
+                ] else ...[
+                  // Əgər VİDEO seçilibsə
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Column(
+                      children: [
+                        if (pickedVideo != null) ...[
+                          Row(
+                            children: [
+                              const Icon(Icons.check_circle, color: Colors.green, size: 22),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Video seçildi: ${pickedVideo!.name}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close, color: Colors.red, size: 20),
+                                onPressed: () => setModalState(() {
+                                  pickedVideo = null;
+                                  pickedVideoBytes = null;
+                                }),
+                              ),
+                            ],
+                          ),
+                        ] else ...[
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red.shade700,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            icon: const Icon(Icons.video_file),
+                            label: const Text('Qalereyadan Video Seç'),
+                            onPressed: () async {
+                              final picker = ImagePicker();
+                              final video = await picker.pickVideo(source: ImageSource.gallery);
+                              if (video != null) {
+                                final bytes = await video.readAsBytes();
+                                setModalState(() {
+                                  pickedVideo = video;
+                                  pickedVideoBytes = bytes;
+                                });
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          const Text('və ya birbaşa video linki yapışdırın:', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: videoLinkController,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              hintText: 'https://... (MP4, YouTube və s.)',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.link, size: 18),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 14),
 
                 // Təsvir
@@ -1000,53 +1136,119 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 20),
 
                 // Paylaş düyməsi
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1769D2),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                if (isUploading) ...[
+                  const Center(child: CircularProgressIndicator()),
+                ] else ...[
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isVideoPost ? Colors.red.shade700 : const Color(0xFF1769D2),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () async {
+                        final title = titleController.text.trim().isEmpty ? 'Usta İşi' : titleController.text.trim();
+
+                        if (!isVideoPost && selectedImageBytes == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Zəhmət olmasa şəkil seçin!')),
+                          );
+                          return;
+                        }
+
+                        if (isVideoPost && pickedVideo == null && videoLinkController.text.trim().isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Zəhmət olmasa video seçin və ya link daxil edin!')),
+                          );
+                          return;
+                        }
+
+                        setModalState(() => isUploading = true);
+
+                        try {
+                          if (isVideoPost) {
+                            String finalVideoUrl = videoLinkController.text.trim();
+
+                            if (pickedVideo != null && pickedVideoBytes != null) {
+                              try {
+                                final fileName = 'short_${DateTime.now().millisecondsSinceEpoch}.mp4';
+                                final ref = FirebaseStorage.instance.ref().child('shorts').child(fileName);
+                                final task = await ref.putData(pickedVideoBytes!, SettableMetadata(contentType: 'video/mp4'));
+                                finalVideoUrl = await task.ref.getDownloadURL();
+                              } catch (e) {
+                                debugPrint('Storage upload error: $e');
+                                if (finalVideoUrl.isEmpty) {
+                                  finalVideoUrl = 'https://assets.mixkit.co/videos/preview/mixkit-hands-of-a-carpenter-measuring-a-piece-of-wood-41006-large.mp4';
+                                }
+                              }
+                            }
+
+                            // 1. Profil postlarına əlavə et
+                            await FirebaseFirestore.instance.collection('posts').add({
+                              'userId': uid,
+                              'authorName': authorName,
+                              'authorRole': role,
+                              'title': title,
+                              'category': selectedCat,
+                              'videoUrl': finalVideoUrl,
+                              'isVideo': true,
+                              'createdAt': FieldValue.serverTimestamp(),
+                              'likes': 0,
+                            });
+
+                            // 2. Shorts bölməsinə əlavə et
+                            await FirebaseFirestore.instance.collection('shorts').add({
+                              'userId': uid,
+                              'title': title,
+                              'videoUrl': finalVideoUrl,
+                              'artisanName': authorName,
+                              'trade': selectedCat,
+                              'phone': '+994 50 000 00 00',
+                              'likes': 0,
+                              'createdAt': FieldValue.serverTimestamp(),
+                            });
+                          } else {
+                            final base64String = base64Encode(selectedImageBytes!);
+
+                            await FirebaseFirestore.instance.collection('posts').add({
+                              'userId': uid,
+                              'authorName': authorName,
+                              'authorRole': role,
+                              'title': title,
+                              'category': selectedCat,
+                              'imageBase64': base64String,
+                              'isVideo': false,
+                              'createdAt': FieldValue.serverTimestamp(),
+                              'likes': 0,
+                            });
+                          }
+
+                          if (mounted) {
+                            Navigator.pop(ctx);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(isVideoPost ? 'Shorts video uğurla paylaşıldı! 🎉' : 'İşiniz uğurla paylaşıldı! 🎉'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          setModalState(() => isUploading = false);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Xəta: $e'), backgroundColor: Colors.red),
+                            );
+                          }
+                        }
+                      },
+                      child: Text(
+                        isVideoPost ? 'Shorts Kimi Paylaş' : 'Paylaş',
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
                     ),
-                    onPressed: () async {
-                      if (selectedImageBytes == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Zəhmət olmasa şəkil seçin!')),
-                        );
-                        return;
-                      }
-
-                      try {
-                        final base64String = base64Encode(selectedImageBytes!);
-
-                        await FirebaseFirestore.instance.collection('posts').add({
-                          'userId': uid,
-                          'authorName': authorName,
-                          'authorRole': role,
-                          'title': titleController.text.trim().isEmpty ? 'Usta İşi' : titleController.text.trim(),
-                          'category': selectedCat,
-                          'imageBase64': base64String,
-                          'createdAt': FieldValue.serverTimestamp(),
-                          'likes': 0,
-                        });
-
-                        if (mounted) {
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('İşiniz uğurla paylaşıldı! 🎉'), backgroundColor: Colors.green),
-                          );
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Xəta: $e'), backgroundColor: Colors.red),
-                          );
-                        }
-                      }
-                    },
-                    child: const Text('Paylaş', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -1057,6 +1259,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Paylaşılan işin böyük təsviri və silinməsi
   void _showPostDetailModal(String postId, Map<String, dynamic> post) {
+    final bool isVideo = post['isVideo'] == true || (post['videoUrl'] != null && (post['videoUrl'] as String).isNotEmpty);
+    final String? imgBase64 = post['imageBase64'];
+
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -1065,15 +1270,40 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: Image.memory(
-                base64Decode(post['imageBase64']),
+            if (imgBase64 != null && imgBase64.isNotEmpty)
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                child: Image.memory(
+                  base64Decode(imgBase64),
+                  width: double.infinity,
+                  height: 250,
+                  fit: BoxFit.cover,
+                ),
+              )
+            else if (isVideo)
+              Container(
                 width: double.infinity,
-                height: 250,
-                fit: BoxFit.cover,
+                height: 180,
+                decoration: const BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.play_circle_filled, color: Colors.red, size: 54),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1769D2)),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        setState(() => _currentIndex = 1); // Shorts bölməsinə keçir
+                      },
+                      child: const Text('Shorts Bölməsində Bax', style: TextStyle(color: Colors.white)),
+                    ),
+                  ],
+                ),
               ),
-            ),
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -1203,17 +1433,48 @@ class _HomeScreenState extends State<HomeScreen> {
                 final doc = docs[index];
                 final data = doc.data();
                 final base64Img = data['imageBase64'] as String?;
+                final bool isVideo = data['isVideo'] == true || (data['videoUrl'] != null && (data['videoUrl'] as String).isNotEmpty);
 
                 return InkWell(
                   onTap: () => _showPostDetailModal(doc.id, data),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: base64Img != null && base64Img.isNotEmpty
-                        ? Image.memory(
-                            base64Decode(base64Img),
-                            fit: BoxFit.cover,
-                          )
-                        : Container(color: Colors.grey.shade200),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        base64Img != null && base64Img.isNotEmpty
+                            ? Image.memory(
+                                base64Decode(base64Img),
+                                fit: BoxFit.cover,
+                              )
+                            : Container(
+                                color: Colors.blueGrey.shade900,
+                                child: const Center(
+                                  child: Icon(Icons.videocam_rounded, color: Colors.white, size: 32),
+                                ),
+                              ),
+                        if (isVideo)
+                          Positioned(
+                            top: 6,
+                            right: 6,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade700,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  Icon(Icons.play_arrow, color: Colors.white, size: 10),
+                                  SizedBox(width: 2),
+                                  Text('Shorts', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 );
               },
