@@ -1253,13 +1253,21 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text('Şəkli sil', style: TextStyle(color: Colors.red)),
               onTap: () async {
                 Navigator.pop(ctx);
-                await FirebaseFirestore.instance.collection('users').doc(uid).update({
-                  'photoBase64': '',
-                });
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Profil şəkli silindi.')),
-                  );
+                try {
+                  await FirebaseFirestore.instance.collection('users').doc(uid).set({
+                    'photoBase64': '',
+                  }, SetOptions(merge: true));
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Profil şəkli silindi.')),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Xəta: $e'), backgroundColor: Colors.red),
+                    );
+                  }
                 }
               },
             ),
@@ -1283,9 +1291,9 @@ class _HomeScreenState extends State<HomeScreen> {
         final bytes = await picked.readAsBytes();
         final base64String = base64Encode(bytes);
 
-        await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
           'photoBase64': base64String,
-        });
+        }, SetOptions(merge: true));
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1335,10 +1343,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1769D2)),
             onPressed: () async {
-              await FirebaseFirestore.instance.collection('users').doc(uid).update({
+              await FirebaseFirestore.instance.collection('users').doc(uid).set({
                 'fullName': nameController.text.trim(),
                 'phone': phoneController.text.trim(),
-              });
+              }, SetOptions(merge: true));
               if (mounted) {
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
