@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
@@ -20,7 +20,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final AuthService _authService = AuthService();
 
   String _selectedRole = 'usta';
-  File? _profileImage;
+  Uint8List? _profileImageBytes;
   bool _isLoading = false;
   bool _obscurePass = true;
 
@@ -46,12 +46,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final picker = ImagePicker();
       final XFile? picked = await picker.pickImage(
         source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
         imageQuality: 70,
       );
 
       if (picked != null) {
+        final bytes = await picked.readAsBytes();
         setState(() {
-          _profileImage = File(picked.path);
+          _profileImageBytes = bytes;
         });
       }
     } catch (e) {
@@ -75,7 +78,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _passController.text,
         phone: _phoneController.text,
         role: _selectedRole,
-        profileImage: _profileImage,
+        profileImageBytes: _profileImageBytes,
       );
 
       if (mounted) {
@@ -155,8 +158,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   CircleAvatar(
                     radius: 48,
                     backgroundColor: const Color(0xFF1769D2).withOpacity(0.12),
-                    backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
-                    child: _profileImage == null
+                    backgroundImage: _profileImageBytes != null ? MemoryImage(_profileImageBytes!) : null,
+                    child: _profileImageBytes == null
                         ? const Icon(Icons.person, size: 52, color: Color(0xFF1769D2))
                         : null,
                   ),

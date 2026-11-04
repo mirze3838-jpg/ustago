@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -19,7 +19,7 @@ class AuthService {
     required String password,
     required String role,
     String? phone,
-    File? profileImage,
+    Uint8List? profileImageBytes,
   }) async {
     // İstifadəçi yaradılır
     final cred = await _auth.createUserWithEmailAndPassword(
@@ -29,12 +29,11 @@ class AuthService {
 
     final uid = cred.user!.uid;
 
-    // Şəkil seçilibsə base64 formatına çeviririk (Storage tələb olunmur)
+    // Şəkil seçilibsə base64 formatına çeviririk (Storage tələb olunmur, həm Web, həm Mobil dəstəklənir)
     String? photoBase64;
-    if (profileImage != null) {
+    if (profileImageBytes != null && profileImageBytes.isNotEmpty) {
       try {
-        final bytes = await profileImage.readAsBytes();
-        photoBase64 = base64Encode(bytes);
+        photoBase64 = base64Encode(profileImageBytes);
       } catch (_) {}
     }
 

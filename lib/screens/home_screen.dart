@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
@@ -874,11 +874,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // İnstagram kimi Yeni İş / Şəkil Paylaşmaq dialoqu
+  // Yeni İş / Şəkil Paylaşmaq dialoqu
   Future<void> _showAddPostDialog(String uid, String authorName, String role) async {
     final titleController = TextEditingController();
     String selectedCat = 'Tikinti';
-    File? selectedImage;
+    Uint8List? selectedImageBytes;
 
     await showModalBottomSheet(
       context: context,
@@ -931,8 +931,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         imageQuality: 75,
                       );
                       if (picked != null) {
+                        final bytes = await picked.readAsBytes();
                         setModalState(() {
-                          selectedImage = File(picked.path);
+                          selectedImageBytes = bytes;
                         });
                       }
                     },
@@ -944,10 +945,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.grey.shade300),
                       ),
-                      child: selectedImage != null
+                      child: selectedImageBytes != null
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(12),
-                              child: Image.file(selectedImage!, fit: BoxFit.cover),
+                              child: Image.memory(selectedImageBytes!, fit: BoxFit.cover),
                             )
                           : Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -1008,7 +1009,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     onPressed: () async {
-                      if (selectedImage == null) {
+                      if (selectedImageBytes == null) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Zəhmət olmasa şəkil seçin!')),
                         );
@@ -1016,8 +1017,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       }
 
                       try {
-                        final bytes = await selectedImage!.readAsBytes();
-                        final base64String = base64Encode(bytes);
+                        final base64String = base64Encode(selectedImageBytes!);
 
                         await FirebaseFirestore.instance.collection('posts').add({
                           'userId': uid,
