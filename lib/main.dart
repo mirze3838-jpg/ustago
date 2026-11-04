@@ -7,18 +7,21 @@ import 'screens/login_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  bool isFirebaseInitialized = false;
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    isFirebaseInitialized = true;
   } catch (e) {
     debugPrint('Firebase ilkin yüklənmə: $e');
   }
-  runApp(const UstaGoApp());
+  runApp(UstaGoApp(isFirebaseInitialized: isFirebaseInitialized));
 }
 
 class UstaGoApp extends StatelessWidget {
-  const UstaGoApp({super.key});
+  final bool isFirebaseInitialized;
+  const UstaGoApp({super.key, this.isFirebaseInitialized = true});
 
   @override
   Widget build(BuildContext context) {
@@ -36,23 +39,24 @@ class UstaGoApp extends StatelessWidget {
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
       ),
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          // Əgər istifadəçi daxil olubsa birbaşa HomeScreen-ə göndəririk
-          if (snapshot.connectionState == ConnectionState.active) {
-            final user = snapshot.data;
-            if (user != null) {
-              return const HomeScreen();
-            } else {
-              return const LoginScreen();
-            }
-          }
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        },
-      ),
+      home: !isFirebaseInitialized
+          ? const LoginScreen()
+          : StreamBuilder<User?>(
+              stream: FirebaseAuth.instance.authStateChanges(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.active) {
+                  final user = snapshot.data;
+                  if (user != null) {
+                    return const HomeScreen();
+                  } else {
+                    return const LoginScreen();
+                  }
+                }
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              },
+            ),
     );
   }
 }

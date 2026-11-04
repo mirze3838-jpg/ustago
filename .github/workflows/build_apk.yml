@@ -30,9 +30,11 @@ jobs:
       - name: Setup Clean Android and Web with Firebase
         run: |
           cp android/app/google-services.json /tmp/google-services.json
+          cp -r web /tmp/saved_web || true
           rm -rf android
           flutter create . --platforms=android,web --org=com.ustago
           cp /tmp/google-services.json android/app/google-services.json
+          cp -r /tmp/saved_web/* web/ || true
 
           # Firebase paket adini eynilesdir
           sed -i 's/"com.ustago.app"/"com.ustago.ustago"/g' android/app/google-services.json
