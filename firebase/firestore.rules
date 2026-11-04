@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Daxil olub-olmadığını yoxlayır
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Yalnız hesab sahibi
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    // Admin olub-olmadığını təhlükəsiz yoxlayır
+    function isAdmin() {
+      return signedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // İSTİFADƏÇİ VƏ USTA PROFİLLƏRİ
+    match /users/{userId} {
+      // Müştərilər və digər istifadəçilər ustaların profilini görə bilsin deyə read açıqdır
+      allow read: if signedIn();
+
+      // Qeydiyyat: Heç kim özünü birbaşa 'admin' edə bilməz!
+      allow create: if signedIn() 
+        && request.auth.uid == userId
+        && request.resource.data.role in ['usta', 'worker', 'customer', 'seller']
+        && request.resource.data.keys().hasAll(['fullName', 'role', 'createdAt']);
+
+      // Redaktə: İstifadəçi öz məlumatını redaktə edə bilər, amma ROLUNU dəyişib admin edə BİLMƏZ!
+      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin();
+
+      // Hesabı yalnız admin və ya istifadəçi özü silə bilər
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // USTA ELANLARI / XİDMƏTLƏRİ
+    match /listings/{listingId} {
+      allow read: if true; // Hər kəs elanları axtarıb görə bilər
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if signedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+    }
+
+    // ŞİKAYƏT VƏ MODERASİYA SİSTEMİ
+    match /reports/{reportId} {
+      allow create: if signedIn(); // İstənilən istifadəçi şikayət yaza bilər
+      allow read, update, delete: if isAdmin(); // Yalnız admin oxuyub tədbir görə bilər
+    }
+  }
+}

@@ -1,0 +1,40 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Yalnız daxil olmuş istifadəçilər
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // İstifadəçi yalnız öz qovluğuna yaza bilər
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    // Usta qeydiyyat videosu təhlükəsizlik filtri
+    match /artisan_videos/{userId}/{fileName} {
+      // Hər kəs təsdiqlənmiş videoları izləyə bilər
+      allow read: if signedIn();
+
+      // Yükləmə qaydaları:
+      // 1. Yalnız hesab sahibi yükləyə bilər
+      // 2. Maksimum ölçü: 40 MB (serveri şişirtməsinlər deyə)
+      // 3. YALNIZ video faylları (mp4, quicktime/mov) - virus, exe, php, script atmaq QADAĞANDIR!
+      allow write: if isOwner(userId) 
+        && request.resource.size < 40 * 1024 * 1024
+        && request.resource.contentType.matches('video/(mp4|quicktime)');
+        
+      allow delete: if isOwner(userId);
+    }
+
+    // Profil şəkilləri üçün təhlükəsizlik filtri
+    match /profile_images/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(userId)
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow delete: if isOwner(userId);
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "628924933222",
+    "project_id": "ustago-6a961",
+    "storage_bucket": "ustago-6a961.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:628924933222:android:efed49421a574832a9f9a7",
+        "android_client_info": {
+          "package_name": "com.ustago.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB0HnbuqWkmKlXw6mzGX4qM0wNya2i2LXI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
