@@ -24,19 +24,16 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Generate Android Gradle Wrapper
-        run: flutter create . --platforms=android --org=com.ustago
-
-      - name: Upgrade to Gradle 8.4
+      - name: Setup Clean Android with Firebase
         run: |
-          mkdir -p android/gradle/wrapper
-          cat << 'EOF' > android/gradle/wrapper/gradle-wrapper.properties
-          distributionBase=GRADLE_USER_HOME
-          distributionPath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-8.4-all.zip
-          zipStoreBase=GRADLE_USER_HOME
-          zipStorePath=wrapper/dists
-          EOF
+          cp android/app/google-services.json /tmp/google-services.json
+          rm -rf android
+          flutter create . --platforms=android --org=com.ustago
+          cp /tmp/google-services.json android/app/google-services.json
+          sed -i '/plugins {/a \    id "com.google.gms.google-services" version "4.4.2" apply false' android/settings.gradle
+          sed -i '/plugins {/a \    id "com.google.gms.google-services"' android/app/build.gradle
+          sed -i 's/minSdkVersion = flutter.minSdkVersion/minSdkVersion = 21/g' android/app/build.gradle || true
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' android/app/build.gradle || true
 
       - name: Get Dependencies
         run: flutter pub get
