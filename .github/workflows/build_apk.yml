@@ -30,10 +30,12 @@ jobs:
       - name: Setup Clean Android and Web with Firebase
         run: |
           cp android/app/google-services.json /tmp/google-services.json
+          cp android/app/debug.keystore /tmp/debug.keystore
           cp -r web /tmp/saved_web || true
           rm -rf android
           flutter create . --platforms=android,web --org=com.ustago
           cp /tmp/google-services.json android/app/google-services.json
+          cp /tmp/debug.keystore android/app/debug.keystore
           cp -r /tmp/saved_web/* web/ || true
 
           # Firebase paket adini eynilesdir
@@ -45,6 +47,11 @@ jobs:
           # Google Services plugin elave et
           sed -i '/plugins {/a \    id "com.google.gms.google-services" version "4.4.2" apply false' android/settings.gradle*
           sed -i '/plugins {/a \    id "com.google.gms.google-services"' android/app/build.gradle*
+
+          # Keystore sazlamasi (Sabit SHA-1 ile imzalama)
+          sed -i '/buildTypes {/i \    signingConfigs { release { storeFile file("debug.keystore"); storePassword "android"; keyAlias "androiddebugkey"; keyPassword "android" } }' android/app/build.gradle*
+          sed -i 's/signingConfig = signingConfigs.debug/signingConfig = signingConfigs.release/g' android/app/build.gradle* || true
+          sed -i 's/signingConfig signingConfigs.debug/signingConfig signingConfigs.release/g' android/app/build.gradle* || true
 
           # SDK 35 ve minSdk 23 sazla
           sed -i 's/compileSdk.*/compileSdk = 35/g' android/app/build.gradle* || true
