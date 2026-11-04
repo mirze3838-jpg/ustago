@@ -27,22 +27,22 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Install Android Build Tools 34
+      - name: Install Android SDK Build Tools 34
         run: |
           yes | sdkmanager --licenses || true
           sdkmanager "build-tools;34.0.0" "platforms;android-34"
 
-      - name: Setup Clean Android & Web with Firebase
+      - name: Setup Clean Android and Web with Firebase
         run: |
           cp android/app/google-services.json /tmp/google-services.json
           rm -rf android
           flutter create . --platforms=android,web --org=com.ustago
           cp /tmp/google-services.json android/app/google-services.json
-          
-          # Match Firebase package name
+
+          # Firebase paket adini eynilesdir
           sed -i 's/"com.ustago.app"/"com.ustago.ustago"/g' android/app/google-services.json
-          
-          # Plugins and SDK config
+
+          # Pluginleri ve versiyalari sazla
           sed -i '/plugins {/a \    id "com.google.gms.google-services" version "4.4.2" apply false' android/settings.gradle*
           sed -i '/plugins {/a \    id "com.google.gms.google-services"' android/app/build.gradle*
           sed -i 's/compileSdk.*/compileSdk = 34/g' android/app/build.gradle* || true
@@ -53,7 +53,7 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
-      - name: Build Web App (for iOS / Safari)
+      - name: Build Web App (for iOS Safari)
         run: flutter build web --release --base-href "/ustago/"
 
       - name: Build Android APK
