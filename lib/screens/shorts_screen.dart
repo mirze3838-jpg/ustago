@@ -54,7 +54,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
     XFile? pickedVideo;
     Uint8List? pickedVideoBytes;
     bool isUploading = false;
-    String uploadStatus = '';
+    double uploadProgress = 0.0;
+    String uploadStatus = '0%';
 
     // İstifadəçinin telefonunu gətirməyə çalışırıq
     if (user != null) {
@@ -231,12 +232,33 @@ class _ShortsScreenState extends State<ShortsScreen> {
                 const SizedBox(height: 20),
 
                 if (isUploading) ...[
-                  Center(
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: Column(
                       children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 8),
-                        Text(uploadStatus, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: LinearProgressIndicator(
+                            value: uploadProgress > 0 ? uploadProgress : null,
+                            minHeight: 10,
+                            backgroundColor: Colors.blue.shade100,
+                            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF1769D2)),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Video Yüklənir: $uploadStatus',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1769D2)),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Zəhmət olmasa gözləyin, video buluda yüklənir...',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
                       ],
                     ),
                   ),
@@ -281,17 +303,37 @@ class _ShortsScreenState extends State<ShortsScreen> {
                             setModalState(() => uploadStatus = 'Video bulud yaddaşına yüklənir...');
                             final fileName = 'short_${DateTime.now().millisecondsSinceEpoch}.mp4';
                             final ref = FirebaseStorage.instance.ref().child('shorts').child(fileName);
-                            final uploadTask = await ref.putData(
+                            final uploadTask = ref.putData(
                               pickedVideoBytes!,
                               SettableMetadata(contentType: 'video/mp4'),
                             );
-                            finalVideoUrl = await uploadTask.ref.getDownloadURL();
+
+                            // Real-time yükləmə faizi
+                            uploadTask.snapshotEvents.listen((TaskSnapshot snap) {
+                              if (snap.totalBytes > 0) {
+                                final prog = snap.bytesTransferred / snap.totalBytes;
+                                setModalState(() {
+                                  uploadProgress = prog;
+                                  uploadStatus = '${(prog * 100).toStringAsFixed(0)}%';
+                                });
+                              }
+                            });
+
+                            final snap = await uploadTask.timeout(const Duration(seconds: 90));
+                            finalVideoUrl = await snap.ref.getDownloadURL();
                           } catch (e) {
                             debugPrint('Storage upload error: $e');
-                            // Əgər Storage xəta verərsə, nümunə video linki ilə davam edirik ki sistem ilişməsin
-                            if (finalVideoUrl.isEmpty) {
-                              finalVideoUrl = 'https://assets.mixkit.co/videos/preview/mixkit-hands-of-a-carpenter-measuring-a-piece-of-wood-41006-large.mp4';
+                            setModalState(() => isUploading = false);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Video yükləmə xətası: $e\n\nFirebase Storage qaydalarını yoxlayın.'),
+                                  backgroundColor: Colors.orange.shade800,
+                                  duration: const Duration(seconds: 7),
+                                ),
+                              );
                             }
+                            return;
                           }
                         }
 

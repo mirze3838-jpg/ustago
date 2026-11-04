@@ -886,6 +886,8 @@ class _HomeScreenState extends State<HomeScreen> {
     Uint8List? pickedVideoBytes;
     bool isVideoPost = false;
     bool isUploading = false;
+    double uploadProgress = 0.0;
+    String uploadStatusText = '0%';
 
     await showModalBottomSheet(
       context: context,
@@ -1136,9 +1138,38 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Paylaş düyməsi
+                // Paylaş düyməsi və ya Yüklənmə Faizi
                 if (isUploading) ...[
-                  const Center(child: CircularProgressIndicator()),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: LinearProgressIndicator(
+                            value: uploadProgress > 0 ? uploadProgress : null,
+                            minHeight: 10,
+                            backgroundColor: Colors.blue.shade100,
+                            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF1769D2)),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Video Yüklənir: $uploadStatusText',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1769D2)),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Zəhmət olmasa gözləyin, video bulud bazasına köçürülür...',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
                 ] else ...[
                   SizedBox(
                     width: double.infinity,
@@ -1175,12 +1206,34 @@ class _HomeScreenState extends State<HomeScreen> {
                               try {
                                 final fileName = 'short_${DateTime.now().millisecondsSinceEpoch}.mp4';
                                 final ref = FirebaseStorage.instance.ref().child('shorts').child(fileName);
-                                final task = await ref.putData(pickedVideoBytes!, SettableMetadata(contentType: 'video/mp4'));
-                                finalVideoUrl = await task.ref.getDownloadURL();
+                                final uploadTask = ref.putData(pickedVideoBytes!, SettableMetadata(contentType: 'video/mp4'));
+
+                                uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+                                  if (snapshot.totalBytes > 0) {
+                                    final progress = snapshot.bytesTransferred / snapshot.totalBytes;
+                                    setModalState(() {
+                                      uploadProgress = progress;
+                                      uploadStatusText = '${(progress * 100).toStringAsFixed(0)}%';
+                                    });
+                                  }
+                                });
+
+                                final snapshot = await uploadTask.timeout(const Duration(seconds: 60));
+                                finalVideoUrl = await snapshot.ref.getDownloadURL();
                               } catch (e) {
                                 debugPrint('Storage upload error: $e');
                                 if (finalVideoUrl.isEmpty) {
-                                  finalVideoUrl = 'https://assets.mixkit.co/videos/preview/mixkit-hands-of-a-carpenter-measuring-a-piece-of-wood-41006-large.mp4';
+                                  setModalState(() => isUploading = false);
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Video yükləmə xətası ($e). Firebase Storage qaydalarını (Rules) yoxlayın və ya video linki qoyun.'),
+                                        backgroundColor: Colors.orange.shade800,
+                                        duration: const Duration(seconds: 6),
+                                      ),
+                                    );
+                                  }
+                                  return;
                                 }
                               }
                             }
