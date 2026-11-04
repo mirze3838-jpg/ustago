@@ -12,7 +12,20 @@
           "package_name": "com.ustago.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "628924933222-ved3lrm6sfgsv8p8rkr8lcsliq0ue5d6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ustago.app",
+            "certificate_hash": "c6c30f96352f811ca78b7738e71fba85e5832c0d"
+          }
+        },
+        {
+          "client_id": "628924933222-3e5m1dkln294in3alurqdkh1en52nvsb.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyB0HnbuqWkmKlXw6mzGX4qM0wNya2i2LXI"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "628924933222-3e5m1dkln294in3alurqdkh1en52nvsb.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

@@ -77,7 +77,9 @@ class AuthService {
       final GoogleAuthProvider authProvider = GoogleAuthProvider();
       cred = await _auth.signInWithPopup(authProvider);
     } else {
-      final GoogleSignIn googleSignIn = GoogleSignIn();
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        serverClientId: '628924933222-3e5m1dkln294in3alurqdkh1en52nvsb.apps.googleusercontent.com',
+      );
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
 
       if (googleUser == null) return null;
