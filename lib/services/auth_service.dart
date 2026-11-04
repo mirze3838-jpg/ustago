@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,7 +11,7 @@ class AuthService {
   User? get currentUser => _auth.currentUser;
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
-  // 1. Email və Şifrə ilə Qeydiyyat (Video tələb olunmur, istəyə bağlı profil şəkli)
+  // 1. Email və Şifrə ilə Qeydiyyat
   Future<UserCredential> registerWithEmail({
     required String fullName,
     required String email,
@@ -27,6 +28,15 @@ class AuthService {
 
     final uid = cred.user!.uid;
 
+    // Şəkil seçilibsə base64 formatına çeviririk (Storage tələb olunmur)
+    String? photoBase64;
+    if (profileImage != null) {
+      try {
+        final bytes = await profileImage.readAsBytes();
+        photoBase64 = base64Encode(bytes);
+      } catch (_) {}
+    }
+
     // İstifadəçi məlumatları Firestore bazasına yazılır
     await _db.collection('users').doc(uid).set({
       'uid': uid,
@@ -34,11 +44,12 @@ class AuthService {
       'email': email.trim(),
       'phone': phone?.trim() ?? '',
       'role': role,
-      'isVerified': true, // Qeydiyyat birbaşa aktiv olur
+      'photoBase64': photoBase64 ?? '',
+      'isVerified': true,
       'createdAt': FieldValue.serverTimestamp(),
     });
 
-    // Email təsdiq linki (uğursuz olsa belə qeydiyyatı dayandırmır)
+    // Email təsdiq linki
     try {
       await cred.user!.sendEmailVerification();
     } catch (_) {}
@@ -62,7 +73,7 @@ class AuthService {
     final GoogleSignIn googleSignIn = GoogleSignIn();
     final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
 
-    if (googleUser == null) return null; // İstifadəçi ləğv etdi
+    if (googleUser == null) return null;
 
     final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
     final AuthCredential credential = GoogleAuthProvider.credential(
@@ -75,13 +86,13 @@ class AuthService {
 
     if (user != null) {
       final doc = await _db.collection('users').doc(user.uid).get();
-      // Əgər ilk dəfə girirsə, bazada profil açırıq
       if (!doc.exists) {
         await _db.collection('users').doc(user.uid).set({
           'uid': user.uid,
           'fullName': user.displayName ?? 'Adsız İstifadəçi',
           'email': user.email ?? '',
           'role': defaultRole,
+          'photoUrl': user.photoURL ?? '',
           'isVerified': true,
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -96,7 +107,7 @@ class AuthService {
     await _auth.signOut();
   }
 
-  // 5. İstifadəçinin rolunu gətirmək ('admin', 'usta', 'worker', 'customer', 'seller')
+  // 5. İstifadəçinin rolunu gətirmək
   Future<String?> getUserRole() async {
     final user = currentUser;
     if (user == null) return null;

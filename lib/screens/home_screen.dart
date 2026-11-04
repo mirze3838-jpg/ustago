@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
@@ -871,6 +873,137 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // Profil şəklini dəyişmək (Kamera və ya Qalereyadan)
+  Future<void> _showPhotoPicker(String uid) async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Color(0xFF1769D2)),
+              title: const Text('Qalereyadan seç'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _updateProfileImage(uid, ImageSource.gallery);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera, color: Color(0xFF1769D2)),
+              title: const Text('Kamera ilə çək'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await _updateProfileImage(uid, ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('Şəkli sil', style: TextStyle(color: Colors.red)),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await FirebaseFirestore.instance.collection('users').doc(uid).update({
+                  'photoBase64': '',
+                });
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Profil şəkli silindi.')),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _updateProfileImage(String uid, ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final XFile? picked = await picker.pickImage(
+        source: source,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 70,
+      );
+
+      if (picked != null) {
+        final bytes = await picked.readAsBytes();
+        final base64String = base64Encode(bytes);
+
+        await FirebaseFirestore.instance.collection('users').doc(uid).update({
+          'photoBase64': base64String,
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profil şəkli uğurla yeniləndi!'), backgroundColor: Colors.green),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  // Profil məlumatlarını redaktə etmək üçün dialoq
+  void _showEditProfileDialog(String uid, Map<String, dynamic>? userData) {
+    final nameController = TextEditingController(text: userData?['fullName'] ?? '');
+    final phoneController = TextEditingController(text: userData?['phone'] ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Profil Məlumatlarını Redaktə Et', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'Ad və Soyad', prefixIcon: Icon(Icons.person)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: 'Mobil Nömrə', prefixIcon: Icon(Icons.phone)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Ləğv et'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1769D2)),
+            onPressed: () async {
+              await FirebaseFirestore.instance.collection('users').doc(uid).update({
+                'fullName': nameController.text.trim(),
+                'phone': phoneController.text.trim(),
+              });
+              if (mounted) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Məlumatlar yadda saxlanıldı!'), backgroundColor: Colors.green),
+                );
+              }
+            },
+            child: const Text('Yadda saxla', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProfileTab() {
     final user = _authService.currentUser;
     final bool isAdmin = _currentUserRole == 'admin';
@@ -918,7 +1051,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 30),
           const Divider(),
 
-          // Admin Girişi (Qonaq rejimində də şifrə ilə daxil olmaq olar)
+          // Admin Girişi
           ListTile(
             leading: const Icon(Icons.admin_panel_settings, color: Colors.amber, size: 26),
             title: const Text('Admin Paneli Girişi', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -937,134 +1070,168 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // 2. Əgər istifadəçi daxil olubsa
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        const SizedBox(height: 20),
-        Center(
-          child: Stack(
-            children: [
-              CircleAvatar(
-                radius: 46,
-                backgroundColor: const Color(0xFF1769D2).withOpacity(0.12),
-                child: const Icon(Icons.person, size: 50, color: Color(0xFF1769D2)),
-              ),
-              if (isAdmin)
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: const BoxDecoration(
-                      color: Colors.amber,
-                      shape: BoxShape.circle,
+    // 2. Əgər istifadəçi daxil olubsa (Canlı Firestore datası ilə)
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+      builder: (context, snapshot) {
+        final userData = snapshot.data?.data();
+        final String? photoBase64 = userData?['photoBase64'];
+        final String? photoUrl = user.photoURL;
+        final String displayName = userData?['fullName'] ?? user.displayName ?? user.email ?? 'İstifadəçi';
+        final String userRole = userData?['role'] ?? _currentUserRole ?? 'customer';
+
+        ImageProvider? avatarImage;
+        if (photoBase64 != null && photoBase64.isNotEmpty) {
+          try {
+            avatarImage = MemoryImage(base64Decode(photoBase64));
+          } catch (_) {}
+        } else if (photoUrl != null && photoUrl.isNotEmpty) {
+          avatarImage = NetworkImage(photoUrl);
+        }
+
+        return ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            const SizedBox(height: 20),
+            Center(
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 52,
+                    backgroundColor: const Color(0xFF1769D2).withOpacity(0.12),
+                    backgroundImage: avatarImage,
+                    child: avatarImage == null
+                        ? const Icon(Icons.person, size: 54, color: Color(0xFF1769D2))
+                        : null,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: InkWell(
+                      onTap: () => _showPhotoPicker(user.uid),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1769D2),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 16),
+                      ),
                     ),
-                    child: const Icon(Icons.admin_panel_settings, size: 16, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              displayName,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Center(
+              child: Text(
+                user.email ?? '',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isAdmin ? Colors.amber.shade100 : const Color(0xFF1769D2).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  isAdmin
+                      ? 'Sistem Administratoru'
+                      : (userRole == 'seller'
+                          ? 'Satıcı (Mağaza Sahibi)'
+                          : (userRole == 'usta' ? 'Usta' : 'Müştəri')),
+                  style: TextStyle(
+                    color: isAdmin ? Colors.amber.shade900 : const Color(0xFF1769D2),
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        Text(
-          user.displayName ?? user.email ?? 'İstifadəçi',
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 6),
-        Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-            decoration: BoxDecoration(
-              color: isAdmin ? Colors.amber.shade100 : const Color(0xFF1769D2).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              isAdmin
-                  ? 'Sistem Administratoru'
-                  : (_currentUserRole == 'seller'
-                      ? 'Satıcı (Mağaza Sahibi)'
-                      : (_currentUserRole == 'usta' ? 'Usta' : 'İstifadəçi')),
-              style: TextStyle(
-                color: isAdmin ? Colors.amber.shade900 : const Color(0xFF1769D2),
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
               ),
             ),
-          ),
-        ),
-        const SizedBox(height: 24),
+            const SizedBox(height: 24),
 
-        // Admin Paneli
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.amber.shade50,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.amber.shade300),
-          ),
-          child: ListTile(
-            leading: const Icon(Icons.security, color: Colors.amber, size: 26),
-            title: const Text('Admin İdarəetmə Paneli', style: TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: const Text('Ustaları təsdiqlə və sistemi idarə et'),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.amber),
-            onTap: () {
-              if (isAdmin) {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminScreen()));
-              } else {
-                _showAdminAccessDialog();
-              }
-            },
-          ),
-        ),
-        const SizedBox(height: 16),
+            // Admin Paneli
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: ListTile(
+                leading: const Icon(Icons.security, color: Colors.amber, size: 26),
+                title: const Text('Admin İdarəetmə Paneli', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Ustaları təsdiqlə və sistemi idarə et'),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.amber),
+                onTap: () {
+                  if (isAdmin) {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminScreen()));
+                  } else {
+                    _showAdminAccessDialog();
+                  }
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
 
-        ListTile(
-          leading: const Icon(Icons.person_outline),
-          title: const Text('Profil məlumatları'),
-          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-          onTap: () {},
-        ),
-        const Divider(),
-        ListTile(
-          leading: const Icon(Icons.storefront_outlined),
-          title: const Text('Mənim Mağazam / Elanlarım'),
-          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-          onTap: () {
-            setState(() => _currentIndex = 2);
-          },
-        ),
-        const Divider(),
-        ListTile(
-          leading: const Icon(Icons.notifications_none),
-          title: const Text('Bildirişlər'),
-          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-          onTap: () {},
-        ),
-        const Divider(),
-        ListTile(
-          leading: const Icon(Icons.help_outline),
-          title: const Text('Kömək və Dəstək'),
-          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-          onTap: () {},
-        ),
-        const Divider(),
-        ListTile(
-          leading: const Icon(Icons.logout, color: Colors.red),
-          title: const Text('Çıxış et', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          onTap: () async {
-            await _authService.signOut();
-            if (mounted) {
-              setState(() {
-                _currentUserRole = null;
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Hesabdan çıxış edildi.')),
-              );
-            }
-          },
-        ),
-      ],
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('Profil məlumatlarını redaktə et'),
+              subtitle: const Text('Ad, nömrə və şəkil dəyiş'),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () => _showEditProfileDialog(user.uid, userData),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.storefront_outlined),
+              title: const Text('Mənim Mağazam / Elanlarım'),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () {
+                setState(() => _currentIndex = 2);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.notifications_none),
+              title: const Text('Bildirişlər'),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () {},
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.help_outline),
+              title: const Text('Kömək və Dəstək'),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () {},
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text('Çıxış et', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              onTap: () async {
+                await _authService.signOut();
+                if (mounted) {
+                  setState(() {
+                    _currentUserRole = null;
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Hesabdan çıxış edildi.')),
+                  );
+                }
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 }
