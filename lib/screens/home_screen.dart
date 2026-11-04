@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
@@ -873,7 +874,355 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Profil şəklini dəyişmək (Kamera və ya Qalereyadan)
+  // İnstagram kimi Yeni İş / Şəkil Paylaşmaq dialoqu
+  Future<void> _showAddPostDialog(String uid, String authorName, String role) async {
+    final titleController = TextEditingController();
+    String selectedCat = 'Tikinti';
+    File? selectedImage;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            left: 20,
+            right: 20,
+            top: 20,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Yeni İş Paylaş (Qalereya)',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Gördüyünüz işin şəklini paylaşaraq müştərilərinizə peşəkarlığınızı göstərin.',
+                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+
+                // Şəkil seçimi
+                Center(
+                  child: InkWell(
+                    onTap: () async {
+                      final picker = ImagePicker();
+                      final picked = await picker.pickImage(
+                        source: ImageSource.gallery,
+                        maxWidth: 800,
+                        maxHeight: 800,
+                        imageQuality: 75,
+                      );
+                      if (picked != null) {
+                        setModalState(() {
+                          selectedImage = File(picked.path);
+                        });
+                      }
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      height: 180,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: selectedImage != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.file(selectedImage!, fit: BoxFit.cover),
+                            )
+                          : Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: const [
+                                Icon(Icons.add_photo_alternate_rounded, size: 48, color: Color(0xFF1769D2)),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Şəkil və ya İş Nümunəsi Seçin',
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Qalereyadan yükləmək üçün toxunun',
+                                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Təsvir
+                TextField(
+                  controller: titleController,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'İş haqqında qısa məlumat *',
+                    hintText: 'Məsələn: Yasamalda 3 otaqlı evin tam kafel-metlax işləri...',
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Kateqoriya
+                DropdownButtonFormField<String>(
+                  value: selectedCat,
+                  decoration: const InputDecoration(
+                    labelText: 'Kateqoriya',
+                    prefixIcon: Icon(Icons.category),
+                  ),
+                  items: _categories.map((c) {
+                    final title = (c['title'] as String).replaceAll('\n', ' ');
+                    return DropdownMenuItem(value: title, child: Text(title));
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) setModalState(() => selectedCat = val);
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                // Paylaş düyməsi
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1769D2),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () async {
+                      if (selectedImage == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Zəhmət olmasa şəkil seçin!')),
+                        );
+                        return;
+                      }
+
+                      try {
+                        final bytes = await selectedImage!.readAsBytes();
+                        final base64String = base64Encode(bytes);
+
+                        await FirebaseFirestore.instance.collection('posts').add({
+                          'userId': uid,
+                          'authorName': authorName,
+                          'authorRole': role,
+                          'title': titleController.text.trim().isEmpty ? 'Usta İşi' : titleController.text.trim(),
+                          'category': selectedCat,
+                          'imageBase64': base64String,
+                          'createdAt': FieldValue.serverTimestamp(),
+                          'likes': 0,
+                        });
+
+                        if (mounted) {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('İşiniz uğurla paylaşıldı! 🎉'), backgroundColor: Colors.green),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Xəta: $e'), backgroundColor: Colors.red),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('İnstagram kimi Paylaş', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Paylaşılan işin böyük təsviri və silinməsi
+  void _showPostDetailModal(String postId, Map<String, dynamic> post) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              child: Image.memory(
+                base64Decode(post['imageBase64']),
+                width: double.infinity,
+                height: 250,
+                fit: BoxFit.cover,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1769D2).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          post['category'] ?? 'Usta İşi',
+                          style: const TextStyle(color: Color(0xFF1769D2), fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.red),
+                        onPressed: () async {
+                          await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
+                          if (mounted) {
+                            Navigator.pop(ctx);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Paylaşım silindi.')),
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    post['title'] ?? '',
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Profil daxilində İnstagram tərzi Qalereya
+  Widget _buildInstagramGallery(String uid, String authorName, String role) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: const [
+                Icon(Icons.grid_on_rounded, size: 20, color: Color(0xFF1769D2)),
+                SizedBox(width: 8),
+                Text(
+                  'İşlərim və Portfoliom',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.add_photo_alternate, size: 18),
+              label: const Text('Yeni Paylaş'),
+              onPressed: () => _showAddPostDialog(uid, authorName, role),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('posts')
+              .where('userId', isEqualTo: uid)
+              .snapshots(),
+          builder: (context, snapshot) {
+            final docs = snapshot.data?.docs ?? [];
+            if (docs.isEmpty) {
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.photo_library_outlined, size: 40, color: Colors.grey),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Hələlik heç bir iş paylaşılmayıb',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Gördüyünüz işlərin şəkillərini İnstagram kimi paylaşaraq müştəri toplayın!',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1769D2)),
+                      icon: const Icon(Icons.camera_alt, color: Colors.white, size: 16),
+                      label: const Text('İlk İşini Paylaş', style: TextStyle(color: Colors.white)),
+                      onPressed: () => _showAddPostDialog(uid, authorName, role),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 6,
+                mainAxisSpacing: 6,
+                childAspectRatio: 1.0,
+              ),
+              itemCount: docs.length,
+              itemBuilder: (context, index) {
+                final doc = docs[index];
+                final data = doc.data();
+                final base64Img = data['imageBase64'] as String?;
+
+                return InkWell(
+                  onTap: () => _showPostDetailModal(doc.id, data),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: base64Img != null && base64Img.isNotEmpty
+                        ? Image.memory(
+                            base64Decode(base64Img),
+                            fit: BoxFit.cover,
+                          )
+                        : Container(color: Colors.grey.shade200),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ],
+    );
+  }
   Future<void> _showPhotoPicker(String uid) async {
     showModalBottomSheet(
       context: context,
@@ -1182,6 +1531,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(height: 16),
+
+            // İnstagram tərzi Portfólio / İşlərim bölməsi
+            _buildInstagramGallery(user.uid, displayName, userRole),
+            const SizedBox(height: 20),
+            const Divider(),
 
             ListTile(
               leading: const Icon(Icons.person_outline),
