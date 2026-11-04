@@ -27,6 +27,17 @@ jobs:
       - name: Generate Android Gradle Wrapper
         run: flutter create . --platforms=android --org=com.ustago
 
+      - name: Upgrade to Gradle 8.4
+        run: |
+          mkdir -p android/gradle/wrapper
+          cat << 'EOF' > android/gradle/wrapper/gradle-wrapper.properties
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.4-all.zip
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          EOF
+
       - name: Get Dependencies
         run: flutter pub get
 
