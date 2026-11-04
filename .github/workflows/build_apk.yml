@@ -24,11 +24,14 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Generate Android Gradle Wrapper
+        run: flutter create . --platforms=android --org=com.ustago
+
       - name: Get Dependencies
         run: flutter pub get
 
       - name: Build APK
-        run: flutter build apk --release
+        run: flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
