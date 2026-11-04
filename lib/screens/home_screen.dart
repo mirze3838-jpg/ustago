@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
+import 'register_screen.dart';
 import 'admin_screen.dart';
 import 'shorts_screen.dart';
+import 'market_screen.dart';
 import 'artisan_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -170,14 +172,78 @@ class _HomeScreenState extends State<HomeScreen> {
       case 1:
         return const ShortsScreen();
       case 2:
-        return const Center(child: Text('Axtarış Bölməsi', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)));
+        return const MarketScreen();
       case 3:
-        return const Center(child: Text('Mesajlar Bölməsi', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)));
+        return _buildMessagesTab();
       case 4:
         return _buildProfileTab();
       default:
         return _buildHomeContent();
     }
+  }
+
+  Widget _buildMessagesTab() {
+    final user = _authService.currentUser;
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        title: const Text('Mesajlar', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF1769D2),
+        foregroundColor: Colors.white,
+      ),
+      body: user == null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Mesajlaşmaq üçün daxil olun',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Ustalar və müştərilərlə birbaşa yazışmaq üçün hesabınıza daxil olun.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1769D2),
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      ),
+                      onPressed: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+                      },
+                      child: const Text('Daxil Ol', style: TextStyle(color: Colors.white)),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : ListView(
+              padding: const EdgeInsets.all(12),
+              children: [
+                Card(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: Color(0xFF1769D2),
+                      child: Text('U', style: TextStyle(color: Colors.white)),
+                    ),
+                    title: const Text('UstaGo Dəstək', style: TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: const Text('UstaGo platformasına xoş gəlmisiniz! Kömək lazımdırsa yazın.'),
+                    trailing: const Text('İndi', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                    onTap: () {},
+                  ),
+                ),
+              ],
+            ),
+    );
   }
 
   Widget _buildHomeContent() {
@@ -696,7 +762,8 @@ class _HomeScreenState extends State<HomeScreen> {
         elevation: 0,
         items: [
           const BottomNavigationBarItem(
-            icon: Icon(Icons.home_filled),
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home_filled),
             label: 'Ana səhifə',
           ),
           const BottomNavigationBarItem(
@@ -705,8 +772,9 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Shorts',
           ),
           const BottomNavigationBarItem(
-            icon: Icon(Icons.search),
-            label: 'Axtarış',
+            icon: Icon(Icons.storefront_outlined),
+            activeIcon: Icon(Icons.storefront_rounded),
+            label: 'Alış-Satış',
           ),
           BottomNavigationBarItem(
             icon: Stack(
@@ -722,7 +790,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       shape: BoxShape.circle,
                     ),
                     child: const Text(
-                      '2',
+                      '1',
                       style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -741,14 +809,139 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _showAdminAccessDialog() {
+    final pinController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.security, color: Color(0xFF1769D2)),
+            SizedBox(width: 8),
+            Text('Admin Girişi', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Admin panelinə daxil olmaq üçün təhlükəsizlik şifrəsini daxil edin:',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: pinController,
+              obscureText: true,
+              keyboardType: TextInputType.text,
+              decoration: const InputDecoration(
+                labelText: 'Admin Şifrəsi',
+                prefixIcon: Icon(Icons.lock),
+                hintText: 'Şifrə: ustago2026',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Ləğv et'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1769D2),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              final pin = pinController.text.trim();
+              if (pin == 'ustago2026' || pin == '7777' || _currentUserRole == 'admin') {
+                Navigator.pop(ctx);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminScreen()));
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Yanlış admin şifrəsi!'), backgroundColor: Colors.red),
+                );
+              }
+            },
+            child: const Text('Daxil ol', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProfileTab() {
     final user = _authService.currentUser;
     final bool isAdmin = _currentUserRole == 'admin';
 
+    // 1. Əgər istifadəçi daxil olmayıbsa (Qonaq rejimindədirsə)
+    if (user == null) {
+      return ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          const SizedBox(height: 20),
+          Center(
+            child: CircleAvatar(
+              radius: 46,
+              backgroundColor: const Color(0xFF1769D2).withOpacity(0.12),
+              child: const Icon(Icons.person_outline, size: 50, color: Color(0xFF1769D2)),
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Qonaq İstifadəçi',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Usta çağırmaq, sifariş vermək və ya usta/satıcı kimi qeydiyyatdan keçmək üçün hesabınıza daxil olun.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey, fontSize: 13),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            height: 48,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1769D2),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.login, color: Colors.white),
+              label: const Text('Daxil Ol / Qeydiyyat', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+              },
+            ),
+          ),
+          const SizedBox(height: 30),
+          const Divider(),
+
+          // Admin Girişi (Qonaq rejimində də şifrə ilə daxil olmaq olar)
+          ListTile(
+            leading: const Icon(Icons.admin_panel_settings, color: Colors.amber, size: 26),
+            title: const Text('Admin Paneli Girişi', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: const Text('Tətbiq rəhbərliyi üçün idarəetmə'),
+            trailing: const Icon(Icons.lock_outline, color: Colors.amber),
+            onTap: _showAdminAccessDialog,
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.help_outline),
+            title: const Text('Kömək və Dəstək'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            onTap: () {},
+          ),
+        ],
+      );
+    }
+
+    // 2. Əgər istifadəçi daxil olubsa
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const SizedBox(height: 30),
+        const SizedBox(height: 20),
         Center(
           child: Stack(
             children: [
@@ -775,50 +968,71 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 14),
         Text(
-          user?.displayName ?? user?.email ?? 'İstifadəçi',
+          user.displayName ?? user.email ?? 'İstifadəçi',
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
-        if (isAdmin) ...[
-          const SizedBox(height: 4),
-          const Center(
-            child: Chip(
-              label: Text('Sistem Administratoru', style: TextStyle(color: Colors.white, fontSize: 11)),
-              backgroundColor: Color(0xFF1769D2),
-              padding: EdgeInsets.zero,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ),
-        ],
-        const SizedBox(height: 30),
-
-        // YALNIZ VƏ YALNIZ ADMİNƏ GÖRÜNƏN BÖLMƏ
-        if (isAdmin) ...[
-          Container(
+        const SizedBox(height: 6),
+        Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
             decoration: BoxDecoration(
-              color: Colors.amber.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.amber.shade300),
+              color: isAdmin ? Colors.amber.shade100 : const Color(0xFF1769D2).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
             ),
-            child: ListTile(
-              leading: const Icon(Icons.security, color: Colors.amber, size: 26),
-              title: const Text('Admin İdarəetmə Paneli', style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: const Text('Ustaları təsdiqlə və sistemi idarə et'),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.amber),
-              onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminScreen()));
-              },
+            child: Text(
+              isAdmin
+                  ? 'Sistem Administratoru'
+                  : (_currentUserRole == 'seller'
+                      ? 'Satıcı (Mağaza Sahibi)'
+                      : (_currentUserRole == 'usta' ? 'Usta' : 'İstifadəçi')),
+              style: TextStyle(
+                color: isAdmin ? Colors.amber.shade900 : const Color(0xFF1769D2),
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
-          const SizedBox(height: 16),
-        ],
+        ),
+        const SizedBox(height: 24),
 
-        // Adi istifadəçilərin gördüyü standart menyular
+        // Admin Paneli
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.amber.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.amber.shade300),
+          ),
+          child: ListTile(
+            leading: const Icon(Icons.security, color: Colors.amber, size: 26),
+            title: const Text('Admin İdarəetmə Paneli', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: const Text('Ustaları təsdiqlə və sistemi idarə et'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.amber),
+            onTap: () {
+              if (isAdmin) {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminScreen()));
+              } else {
+                _showAdminAccessDialog();
+              }
+            },
+          ),
+        ),
+        const SizedBox(height: 16),
+
         ListTile(
           leading: const Icon(Icons.person_outline),
-          title: const Text('Profil məlumatlarını redaktə et'),
+          title: const Text('Profil məlumatları'),
           trailing: const Icon(Icons.arrow_forward_ios, size: 16),
           onTap: () {},
+        ),
+        const Divider(),
+        ListTile(
+          leading: const Icon(Icons.storefront_outlined),
+          title: const Text('Mənim Mağazam / Elanlarım'),
+          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+          onTap: () {
+            setState(() => _currentIndex = 2);
+          },
         ),
         const Divider(),
         ListTile(
@@ -841,9 +1055,11 @@ class _HomeScreenState extends State<HomeScreen> {
           onTap: () async {
             await _authService.signOut();
             if (mounted) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              setState(() {
+                _currentUserRole = null;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Hesabdan çıxış edildi.')),
               );
             }
           },

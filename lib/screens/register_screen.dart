@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
+import 'home_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -19,7 +20,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final AuthService _authService = AuthService();
 
   String _selectedRole = 'usta';
-  File? _videoFile;
+  File? _profileImage;
   bool _isLoading = false;
   bool _obscurePass = true;
 
@@ -27,7 +28,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     'usta': 'Usta kimi (Xidmət təklif etmək)',
     'worker': 'Fəhlə kimi (Köməkçi işlər)',
     'customer': 'Müştəri kimi (Xidmət axtaran)',
-    'seller': 'Satıcı kimi (Tikinti materialları)',
+    'seller': 'Satıcı kimi (Tikinti materialları və mağaza)',
   };
 
   @override
@@ -39,39 +40,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  // Kamera və ya Qalereyadan 1 dəqiqəlik video seçmək
-  Future<void> _pickVideo(ImageSource source) async {
+  // İstəyə bağlı profil şəkli seçmək
+  Future<void> _pickProfileImage() async {
     try {
       final picker = ImagePicker();
-      final XFile? picked = await picker.pickVideo(
-        source: source,
-        maxDuration: const Duration(seconds: 60), // Maksimum 1 dəqiqə
+      final XFile? picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70,
       );
 
       if (picked != null) {
-        final file = File(picked.path);
-        final sizeInMb = (await file.length()) / (1024 * 1024);
-
-        if (sizeInMb > 40) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Video ölçüsü çox böyükdür (maksimum 40 MB ola bilər)!'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-          return;
-        }
-
         setState(() {
-          _videoFile = file;
+          _profileImage = File(picked.path);
         });
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Video seçilərkən xəta: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Şəkil seçilərkən xəta: $e')),
         );
       }
     }
@@ -79,17 +65,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-
-    // Əgər usta və ya fəhlədirsə və video mütləqdirsə yoxlayırıq
-    if ((_selectedRole == 'usta' || _selectedRole == 'worker') && _videoFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Zəhmət olmasa, 1 dəqiqəlik iş təcrübənizi göstərən video əlavə edin!'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
 
     setState(() => _isLoading = true);
 
@@ -100,25 +75,42 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _passController.text,
         phone: _phoneController.text,
         role: _selectedRole,
-        videoFile: _videoFile,
+        profileImage: _profileImage,
       );
 
       if (mounted) {
+        // Uğurlu bildiriş dialoqu
         showDialog(
           context: context,
           barrierDismissible: false,
           builder: (ctx) => AlertDialog(
-            title: const Text('Qeydiyyat uğurla tamamlandı!'),
-            content: const Text(
-              'Təsdiq linki e-mail ünvanınıza göndərildi. Zəhmət olmasa e-mailinizi yoxlayın.',
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: const [
+                Icon(Icons.check_circle, color: Colors.green, size: 28),
+                SizedBox(width: 8),
+                Text('Uğurlu Qeydiyyat!'),
+              ],
+            ),
+            content: Text(
+              'Təbriklər, ${_nameController.text.trim()}! Hesabınız uğurla yaradıldı.',
+              style: const TextStyle(fontSize: 14),
             ),
             actions: [
-              TextButton(
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1769D2),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
                 onPressed: () {
-                  Navigator.pop(ctx); // dialoqu bağla
-                  Navigator.pop(context); // login/home ekranına qayıt
+                  Navigator.pop(ctx);
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (_) => const HomeScreen()),
+                    (route) => false,
+                  );
                 },
-                child: const Text('Tamam'),
+                child: const Text('Ana Səhifəyə Keç', style: TextStyle(color: Colors.white)),
               ),
             ],
           ),
@@ -126,8 +118,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
     } catch (e) {
       if (mounted) {
+        String errMsg = e.toString();
+        if (errMsg.contains('email-already-in-use')) {
+          errMsg = 'Bu e-mail artıq qeydiyyatdan keçib! Giriş səhifəsindən daxil olun.';
+        } else if (errMsg.contains('weak-password')) {
+          errMsg = 'Şifrə çox zəifdir. Ən azı 6 simvol daxil edin.';
+        } else if (errMsg.contains('invalid-email')) {
+          errMsg = 'E-mail ünvanı düzgün deyil.';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Qeydiyyat xətası: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(errMsg), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -137,195 +137,163 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isArtisan = _selectedRole == 'usta' || _selectedRole == 'worker';
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Qeydiyyat')),
+      appBar: AppBar(
+        title: const Text('Qeydiyyat'),
+        backgroundColor: const Color(0xFF1769D2),
+        foregroundColor: Colors.white,
+      ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(24),
           children: [
-            const Text(
-              'Yeni Hesab Yarat',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            // Profil Şəkli Seçimi (İstəyə bağlı)
+            Center(
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 48,
+                    backgroundColor: const Color(0xFF1769D2).withOpacity(0.12),
+                    backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
+                    child: _profileImage == null
+                        ? const Icon(Icons.person, size: 52, color: Color(0xFF1769D2))
+                        : null,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: InkWell(
+                      onTap: _pickProfileImage,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF1769D2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 18),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 6),
-            const Text(
-              'Xidmətlərdən yararlanmaq üçün qeydiyyatdan keçin',
-              style: TextStyle(color: Colors.grey),
+            const SizedBox(height: 8),
+            const Center(
+              child: Text(
+                'Profil şəkli əlavə et (İstəyə bağlı)',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
 
             // Ad və Soyad
             TextFormField(
               controller: _nameController,
               decoration: const InputDecoration(
                 labelText: 'Ad və Soyad',
-                prefixIcon: Icon(Icons.person_outline),
-                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person),
               ),
-              validator: (v) => v == null || v.trim().isEmpty ? 'Adınızı qeyd edin' : null,
+              validator: (v) => v!.trim().isEmpty ? 'Adınızı daxil edin' : null,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
 
-            // Telefon nömrəsi
+            // Rol Seçimi
+            DropdownButtonFormField<String>(
+              value: _selectedRole,
+              decoration: const InputDecoration(
+                labelText: 'Fəaliyyət Növü',
+                prefixIcon: Icon(Icons.work_outline),
+              ),
+              items: _roles.entries.map((e) {
+                return DropdownMenuItem(
+                  value: e.key,
+                  child: Text(e.value, style: const TextStyle(fontSize: 13)),
+                );
+              }).toList(),
+              onChanged: (val) {
+                if (val != null) setState(() => _selectedRole = val);
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Telefon Nömrəsi
             TextFormField(
               controller: _phoneController,
               keyboardType: TextInputType.phone,
               decoration: const InputDecoration(
-                labelText: 'Əlaqə nömrəsi (+994...)',
-                prefixIcon: Icon(Icons.phone_outlined),
-                border: OutlineInputBorder(),
+                labelText: 'Mobil Nömrə',
+                prefixIcon: Icon(Icons.phone),
+                hintText: '+994 50 123 45 67',
               ),
-              validator: (v) => v == null || v.trim().isEmpty ? 'Əlaqə nömrənizi qeyd edin' : null,
+              validator: (v) => v!.trim().isEmpty ? 'Əlaqə nömrənizi daxil edin' : null,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
 
-            // E-mail
+            // Email
             TextFormField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
               decoration: const InputDecoration(
                 labelText: 'E-mail ünvanı',
                 prefixIcon: Icon(Icons.email_outlined),
-                border: OutlineInputBorder(),
               ),
-              validator: (v) => v == null || !v.contains('@') ? 'Düzgün e-mail yazın' : null,
+              validator: (v) => !v!.contains('@') ? 'Düzgün e-mail daxil edin' : null,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
 
             // Şifrə
             TextFormField(
               controller: _passController,
               obscureText: _obscurePass,
               decoration: InputDecoration(
-                labelText: 'Şifrə (ən azı 8 simvol)',
+                labelText: 'Şifrə (ən azı 6 simvol)',
                 prefixIcon: const Icon(Icons.lock_outline),
-                border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
                   icon: Icon(_obscurePass ? Icons.visibility_off : Icons.visibility),
                   onPressed: () => setState(() => _obscurePass = !_obscurePass),
                 ),
               ),
-              validator: (v) => v == null || v.length < 8 ? 'Şifrə ən azı 8 simvol olmalıdır' : null,
-            ),
-            const SizedBox(height: 20),
-
-            // Rol seçimi
-            const Text(
-              'Hansı məqsədlə qeydiyyatdan keçirsiniz?',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            ..._roles.entries.map((entry) => RadioListTile<String>(
-                  value: entry.key,
-                  groupValue: _selectedRole,
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(entry.value),
-                  onChanged: (val) {
-                    setState(() {
-                      _selectedRole = val!;
-                    });
-                  },
-                )),
-
-            // Usta və ya fəhlədirsə 1 DƏQİQƏLİK VİDEO YÜKLƏMƏ BÖLMƏSİ
-            if (isArtisan) ...[
-              const SizedBox(height: 16),
-              Card(
-                color: Colors.blue.shade50,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.blue.shade200),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.video_library, color: Color(0xFF1769D2)),
-                          SizedBox(width: 8),
-                          Text(
-                            '1 Dəqiqəlik Tanıtım Videosu',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Görülən işləriniz və bacarıqlarınız haqqında qısa video çəkin (Maksimum 60 saniyə, 40 MB).',
-                        style: TextStyle(fontSize: 13, color: Colors.black87),
-                      ),
-                      const SizedBox(height: 12),
-
-                      if (_videoFile != null) ...[
-                        Row(
-                          children: [
-                            const Icon(Icons.check_circle, color: Colors.green),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Video seçildi (${_videoFile!.path.split(Platform.pathSeparator).last})',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => setState(() => _videoFile = null),
-                            ),
-                          ],
-                        ),
-                      ] else ...[
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () => _pickVideo(ImageSource.camera),
-                                icon: const Icon(Icons.videocam),
-                                label: const Text('Kamera ilə çək'),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () => _pickVideo(ImageSource.gallery),
-                                icon: const Icon(Icons.video_file),
-                                label: const Text('Qalereyadan seç'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 24),
-
-            // Təsdiq düyməsi
-            FilledButton(
-              onPressed: _isLoading ? null : _submit,
-              style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-              child: _isLoading
-                  ? const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
-                        SizedBox(width: 12),
-                        Text('Yüklənir və qeydiyyatdan keçirilir...'),
-                      ],
-                    )
-                  : const Text('Qeydiyyatı Tamamla', style: TextStyle(fontSize: 16)),
+              validator: (v) => v!.length < 6 ? 'Ən azı 6 simvol olmalıdır' : null,
             ),
             const SizedBox(height: 30),
+
+            // Qeydiyyat Düyməsi
+            SizedBox(
+              height: 50,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1769D2),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: _isLoading ? null : _submit,
+                child: _isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text(
+                        'Qeydiyyatdan Keç',
+                        style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Daxil ol keçidi
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Artıq hesabınız var? '),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: const Text(
+                    'Daxil olun',
+                    style: TextStyle(
+                      color: Color(0xFF1769D2),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),

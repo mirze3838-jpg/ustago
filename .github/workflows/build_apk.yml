@@ -61,13 +61,25 @@ jobs:
         run: flutter build web --release --base-href "/ustago/"
 
       - name: Build Android APK
-        run: flutter build apk --release --no-tree-shake-icons
+        run: |
+          flutter build apk --release --no-tree-shake-icons
+          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/ustago.apk
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
           name: UstaGo-Android-APK
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Update GitHub Release APK
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.0
+          name: UstaGo v1.0.0 (Android APK)
+          files: build/app/outputs/flutter-apk/ustago.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Deploy iOS Web App to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3

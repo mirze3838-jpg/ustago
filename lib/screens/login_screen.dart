@@ -42,11 +42,14 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       if (mounted) {
+        String msg = e.toString();
+        if (msg.contains('user-not-found') || msg.contains('wrong-password') || msg.contains('invalid-credential')) {
+          msg = 'E-mail və ya şifrə yanlışdır!';
+        } else if (msg.contains('invalid-email')) {
+          msg = 'E-mail ünvanı formatı düzgün deyil.';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Giriş xətası: ${e.toString().replaceAll('Exception:', '')}'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(msg), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -67,9 +70,12 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Google ilə giriş xətası: $e'),
-            backgroundColor: Colors.red,
+          const SnackBar(
+            content: Text(
+              'Google ilə giriş üçün Firebase-də SHA-1 sazlanmalıdır. Zəhmət olmasa E-mail və Şifrə ilə daxil olun.',
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 4),
           ),
         );
       }
@@ -81,41 +87,70 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const HomeScreen()),
+              );
+            },
+            child: const Text('Keçid et (Qonaq)', style: TextStyle(color: Color(0xFF1769D2), fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Form(
               key: _formKey,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(Icons.handyman_rounded, size: 70, color: Color(0xFF1769D2)),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'UstaGo-ya Xoş Gəlmisiniz',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  // Loqo və Başlıq
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1769D2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.handyman_rounded, size: 40, color: Colors.white),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 14),
                   const Text(
-                    'Hesabınıza daxil olun',
+                    'UstaGo',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1769D2),
+                      letterSpacing: 0.5,
+                    ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Peşəkar Usta Xidmətləri və Satış Platforması',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 36),
 
-                  // E-mail sahəsi
+                  // Email sahəsi
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
                     decoration: const InputDecoration(
-                      labelText: 'E-mail',
+                      labelText: 'E-mail ünvanı',
                       prefixIcon: Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(),
                     ),
-                    validator: (v) => v == null || !v.contains('@') ? 'Düzgün e-mail daxil edin' : null,
+                    validator: (v) => !v!.contains('@') ? 'Düzgün e-mail daxil edin' : null,
                   ),
                   const SizedBox(height: 16),
 
@@ -126,56 +161,69 @@ class _LoginScreenState extends State<LoginScreen> {
                     decoration: InputDecoration(
                       labelText: 'Şifrə',
                       prefixIcon: const Icon(Icons.lock_outline),
-                      border: const OutlineInputBorder(),
                       suffixIcon: IconButton(
                         icon: Icon(_obscurePass ? Icons.visibility_off : Icons.visibility),
                         onPressed: () => setState(() => _obscurePass = !_obscurePass),
                       ),
                     ),
-                    validator: (v) => v == null || v.length < 6 ? 'Şifrə ən azı 6 simvol olmalıdır' : null,
+                    validator: (v) => v!.isEmpty ? 'Şifrənizi daxil edin' : null,
                   ),
                   const SizedBox(height: 24),
 
                   // Daxil ol düyməsi
-                  FilledButton(
-                    onPressed: _isLoading ? null : _loginWithEmail,
-                    style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-                    child: _isLoading
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('Daxil ol', style: TextStyle(fontSize: 16)),
+                  SizedBox(
+                    height: 50,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1769D2),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: _isLoading ? null : _loginWithEmail,
+                      child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text(
+                              'Daxil Ol',
+                              style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                    ),
                   ),
                   const SizedBox(height: 16),
 
-                  // Bölücü
-                  const Row(
-                    children: [
-                      Expanded(child: Divider()),
-                      Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('və ya')),
-                      Expanded(child: Divider()),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Google ilə daxil ol
+                  // Google ilə Giriş
                   OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      side: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    icon: const Icon(Icons.g_mobiledata, size: 28, color: Colors.red),
+                    label: const Text(
+                      'Google ilə Daxil Ol',
+                      style: TextStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
                     onPressed: _isLoading ? null : _loginWithGoogle,
-                    icon: const Icon(Icons.g_mobiledata, size: 28),
-                    label: const Text('Google ilə davam et'),
-                    style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
                   ),
                   const SizedBox(height: 24),
 
-                  // Qeydiyyat linki
+                  // Qeydiyyat keçidi
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text('Hesabınız yoxdur?'),
-                      TextButton(
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                      const Text('Hesabınız yoxdur? '),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                          );
+                        },
+                        child: const Text(
+                          'Qeydiyyatdan keçin',
+                          style: TextStyle(
+                            color: Color(0xFF1769D2),
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                        child: const Text('Qeydiyyatdan keçin'),
                       ),
                     ],
                   ),
