@@ -1,4 +1,4 @@
-name: Build UstaGo APK
+name: Build UstaGo App
 
 on:
   push:
@@ -28,21 +28,35 @@ jobs:
         run: |
           cp android/app/google-services.json /tmp/google-services.json
           rm -rf android
-          flutter create . --platforms=android --org=com.ustago
+          flutter create . --platforms=android,web --org=com.ustago
           cp /tmp/google-services.json android/app/google-services.json
-          sed -i '/plugins {/a \    id "com.google.gms.google-services" version "4.4.2" apply false' android/settings.gradle
-          sed -i '/plugins {/a \    id "com.google.gms.google-services"' android/app/build.gradle
-          sed -i 's/minSdkVersion = flutter.minSdkVersion/minSdkVersion = 21/g' android/app/build.gradle || true
-          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' android/app/build.gradle || true
+          
+          # Firebase paket adını avtomatik 100% eyniləşdir
+          sed -i 's/"com.ustago.app"/"com.ustago.ustago"/g' android/app/google-services.json
+          
+          # Pluginləri qoş
+          sed -i '/plugins {/a \    id "com.google.gms.google-services" version "4.4.2" apply false' android/settings.gradle*
+          sed -i '/plugins {/a \    id "com.google.gms.google-services"' android/app/build.gradle*
+          sed -i 's/compileSdk = .*/compileSdk = 35/g' android/app/build.gradle* || true
+          sed -i 's/minSdk = .*/minSdk = 21/g' android/app/build.gradle* || true
 
       - name: Get Dependencies
         run: flutter pub get
 
-      - name: Build APK
+      - name: Build Web App (for iPhone / Safari)
+        run: flutter build web --release
+
+      - name: Build Android APK
         run: flutter build apk --release --no-tree-shake-icons
 
-      - name: Upload APK Artifact
+      - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
-          name: UstaGo-Release-APK
+          name: UstaGo-Android-APK
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload Web App (for iPhone)
+        uses: actions/upload-artifact@v4
+        with:
+          name: UstaGo-iPhone-Web-App
+          path: build/web
