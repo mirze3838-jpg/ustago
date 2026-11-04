@@ -69,13 +69,20 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final errorStr = e.toString();
+        String userFriendlyMsg = 'Google ilə daxil olarkən xəta baş verdi: $errorStr';
+        if (errorStr.contains('10') || errorStr.contains('DEVELOPER_ERROR')) {
+          userFriendlyMsg = 'Google Xətası 10: Tətbiqin paket adı (com.ustago.app) və ya SHA-1 Firebase-də təsdiqlənməlidir.';
+        } else if (errorStr.contains('12500')) {
+          userFriendlyMsg = 'Google Xətası 12500: Firebase Authentication-da Google provayderini aktiv edin.';
+        } else if (errorStr.contains('network') || errorStr.contains('7')) {
+          userFriendlyMsg = 'İnternet bağlantınızı yoxlayın.';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Google ilə giriş üçün Firebase-də SHA-1 sazlanmalıdır. Zəhmət olmasa E-mail və Şifrə ilə daxil olun.',
-            ),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 4),
+          SnackBar(
+            content: Text(userFriendlyMsg),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 6),
           ),
         );
       }

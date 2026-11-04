@@ -31,6 +31,7 @@ jobs:
         run: |
           cp android/app/google-services.json /tmp/google-services.json
           cp android/app/debug.keystore /tmp/debug.keystore
+          cp android/app/src/main/AndroidManifest.xml /tmp/AndroidManifest.xml || true
           mkdir -p /tmp/saved_res && cp -r android/app/src/main/res/mipmap* /tmp/saved_res/ || true
           cp -r web /tmp/saved_web || true
           rm -rf android
@@ -39,9 +40,14 @@ jobs:
           cp /tmp/debug.keystore android/app/debug.keystore
           cp -r /tmp/saved_res/* android/app/src/main/res/ || true
           cp -r /tmp/saved_web/* web/ || true
+          cp /tmp/AndroidManifest.xml android/app/src/main/AndroidManifest.xml || true
 
-          # Firebase paket adini eynilesdir
-          sed -i 's/"com.ustago.app"/"com.ustago.ustago"/g' android/app/google-services.json
+          # Paket adini com.ustago.app olaraq teyin et (Firebase ile tam eyni olmalidir)
+          sed -i 's/applicationId = ".*"/applicationId = "com.ustago.app"/g' android/app/build.gradle* || true
+          sed -i 's/applicationId ".*"/applicationId "com.ustago.app"/g' android/app/build.gradle* || true
+          sed -i 's/namespace = ".*"/namespace = "com.ustago.app"/g' android/app/build.gradle* || true
+          sed -i 's/namespace ".*"/namespace "com.ustago.app"/g' android/app/build.gradle* || true
+          sed -i 's/package="com.ustago.ustago"/package="com.ustago.app"/g' android/app/src/main/AndroidManifest.xml || true
 
           # Kotlin versiyasini 1.9.24-e yukselt
           sed -i 's/org.jetbrains.kotlin.android" version "[^"]*"/org.jetbrains.kotlin.android" version "1.9.24"/g' android/settings.gradle* || true
