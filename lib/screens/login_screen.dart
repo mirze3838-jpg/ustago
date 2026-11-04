@@ -114,14 +114,16 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // Loqo və Başlıq
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF1769D2),
-                      shape: BoxShape.circle,
+                  Center(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Image.asset(
+                        'assets/images/app_logo.png',
+                        width: 90,
+                        height: 90,
+                        fit: BoxFit.cover,
+                      ),
                     ),
-                    child: const Icon(Icons.handyman_rounded, size: 40, color: Colors.white),
                   ),
                   const SizedBox(height: 14),
                   const Text(

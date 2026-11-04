@@ -31,11 +31,13 @@ jobs:
         run: |
           cp android/app/google-services.json /tmp/google-services.json
           cp android/app/debug.keystore /tmp/debug.keystore
+          mkdir -p /tmp/saved_res && cp -r android/app/src/main/res/mipmap* /tmp/saved_res/ || true
           cp -r web /tmp/saved_web || true
           rm -rf android
           flutter create . --platforms=android,web --org=com.ustago
           cp /tmp/google-services.json android/app/google-services.json
           cp /tmp/debug.keystore android/app/debug.keystore
+          cp -r /tmp/saved_res/* android/app/src/main/res/ || true
           cp -r /tmp/saved_web/* web/ || true
 
           # Firebase paket adini eynilesdir
