@@ -6,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
+import '../services/video_upload_service.dart';
 
 class ShortsScreen extends StatefulWidget {
   const ShortsScreen({super.key});
@@ -297,45 +298,35 @@ class _ShortsScreenState extends State<ShortsScreen> {
 
                         String finalVideoUrl = link;
 
-                        // Əgər telefonun qalereyasından video seçilibsə, Storage-ə yükləyirik
+                        // Əgər telefonun qalereyasından video seçilibsə, pulsuz bulud bazasına yükləyirik
                         if (pickedVideo != null && pickedVideoBytes != null) {
                           try {
-                            setModalState(() => uploadStatus = 'Video bulud yaddaşına yüklənir...');
-                            final fileName = 'short_${DateTime.now().millisecondsSinceEpoch}.mp4';
-                            final ref = FirebaseStorage.instance.ref().child('shorts').child(fileName);
-                            final uploadTask = ref.putData(
-                              pickedVideoBytes!,
-                              SettableMetadata(contentType: 'video/mp4'),
-                            );
-
-                            // Real-time yükləmə faizi
-                            uploadTask.snapshotEvents.listen((TaskSnapshot snap) {
-                              if (snap.totalBytes > 0) {
-                                final prog = snap.bytesTransferred / snap.totalBytes;
-                                setModalState(() {
-                                  uploadProgress = prog;
-                                  uploadStatus = '${(prog * 100).toStringAsFixed(0)}%';
-                                });
-                              }
+                            setModalState(() {
+                              uploadStatus = 'Video bulud bazasına yüklənir...';
+                              uploadProgress = 0.2;
                             });
 
-                            final snap = await uploadTask.timeout(const Duration(minutes: 5));
-                            finalVideoUrl = await snap.ref.getDownloadURL();
+                            final uploadedUrl = await VideoUploadService.uploadVideo(
+                              videoBytes: pickedVideoBytes!,
+                              fileName: pickedVideo!.name,
+                              onProgress: (p) {
+                                setModalState(() {
+                                  uploadProgress = p;
+                                  uploadStatus = '${(p * 100).toStringAsFixed(0)}%';
+                                });
+                              },
+                            );
+
+                            finalVideoUrl = uploadedUrl;
                           } catch (e) {
-                            debugPrint('Storage upload error: $e');
+                            debugPrint('Video upload error: $e');
                             setModalState(() => isUploading = false);
                             if (mounted) {
-                              String errText = 'Video yükləmə xətası: $e';
-                              if (e.toString().contains('unauthorized') || e.toString().contains('permission-denied')) {
-                                errText = 'Firebase Storage icazəsi bağlıdır! Firebase Console -> Storage -> Rules bölməsində yazma icazəsi (allow write: if true;) verilməlidir.';
-                              } else if (e.toString().contains('TimeoutException')) {
-                                errText = 'İnternet sürəti zəif olduğu üçün vaxt bitdi (Timeout). Zəhmət olmasa daha qısa video və ya stabil internet seçin.';
-                              }
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text(errText),
+                                  content: Text('Video yükləmə xətası: $e\nZəhmət olmasa internet bağlantısını yoxlayın və ya video linki daxil edin.'),
                                   backgroundColor: Colors.orange.shade900,
-                                  duration: const Duration(seconds: 8),
+                                  duration: const Duration(seconds: 7),
                                 ),
                               );
                             }

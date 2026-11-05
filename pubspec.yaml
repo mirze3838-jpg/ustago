@@ -27,6 +27,9 @@ dependencies:
   # Zəng və WhatsApp əlaqəsi
   url_launcher: ^6.3.0
 
+  # Şəbəkə və Video Yükləmə (Pulsuz Limitsiz Video Buludu)
+  http: ^1.2.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

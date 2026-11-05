@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
+import '../services/video_upload_service.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
 import 'admin_screen.dart';
@@ -1204,38 +1205,33 @@ class _HomeScreenState extends State<HomeScreen> {
 
                             if (pickedVideo != null && pickedVideoBytes != null) {
                               try {
-                                final fileName = 'short_${DateTime.now().millisecondsSinceEpoch}.mp4';
-                                final ref = FirebaseStorage.instance.ref().child('shorts').child(fileName);
-                                final uploadTask = ref.putData(pickedVideoBytes!, SettableMetadata(contentType: 'video/mp4'));
-
-                                uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-                                  if (snapshot.totalBytes > 0) {
-                                    final progress = snapshot.bytesTransferred / snapshot.totalBytes;
-                                    setModalState(() {
-                                      uploadProgress = progress;
-                                      uploadStatusText = '${(progress * 100).toStringAsFixed(0)}%';
-                                    });
-                                  }
+                                setModalState(() {
+                                  uploadStatusText = 'Bulud bazasına yüklənir...';
+                                  uploadProgress = 0.2;
                                 });
 
-                                final snapshot = await uploadTask.timeout(const Duration(minutes: 5));
-                                finalVideoUrl = await snapshot.ref.getDownloadURL();
+                                final uploadedUrl = await VideoUploadService.uploadVideo(
+                                  videoBytes: pickedVideoBytes!,
+                                  fileName: pickedVideo!.name,
+                                  onProgress: (p) {
+                                    setModalState(() {
+                                      uploadProgress = p;
+                                      uploadStatusText = '${(p * 100).toStringAsFixed(0)}%';
+                                    });
+                                  },
+                                );
+
+                                finalVideoUrl = uploadedUrl;
                               } catch (e) {
-                                debugPrint('Storage upload error: $e');
+                                debugPrint('Video upload error: $e');
                                 if (finalVideoUrl.isEmpty) {
                                   setModalState(() => isUploading = false);
                                   if (mounted) {
-                                    String errText = 'Video yükləmə xətası: $e';
-                                    if (e.toString().contains('unauthorized') || e.toString().contains('permission-denied')) {
-                                      errText = 'Firebase Storage icazəsi bağlıdır! Firebase Console -> Storage -> Rules bölməsində yazma icazəsi (allow write: if true;) verilməlidir.';
-                                    } else if (e.toString().contains('TimeoutException')) {
-                                      errText = 'İnternet sürəti zəif olduğu üçün vaxt bitdi (Timeout). Zəhmət olmasa daha qısa video və ya stabil internet seçin.';
-                                    }
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
-                                        content: Text(errText),
+                                        content: Text('Video yükləmə xətası: $e\nZəhmət olmasa internet bağlantısını yoxlayın və ya video linki daxil edin.'),
                                         backgroundColor: Colors.orange.shade900,
-                                        duration: const Duration(seconds: 8),
+                                        duration: const Duration(seconds: 7),
                                       ),
                                     );
                                   }
