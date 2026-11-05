@@ -22,35 +22,37 @@ class CategoryArtisansScreen extends StatelessWidget {
 
   // Kateqoriyanın dəqiq uyğunluğunu yoxlayır
   bool _isMatchingCategory(String? ustaCategory) {
-    if (ustaCategory == null || ustaCategory.trim().isEmpty) return false;
+    final t = _cleanTitle.toLowerCase();
+    if (ustaCategory == null || ustaCategory.trim().isEmpty) {
+      // Kateqoriyası hələ seçilməmiş ustalar default olaraq Tikinti bölməsində göstərilir
+      return t.contains('tikinti');
+    }
 
     final u = ustaCategory.trim().toLowerCase().replaceAll('\n', ' ');
-    final t = _cleanTitle.toLowerCase();
 
-    // Dəqiq eynilik
-    if (u == t) return true;
+    // Dəqiq eynilik və ya bir-birini ehtiva etməsi
+    if (u == t || u.contains(t) || t.contains(u)) return true;
 
     // Açar sözlərlə dəqiq uyğunluq
     const categoryKeywords = {
-      'tikinti': ['tikinti', 'hörgü', 'suvaq', 'bünövrə'],
+      'tikinti': ['tikinti', 'hörgü', 'suvaq', 'bünövrə', 'dam'],
       'santexnik': ['santexnik', 'boru', 'kran', 'su təchizatı'],
       'elektrik': ['elektrik', 'şit', 'naqil', 'işıqlandırma'],
       'təmir': ['təmir', 'quraşdırma', 'usta'],
       'avtomobil': ['avtomobil', 'avto', 'motor', 'dəmirçi'],
       'mebel': ['mebel', 'quraşdırılması', 'yığılması'],
-      'kondisioner': ['kondisioner', 'soyuducu', 'freon'],
-      'dülgər': ['dülgər', 'qapı', 'taxta'],
-      'rəngsaz': ['rəngsaz', 'malyar', 'oboy', 'boya'],
+      'kondisioner': ['kondisioner', 'soyuducu', 'freon', 'kombi'],
+      'dülgər': ['dülgər', 'dulger', 'qapı', 'taxta'],
+      'rəngsaz': ['rəngsaz', 'rengsaz', 'malyar', 'oboy', 'boya'],
     };
 
     for (var entry in categoryKeywords.entries) {
       if (t.contains(entry.key)) {
-        // Hədəf kateqoriya bu açar sözü ehtiva edirsə, ustanın kateqoriyası da bu qrupdan olmalıdır
         return entry.value.any((kw) => u.contains(kw));
       }
     }
 
-    return u.contains(t) || t.contains(u);
+    return false;
   }
 
   Future<void> _makeCall(String phone) async {

@@ -1786,6 +1786,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showEditProfileDialog(String uid, Map<String, dynamic>? userData) {
     final nameController = TextEditingController(text: userData?['fullName'] ?? '');
     final phoneController = TextEditingController(text: userData?['phone'] ?? '');
+    String selectedRole = userData?['role'] ?? 'usta';
     String selectedUstaCategory = userData?['category'] ?? 'Tikinti';
 
     showDialog(
@@ -1809,17 +1810,36 @@ class _HomeScreenState extends State<HomeScreen> {
                   decoration: const InputDecoration(labelText: 'Mobil Nömrə', prefixIcon: Icon(Icons.phone)),
                 ),
                 const SizedBox(height: 12),
+
+                // Hesab Növü (Rol)
                 DropdownButtonFormField<String>(
-                  value: selectedUstaCategory,
-                  decoration: const InputDecoration(labelText: 'Usta İxtisası / Kateqoriya', prefixIcon: Icon(Icons.construction)),
-                  items: _categories.map((c) {
-                    final title = (c['title'] as String).replaceAll('\n', ' ');
-                    return DropdownMenuItem(value: title, child: Text(title));
-                  }).toList(),
+                  value: selectedRole,
+                  decoration: const InputDecoration(labelText: 'Hesab Növü', prefixIcon: Icon(Icons.badge_outlined)),
+                  items: const [
+                    DropdownMenuItem(value: 'usta', child: Text('Usta kimi')),
+                    DropdownMenuItem(value: 'customer', child: Text('Müştəri kimi')),
+                    DropdownMenuItem(value: 'seller', child: Text('Satıcı / Mağaza')),
+                  ],
                   onChanged: (val) {
-                    if (val != null) setDialogState(() => selectedUstaCategory = val);
+                    if (val != null) setDialogState(() => selectedRole = val);
                   },
                 ),
+                const SizedBox(height: 12),
+
+                // Əgər Usta seçilibsə, İxtisas (Kateqoriya)
+                if (selectedRole == 'usta') ...[
+                  DropdownButtonFormField<String>(
+                    value: selectedUstaCategory,
+                    decoration: const InputDecoration(labelText: 'Usta İxtisası / Kateqoriya', prefixIcon: Icon(Icons.construction)),
+                    items: _categories.map((c) {
+                      final title = (c['title'] as String).replaceAll('\n', ' ');
+                      return DropdownMenuItem(value: title, child: Text(title));
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) setDialogState(() => selectedUstaCategory = val);
+                    },
+                  ),
+                ],
               ],
             ),
           ),
@@ -1834,7 +1854,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 await FirebaseFirestore.instance.collection('users').doc(uid).set({
                   'fullName': nameController.text.trim(),
                   'phone': phoneController.text.trim(),
-                  'category': selectedUstaCategory,
+                  'role': selectedRole,
+                  'category': selectedRole == 'usta' ? selectedUstaCategory : '',
                 }, SetOptions(merge: true));
                 if (mounted) {
                   Navigator.pop(ctx);
