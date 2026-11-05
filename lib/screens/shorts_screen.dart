@@ -498,24 +498,39 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
   late VideoPlayerController _controller;
   bool _isInitialized = false;
   bool _isPlaying = true;
+  bool _hasError = false;
 
   @override
   void initState() {
     super.initState();
     final url = widget.data['videoUrl'] ?? '';
     if (url.isNotEmpty) {
-      _controller = VideoPlayerController.networkUrl(Uri.parse(url))
+      _controller = VideoPlayerController.networkUrl(
+        Uri.parse(url),
+        httpHeaders: {'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile)'},
+      )
         ..initialize().then((_) {
           if (mounted) {
             setState(() {
               _isInitialized = true;
+              _hasError = false;
             });
             _controller.setLooping(true);
             _controller.play();
           }
         }).catchError((error) {
           debugPrint('Video error: $error');
+          if (mounted) {
+            setState(() {
+              _hasError = true;
+            });
+          }
         });
+
+      // Video kadrları dəyişdikcə ekranın yenilənməsi üçün dinləyici (ÇOX VACİB)
+      _controller.addListener(() {
+        if (mounted) setState(() {});
+      });
     }
   }
 
@@ -526,6 +541,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
   }
 
   void _togglePlay() {
+    if (!_isInitialized) return;
     setState(() {
       if (_controller.value.isPlaying) {
         _controller.pause();
@@ -561,17 +577,38 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Video və ya yüklənmə çarxı
-          if (_isInitialized)
+          // 1. VİDEO EKRANI (Bütün ekranı örtən şaquli video)
+          if (_isInitialized && !_hasError)
+            SizedBox.expand(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _controller.value.size.width > 0 ? _controller.value.size.width : 1080,
+                  height: _controller.value.size.height > 0 ? _controller.value.size.height : 1920,
+                  child: VideoPlayer(_controller),
+                ),
+              ),
+            )
+          else if (_hasError)
             Center(
-              child: AspectRatio(
-                aspectRatio: _controller.value.aspectRatio,
-                child: VideoPlayer(_controller),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  Icon(Icons.error_outline, color: Colors.orange, size: 48),
+                  SizedBox(height: 8),
+                  Text('Video oxunmadı və ya format uyğun deyil', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                ],
               ),
             )
           else
             const Center(
               child: CircularProgressIndicator(color: Colors.white),
+            ),
+
+          // Video yüklənərkən (buffering) çarx göstərici
+          if (_isInitialized && _controller.value.isBuffering)
+            const Center(
+              child: CircularProgressIndicator(color: Colors.white70),
             ),
 
           // Pause olduqda mərkəzdə böyük Play ikonu
