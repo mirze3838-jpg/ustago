@@ -309,13 +309,47 @@ class _HomeScreenState extends State<HomeScreen> {
         SliverToBoxAdapter(
           child: SizedBox(
             height: 230,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              scrollDirection: Axis.horizontal,
-              itemCount: _shortsList.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                return _buildShortsCard(_shortsList[index]);
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('shorts')
+                  .orderBy('createdAt', descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                final docs = snapshot.data?.docs ?? [];
+                final List<Map<String, dynamic>> dynamicShorts = [];
+
+                for (var d in docs) {
+                  final data = d.data();
+                  dynamicShorts.add({
+                    'id': d.id,
+                    'title': data['title'] ?? 'Usta İşi',
+                    'author': data['artisanName'] ?? 'Usta',
+                    'trade': data['trade'] ?? 'Usta',
+                    'videoUrl': data['videoUrl'] ?? '',
+                  });
+                }
+
+                if (dynamicShorts.isEmpty) {
+                  return ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _shortsList.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemBuilder: (context, index) {
+                      return _buildShortsCard(_shortsList[index]);
+                    },
+                  );
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: dynamicShorts.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                  itemBuilder: (context, index) {
+                    return _buildDynamicShortsCard(dynamicShorts[index]);
+                  },
+                );
               },
             ),
           ),
@@ -600,10 +634,113 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // DİNAMİK YÜKLƏNƏN SHORTS KARTI (Ana səhifəyə dərhal düşən real videolar)
+  Widget _buildDynamicShortsCard(Map<String, dynamic> item) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => setState(() => _currentIndex = 1),
+      child: SizedBox(
+        width: 140,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Color(0xFF1E293B),
+                            Color(0xFF0F172A),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      child: const Center(
+                        child: Icon(Icons.video_library_rounded, size: 40, color: Colors.white24),
+                      ),
+                    ),
+                    // Qaranlıq qradiyent
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                      ),
+                    ),
+                    // Mərkəzdə Play ikonu
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1769D2).withOpacity(0.85),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 28),
+                      ),
+                    ),
+                    // Yuxarıda Usta etiketi
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.55),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          item['trade'] ?? 'Usta',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                    // Aşağıda Müəllif adı
+                    Positioned(
+                      left: 8,
+                      right: 8,
+                      bottom: 8,
+                      child: Text(
+                        item['author'] ?? 'Usta',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              item['title'] ?? 'Usta Videosu',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // SHORTS KARTI
   Widget _buildShortsCard(Map<String, String> item) {
-    return SizedBox(
-      width: 140,
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => setState(() => _currentIndex = 1),
+      child: SizedBox(
+        width: 140,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -671,6 +808,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 
