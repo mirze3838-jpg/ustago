@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
 import '../services/auth_service.dart';
 import '../services/video_upload_service.dart';
 import 'login_screen.dart';
@@ -747,7 +748,17 @@ class _HomeScreenState extends State<HomeScreen> {
         errorBuilder: (_, __, ___) => fallbackVisual,
       );
     } else {
-      coverWidget = fallbackVisual;
+      // İstifadəçi başlıq şəkli qoymayıbsa belə, birbaşa VİDEONUN ÖZÜNÜN İÇİNDƏN kadr çıxarılır və göstərilir!
+      final videoUrl = (item['videoUrl'] ?? '').toString();
+      if (videoUrl.isNotEmpty) {
+        coverWidget = _ShortsVideoThumbnail(
+          key: ValueKey(item['id'] ?? videoUrl),
+          videoUrl: videoUrl,
+          fallback: fallbackVisual,
+        );
+      } else {
+        coverWidget = fallbackVisual;
+      }
     }
 
     return InkWell(
@@ -2376,5 +2387,100 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
+  }
+}
+
+/// Videonun öz içindən (0.7s) kadr çıxararaq kartın üz qabığında göstərən vidcet
+class _ShortsVideoThumbnail extends StatefulWidget {
+  final String videoUrl;
+  final Widget fallback;
+
+  const _ShortsVideoThumbnail({
+    super.key,
+    required this.videoUrl,
+    required this.fallback,
+  });
+
+  @override
+  State<_ShortsVideoThumbnail> createState() => _ShortsVideoThumbnailState();
+}
+
+class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
+  VideoPlayerController? _controller;
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initThumbnail();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ShortsVideoThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.videoUrl != widget.videoUrl) {
+      _controller?.dispose();
+      _controller = null;
+      _isInitialized = false;
+      _initThumbnail();
+    }
+  }
+
+  Future<void> _initThumbnail() async {
+    final url = widget.videoUrl.trim();
+    if (url.isEmpty) return;
+
+    try {
+      final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+      _controller = controller;
+
+      await controller.initialize();
+      if (!mounted) {
+        controller.dispose();
+        return;
+      }
+
+      // Videonun ilk qaranlıq kadrı qalmasın deyə videonun içindən 700ms-ci kadra keçirik
+      final duration = controller.value.duration;
+      final seekTarget = duration > const Duration(milliseconds: 700)
+          ? const Duration(milliseconds: 700)
+          : Duration.zero;
+
+      if (seekTarget > Duration.zero) {
+        await controller.seekTo(seekTarget);
+      }
+      await controller.pause();
+
+      if (mounted) {
+        setState(() {
+          _isInitialized = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Thumbnail extraction error: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isInitialized && _controller != null && _controller!.value.isInitialized) {
+      return SizedBox.expand(
+        child: FittedBox(
+          fit: BoxFit.cover,
+          child: SizedBox(
+            width: _controller!.value.size.width > 0 ? _controller!.value.size.width : 1080,
+            height: _controller!.value.size.height > 0 ? _controller!.value.size.height : 1920,
+            child: VideoPlayer(_controller!),
+          ),
+        ),
+      );
+    }
+    return widget.fallback;
   }
 }
