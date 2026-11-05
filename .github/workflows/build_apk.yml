@@ -44,6 +44,18 @@ jobs:
           cp -r /tmp/saved_web/* web/ || true
           cp /tmp/AndroidManifest.xml android/app/src/main/AndroidManifest.xml || true
 
+          # MainActivity-nin paket adını DƏQİQ com.ustago.app et və uyğun qovluqda yarat
+          rm -rf android/app/src/main/kotlin/*
+          mkdir -p android/app/src/main/kotlin/com/ustago/app
+          cat << 'EOF' > android/app/src/main/kotlin/com/ustago/app/MainActivity.kt
+          package com.ustago.app
+
+          import io.flutter.embedding.android.FlutterActivity
+
+          class MainActivity: FlutterActivity() {
+          }
+          EOF
+
           # Paket adini com.ustago.app olaraq teyin et (Firebase ile tam eyni olmalidir)
           sed -i 's/applicationId = ".*"/applicationId = "com.ustago.app"/g' android/app/build.gradle* || true
           sed -i 's/applicationId ".*"/applicationId "com.ustago.app"/g' android/app/build.gradle* || true
@@ -63,9 +75,9 @@ jobs:
           sed -i 's/signingConfig = signingConfigs.debug/signingConfig = signingConfigs.release/g' android/app/build.gradle* || true
           sed -i 's/signingConfig signingConfigs.debug/signingConfig signingConfigs.release/g' android/app/build.gradle* || true
 
-          # SDK 35 ve minSdk 23 sazla
+          # SDK 35, minSdk 23 ve MultiDex aktivlesdir (Crashlerin qarsisini alir)
           sed -i 's/compileSdk.*/compileSdk = 35/g' android/app/build.gradle* || true
-          sed -i 's/minSdk.*/minSdk = 23/g' android/app/build.gradle* || true
+          sed -i 's/minSdk.*/minSdk = 23\n        multiDexEnabled = true/g' android/app/build.gradle* || true
           sed -i 's/targetSdk.*/targetSdk = 35/g' android/app/build.gradle* || true
 
           # AAPT2 API 35 uyugun versiyani mecbur et (RES_TABLE_TYPE_TYPE xetasini hell edir)

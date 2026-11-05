@@ -12,6 +12,13 @@ Future<void> main() async {
   } catch (e) {
     debugPrint('Firebase ilkin yüklənmə: $e');
   }
+
+  // Qəfil crashlərin qarşısını almaq üçün təhlükəsiz xəta idarəetməsi
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    debugPrint('UstaGo Flutter Error: ${details.exception}');
+  };
+
   runApp(const UstaGoApp());
 }
 
