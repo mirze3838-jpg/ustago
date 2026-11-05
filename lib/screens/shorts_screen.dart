@@ -53,6 +53,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
 
     XFile? pickedVideo;
     Uint8List? pickedVideoBytes;
+    XFile? pickedCover;
+    Uint8List? pickedCoverBytes;
     bool isUploading = false;
     double uploadProgress = 0.0;
     String uploadStatus = '0%';
@@ -190,6 +192,68 @@ class _ShortsScreenState extends State<ShortsScreen> {
                           ),
                         ),
                       ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Videonun Üz Qabığı Şəkli (Thumbnail / Başlıq fotosu)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: pickedCoverBytes != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.memory(pickedCoverBytes!, fit: BoxFit.cover),
+                              )
+                            : const Icon(Icons.add_photo_alternate_rounded, color: Color(0xFF1769D2)),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              pickedCoverBytes != null ? 'Başlıq şəkli seçildi' : 'Videonun Başlıq Şəkli (Kover)',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            Text(
+                              pickedCoverBytes != null ? pickedCover!.name : 'Videoda qaranlıq qalmamaq üçün ilk kadr fotosu seçin',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.grey, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          final picker = ImagePicker();
+                          final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 75);
+                          if (img != null) {
+                            final bytes = await img.readAsBytes();
+                            setModalState(() {
+                              pickedCover = img;
+                              pickedCoverBytes = bytes;
+                            });
+                          }
+                        },
+                        child: Text(pickedCoverBytes != null ? 'Dəyiş' : 'Seç'),
+                      ),
                     ],
                   ),
                 ),
@@ -336,14 +400,25 @@ class _ShortsScreenState extends State<ShortsScreen> {
                         try {
                           final authorName = user?.displayName ?? 'UstaGo Ustası';
                           final uid = user?.uid ?? 'guest';
+                          final tradeVal = tradeController.text.trim().isEmpty ? 'Tikinti' : tradeController.text.trim();
+
+                          String fallbackCover = 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80';
+                          final tLower = tradeVal.toLowerCase();
+                          if (tLower.contains('santexnik')) fallbackCover = 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=600&q=80';
+                          if (tLower.contains('elektrik')) fallbackCover = 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80';
+                          if (tLower.contains('kondisioner')) fallbackCover = 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=600&q=80';
+
+                          final String coverBase64 = pickedCoverBytes != null ? base64Encode(pickedCoverBytes!) : '';
 
                           // 1. Shorts kolleksiyasına yazırıq
                           await FirebaseFirestore.instance.collection('shorts').add({
                             'userId': uid,
                             'title': title,
                             'videoUrl': finalVideoUrl,
+                            'thumbnailBase64': coverBase64,
+                            'thumbnailUrl': fallbackCover,
                             'artisanName': authorName,
-                            'trade': tradeController.text.trim().isEmpty ? 'Peşəkar Usta' : tradeController.text.trim(),
+                            'trade': tradeVal,
                             'phone': phone.isEmpty ? '+994 50 000 00 00' : phone,
                             'likes': 0,
                             'createdAt': FieldValue.serverTimestamp(),
@@ -356,8 +431,11 @@ class _ShortsScreenState extends State<ShortsScreen> {
                               'authorName': authorName,
                               'authorRole': 'usta',
                               'title': title,
-                              'category': tradeController.text.trim(),
+                              'category': tradeVal,
                               'videoUrl': finalVideoUrl,
+                              'imageBase64': coverBase64,
+                              'thumbnailBase64': coverBase64,
+                              'thumbnailUrl': fallbackCover,
                               'isVideo': true,
                               'createdAt': FieldValue.serverTimestamp(),
                               'likes': 0,
@@ -423,6 +501,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
                     'phone': data['phone'] ?? '',
                     'likes': (data['likes'] ?? 0).toString(),
                     'videoUrl': data['videoUrl'] ?? '',
+                    'thumbnailBase64': data['thumbnailBase64'],
+                    'thumbnailUrl': data['thumbnailUrl'],
                   });
                 }
               }
@@ -593,6 +673,38 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     }
   }
 
+  Widget _buildCoverImage(Map<String, dynamic> data) {
+    final String? thumbnailBase64 = data['thumbnailBase64'];
+    final String? thumbnailUrl = data['thumbnailUrl'];
+    final String trade = (data['trade'] ?? '').toString().toLowerCase();
+
+    String fallbackUrl = 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80';
+    if (trade.contains('santexnik')) {
+      fallbackUrl = 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=800&q=80';
+    } else if (trade.contains('elektrik')) {
+      fallbackUrl = 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80';
+    } else if (trade.contains('kondisioner')) {
+      fallbackUrl = 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=800&q=80';
+    } else if (trade.contains('mebel') || trade.contains('dülgər')) {
+      fallbackUrl = 'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=800&q=80';
+    }
+
+    if (thumbnailBase64 != null && thumbnailBase64.isNotEmpty) {
+      try {
+        return Image.memory(base64Decode(thumbnailBase64), fit: BoxFit.cover, width: double.infinity, height: double.infinity);
+      } catch (_) {}
+    }
+
+    final imgUrl = (thumbnailUrl != null && thumbnailUrl.isNotEmpty) ? thumbnailUrl : fallbackUrl;
+    return Image.network(
+      imgUrl,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      errorBuilder: (_, __, ___) => Container(color: const Color(0xFF0F172A)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -600,6 +712,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       child: Stack(
         fit: StackFit.expand,
         children: [
+          // 0. VİDEO AÇILANA QƏDƏR ARXA FONDA BAŞLIQ FOTOSU (Qaranlıq qalmır!)
+          _buildCoverImage(widget.data),
           // 1. VİDEO EKRANI (Bütün ekranı dolduran video)
           if (_isInitialized && _controller != null && !_hasError)
             SizedBox.expand(

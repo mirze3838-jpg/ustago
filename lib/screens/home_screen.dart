@@ -326,6 +326,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     'author': data['artisanName'] ?? 'Usta',
                     'trade': data['trade'] ?? 'Usta',
                     'videoUrl': data['videoUrl'] ?? '',
+                    'thumbnailBase64': data['thumbnailBase64'],
+                    'thumbnailUrl': data['thumbnailUrl'],
                   });
                 }
 
@@ -634,8 +636,53 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // DİNAMİK YÜKLƏNƏN SHORTS KARTI (Ana səhifəyə dərhal düşən real videolar)
+  // Kateqoriyaya uyğun parlaq real kadr / başlıq şəkli
+  String _getCategoryPlaceholderImage(String? trade) {
+    final t = (trade ?? '').toLowerCase();
+    if (t.contains('santexnik') || t.contains('su')) {
+      return 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=400&q=80';
+    } else if (t.contains('elektrik') || t.contains('şit') || t.contains('naqil')) {
+      return 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=400&q=80';
+    } else if (t.contains('kondisioner') || t.contains('kombi') || t.contains('soyuducu')) {
+      return 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=400&q=80';
+    } else if (t.contains('mebel') || t.contains('dülgər')) {
+      return 'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=400&q=80';
+    } else if (t.contains('avto') || t.contains('avtomobil')) {
+      return 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&w=400&q=80';
+    } else if (t.contains('rəngsaz') || t.contains('malyar') || t.contains('boya')) {
+      return 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80';
+    }
+    // Default Tikinti və təmir üçün gözəl real kadr
+    return 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=80';
+  }
+
+  // DİNAMİK YÜKLƏNƏN SHORTS KARTI (Videonun başlıq şəkli ilə, qaranlıq görünmür)
   Widget _buildDynamicShortsCard(Map<String, dynamic> item) {
+    final String? thumbnailBase64 = item['thumbnailBase64'];
+    final String? thumbnailUrl = item['thumbnailUrl'];
+    final String defaultImg = _getCategoryPlaceholderImage(item['trade']);
+
+    Widget coverWidget;
+    if (thumbnailBase64 != null && thumbnailBase64.isNotEmpty) {
+      try {
+        coverWidget = Image.memory(base64Decode(thumbnailBase64), fit: BoxFit.cover);
+      } catch (_) {
+        coverWidget = Image.network(defaultImg, fit: BoxFit.cover);
+      }
+    } else if (thumbnailUrl != null && thumbnailUrl.isNotEmpty) {
+      coverWidget = Image.network(
+        thumbnailUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Image.network(defaultImg, fit: BoxFit.cover),
+      );
+    } else {
+      coverWidget = Image.network(
+        defaultImg,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(color: const Color(0xFF1E293B)),
+      );
+    }
+
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: () => setState(() => _currentIndex = 1),
@@ -650,43 +697,36 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Color(0xFF1E293B),
-                            Color(0xFF0F172A),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      child: const Center(
-                        child: Icon(Icons.video_library_rounded, size: 40, color: Colors.white24),
-                      ),
-                    ),
-                    // Qaranlıq qradiyent
+                    // 1. VİDEONUN REAL BAŞLIQ FOTOSU (Qaranlıq görünməsin deyə)
+                    coverWidget,
+
+                    // 2. Qaranlıq zərif qradiyent
                     Container(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
+                          colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                         ),
                       ),
                     ),
-                    // Mərkəzdə Play ikonu
+
+                    // 3. Mərkəzdə Play ikonu
                     Center(
                       child: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
                           color: const Color(0xFF1769D2).withOpacity(0.85),
                           shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 6),
+                          ],
                         ),
                         child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 28),
                       ),
                     ),
-                    // Yuxarıda Usta etiketi
+
+                    // 4. Yuxarıda Usta etiketi
                     Positioned(
                       top: 8,
                       left: 8,
@@ -694,7 +734,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.55),
+                          color: Colors.black.withOpacity(0.65),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -705,7 +745,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
-                    // Aşağıda Müəllif adı
+
+                    // 5. Aşağıda Müəllif adı
                     Positioned(
                       left: 8,
                       right: 8,
@@ -714,7 +755,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         item['author'] ?? 'Usta',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
@@ -1395,6 +1436,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               }
                             }
 
+                            final defaultCover = _getCategoryPlaceholderImage(selectedCat);
+
                             // 1. Profil postlarına əlavə et
                             await FirebaseFirestore.instance.collection('posts').add({
                               'userId': uid,
@@ -1403,6 +1446,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               'title': title,
                               'category': selectedCat,
                               'videoUrl': finalVideoUrl,
+                              'thumbnailUrl': defaultCover,
                               'isVideo': true,
                               'createdAt': FieldValue.serverTimestamp(),
                               'likes': 0,
@@ -1413,6 +1457,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               'userId': uid,
                               'title': title,
                               'videoUrl': finalVideoUrl,
+                              'thumbnailUrl': defaultCover,
                               'artisanName': authorName,
                               'trade': selectedCat,
                               'phone': '+994 50 000 00 00',
