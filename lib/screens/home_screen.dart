@@ -316,6 +316,28 @@ class _HomeScreenState extends State<HomeScreen> {
                   .orderBy('createdAt', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
+                // Səhifə yenilənərkən heç bir köhnə stok şəkil sıçrayışı olmasın - səliqəli müasir skelet yüklənməsi
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: 3,
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemBuilder: (context, index) {
+                      return Container(
+                        width: 140,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E293B),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Center(
+                          child: Icon(Icons.play_circle_outline, color: Colors.white.withOpacity(0.2), size: 36),
+                        ),
+                      );
+                    },
+                  );
+                }
+
                 final docs = snapshot.data?.docs ?? [];
                 final List<Map<String, dynamic>> dynamicShorts = [];
 
@@ -333,14 +355,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
 
                 if (dynamicShorts.isEmpty) {
-                  return ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _shortsList.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 12),
-                    itemBuilder: (context, index) {
-                      return _buildShortsCard(_shortsList[index]);
-                    },
+                  return const Center(
+                    child: Text(
+                      'Hələ ki Shorts video paylaşılmayıb',
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
                   );
                 }
 
@@ -663,58 +682,30 @@ class _HomeScreenState extends State<HomeScreen> {
     final String? thumbnailUrl = item['thumbnailUrl'];
     final String trade = (item['trade'] ?? 'Tikinti').toString();
 
-    // Qaranlıq qalmamaq üçün kateqoriyaya uyğun zəngin və rəngli fallback vizualı
-    final String tLower = trade.toLowerCase();
-    List<Color> gradientColors = [const Color(0xFFE65100), const Color(0xFFBF360C)]; // Tikinti (Narıncı/Kərpic)
-    IconData visualIcon = Icons.foundation_rounded;
-
-    if (tLower.contains('santexnik') || tLower.contains('su')) {
-      gradientColors = [const Color(0xFF0288D1), const Color(0xFF01579B)]; // Santexnik (Mavi)
-      visualIcon = Icons.water_drop_rounded;
-    } else if (tLower.contains('elektrik') || tLower.contains('şit')) {
-      gradientColors = [const Color(0xFFF57F17), const Color(0xFFE65100)]; // Elektrik (Qızılı)
-      visualIcon = Icons.bolt_rounded;
-    } else if (tLower.contains('kondisioner') || tLower.contains('kombi')) {
-      gradientColors = [const Color(0xFF0097A7), const Color(0xFF006064)]; // Kondisioner (Firuzəyi)
-      visualIcon = Icons.ac_unit_rounded;
-    } else if (tLower.contains('mebel') || tLower.contains('dülgər')) {
-      gradientColors = [const Color(0xFF8D6E63), const Color(0xFF4E342E)]; // Mebel (Qəhvəyi)
-      visualIcon = Icons.chair_rounded;
-    } else if (tLower.contains('rəngsaz') || tLower.contains('malyar')) {
-      gradientColors = [const Color(0xFFFF7043), const Color(0xFFD84315)]; // Rəngsaz (Parlaq)
-      visualIcon = Icons.format_paint_rounded;
-    }
-
+    // Səhifə yenilənərkən sarı/narıncı sıçrayış olmasın deyə zərif neytral qaranlıq kover (YouTube stili)
     final Widget fallbackVisual = Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: gradientColors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
         ),
       ),
       child: Stack(
         alignment: Alignment.center,
         children: [
-          Icon(visualIcon, size: 60, color: Colors.white.withOpacity(0.22)),
+          Icon(Icons.play_circle_fill_rounded, size: 44, color: Colors.white.withOpacity(0.2)),
           Positioned(
-            bottom: 30,
+            bottom: 24,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.25),
+                color: Colors.white.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(visualIcon, color: Colors.white, size: 14),
-                  const SizedBox(width: 4),
-                  Text(
-                    trade,
-                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                  ),
-                ],
+              child: Text(
+                trade,
+                style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -2440,6 +2431,8 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
         return;
       }
 
+      await controller.setVolume(0);
+
       // Videonun ilk qaranlıq kadrı qalmasın deyə videonun içindən 700ms-ci kadra keçirik
       final duration = controller.value.duration;
       final seekTarget = duration > const Duration(milliseconds: 700)
@@ -2469,18 +2462,25 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isInitialized && _controller != null && _controller!.value.isInitialized) {
-      return SizedBox.expand(
-        child: FittedBox(
-          fit: BoxFit.cover,
-          child: SizedBox(
-            width: _controller!.value.size.width > 0 ? _controller!.value.size.width : 1080,
-            height: _controller!.value.size.height > 0 ? _controller!.value.size.height : 1920,
-            child: VideoPlayer(_controller!),
-          ),
-        ),
-      );
-    }
-    return widget.fallback;
+    final bool ready = _isInitialized && _controller != null && _controller!.value.isInitialized;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      child: ready
+          ? SizedBox.expand(
+              key: const ValueKey('video_ready'),
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _controller!.value.size.width > 0 ? _controller!.value.size.width : 1080,
+                  height: _controller!.value.size.height > 0 ? _controller!.value.size.height : 1920,
+                  child: VideoPlayer(_controller!),
+                ),
+              ),
+            )
+          : SizedBox.expand(
+              key: const ValueKey('video_fallback'),
+              child: widget.fallback,
+            ),
+    );
   }
 }
