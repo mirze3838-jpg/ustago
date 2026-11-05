@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -435,7 +434,10 @@ class _ShortsScreenState extends State<ShortsScreen> {
                 scrollDirection: Axis.vertical,
                 itemCount: items.length,
                 itemBuilder: (context, index) {
-                  return _ShortVideoItem(data: items[index]);
+                  return _ShortVideoItem(
+                    key: ValueKey(items[index]['id'] ?? index),
+                    data: items[index],
+                  );
                 },
               );
             },
@@ -488,95 +490,87 @@ class _ShortsScreenState extends State<ShortsScreen> {
 
 class _ShortVideoItem extends StatefulWidget {
   final Map<String, dynamic> data;
-  const _ShortVideoItem({required this.data});
+  const _ShortVideoItem({super.key, required this.data});
 
   @override
   State<_ShortVideoItem> createState() => _ShortVideoItemState();
 }
 
 class _ShortVideoItemState extends State<_ShortVideoItem> {
-  VideoPlayerController? _videoController;
-  ChewieController? _chewieController;
+  VideoPlayerController? _controller;
   bool _isInitialized = false;
-  bool _hasError = false;
   bool _isPlaying = true;
+  bool _hasError = false;
 
   @override
   void initState() {
     super.initState();
-    _initializePlayer();
+    _initVideo();
   }
 
-  Future<void> _initializePlayer() async {
-    final url = widget.data['videoUrl'] ?? '';
+  Future<void> _initVideo() async {
+    final url = widget.data['videoUrl']?.toString().trim() ?? '';
     if (url.isEmpty) {
       if (mounted) setState(() => _hasError = true);
       return;
     }
 
     try {
-      _videoController = VideoPlayerController.networkUrl(
-        Uri.parse(url),
-        httpHeaders: {
-          'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36',
-        },
-      );
+      // Heç bir zərərli httpHeaders ötürmürük - ExoPlayer birbaşa açır
+      final uri = Uri.parse(url);
+      final controller = VideoPlayerController.networkUrl(uri);
+      _controller = controller;
 
-      await _videoController!.initialize();
+      await controller.initialize();
 
-      if (!mounted) return;
+      if (!mounted) {
+        controller.dispose();
+        return;
+      }
 
-      _chewieController = ChewieController(
-        videoPlayerController: _videoController!,
-        autoPlay: true,
-        looping: true,
-        showControls: false,          // Öz düymələrimizi istifadə edirik
-        allowFullScreen: false,
-        allowMuting: true,
-        aspectRatio: _videoController!.value.aspectRatio,
-        errorBuilder: (context, errorMessage) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, color: Colors.orange, size: 48),
-                const SizedBox(height: 8),
-                Text(
-                  errorMessage,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          );
-        },
-      );
+      controller.setLooping(true);
+      await controller.play();
 
       setState(() {
         _isInitialized = true;
         _hasError = false;
+        _isPlaying = true;
+      });
+
+      controller.addListener(() {
+        if (!mounted) return;
+        final playing = controller.value.isPlaying;
+        if (playing != _isPlaying) {
+          setState(() {
+            _isPlaying = playing;
+          });
+        }
       });
     } catch (e) {
-      debugPrint('Video init xətası: $e');
-      if (mounted) setState(() => _hasError = true);
+      debugPrint('Video oxutma xətası ($url): $e');
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+        });
+      }
     }
   }
 
   @override
   void dispose() {
-    _chewieController?.dispose();
-    _videoController?.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
   void _togglePlay() {
-    if (!_isInitialized || _videoController == null) return;
+    final c = _controller;
+    if (c == null || !_isInitialized) return;
     setState(() {
-      if (_videoController!.value.isPlaying) {
-        _videoController!.pause();
+      if (c.value.isPlaying) {
+        c.pause();
         _isPlaying = false;
       } else {
-        _videoController!.play();
+        c.play();
         _isPlaying = true;
       }
     });
@@ -606,18 +600,27 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. VİDEO EKRANI — Chewie ilə tam ekran video
-          if (_isInitialized && _chewieController != null && !_hasError)
-            Chewie(controller: _chewieController!)
+          // 1. VİDEO EKRANI (Bütün ekranı dolduran video)
+          if (_isInitialized && _controller != null && !_hasError)
+            SizedBox.expand(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _controller!.value.size.width > 0 ? _controller!.value.size.width : 1080,
+                  height: _controller!.value.size.height > 0 ? _controller!.value.size.height : 1920,
+                  child: VideoPlayer(_controller!),
+                ),
+              ),
+            )
           else if (_hasError)
             Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: const [
-                  Icon(Icons.error_outline, color: Colors.orange, size: 48),
-                  SizedBox(height: 8),
+                  Icon(Icons.play_disabled_rounded, color: Colors.orange, size: 52),
+                  SizedBox(height: 12),
                   Text(
-                    'Video oxunmadı\nVideo linki keçərsiz ola bilər',
+                    'Video oxunmadı və ya format uyğun deyil',
                     style: TextStyle(color: Colors.white70, fontSize: 13),
                     textAlign: TextAlign.center,
                   ),
@@ -631,12 +634,21 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                 children: [
                   CircularProgressIndicator(color: Colors.white),
                   SizedBox(height: 12),
-                  Text('Video yüklənir...', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                  Text(
+                    'Video yüklənir...',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
                 ],
               ),
             ),
 
-          // Pause olduqda mərkəzdə böyük Play ikonu
+          // Video buferlənərkən fırlanan çarx
+          if (_isInitialized && _controller != null && _controller!.value.isBuffering)
+            const Center(
+              child: CircularProgressIndicator(color: Colors.white70),
+            ),
+
+          // Pause olduqda mərkəzdə Play ikonu
           if (!_isPlaying && _isInitialized)
             Center(
               child: Container(
