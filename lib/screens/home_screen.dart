@@ -1161,6 +1161,8 @@ class _HomeScreenState extends State<HomeScreen> {
     Uint8List? selectedImageBytes;
     XFile? pickedVideo;
     Uint8List? pickedVideoBytes;
+    XFile? pickedCover;
+    Uint8List? pickedCoverBytes;
     bool isVideoPost = false;
     bool isUploading = false;
     double uploadProgress = 0.0;
@@ -1384,6 +1386,68 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 12),
+
+                  // Videonun Üz Qabığı Şəkli (Thumbnail / Başlıq fotosu)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: pickedCoverBytes != null
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.memory(pickedCoverBytes!, fit: BoxFit.cover),
+                                )
+                              : const Icon(Icons.add_photo_alternate_rounded, color: Color(0xFF1769D2)),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                pickedCoverBytes != null ? 'Başlıq şəkli seçildi' : 'Videonun Başlıq Şəkli (Kover)',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              Text(
+                                pickedCoverBytes != null ? pickedCover!.name : 'Videoda qaranlıq qalmamaq üçün kover fotosu seçin',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Colors.grey, fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            final picker = ImagePicker();
+                            final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 75);
+                            if (img != null) {
+                              final bytes = await img.readAsBytes();
+                              setModalState(() {
+                                pickedCover = img;
+                                pickedCoverBytes = bytes;
+                              });
+                            }
+                          },
+                          child: Text(pickedCoverBytes != null ? 'Dəyiş' : 'Seç'),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 14),
 
@@ -1503,9 +1567,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                 if (finalVideoUrl.isEmpty) {
                                   setModalState(() => isUploading = false);
                                   if (mounted) {
+                                    final errStr = e.toString();
+                                    final friendlyMsg = errStr.contains('403') || errStr.contains('Forbidden')
+                                        ? 'Video serverinə bağlantı xətası (CORS). Zəhmət olmasa video linki daxil edin və ya APK tətbiqindən istifadə edin.'
+                                        : 'Video yükləmə xətası: $e\nZəhmət olmasa internet bağlantısını yoxlayın və ya video linki daxil edin.';
+
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
-                                        content: Text('Video yükləmə xətası: $e\nZəhmət olmasa internet bağlantısını yoxlayın və ya video linki daxil edin.'),
+                                        content: Text(friendlyMsg),
                                         backgroundColor: Colors.orange.shade900,
                                         duration: const Duration(seconds: 7),
                                       ),
@@ -1516,6 +1585,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               }
                             }
 
+                            final String coverBase64 = pickedCoverBytes != null ? base64Encode(pickedCoverBytes!) : '';
+
                             // 1. Profil postlarına əlavə et
                             await FirebaseFirestore.instance.collection('posts').add({
                               'userId': uid,
@@ -1524,6 +1595,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               'title': title,
                               'category': selectedCat,
                               'videoUrl': finalVideoUrl,
+                              'imageBase64': coverBase64,
+                              'thumbnailBase64': coverBase64,
                               'thumbnailUrl': '',
                               'isVideo': true,
                               'createdAt': FieldValue.serverTimestamp(),
@@ -1535,6 +1608,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               'userId': uid,
                               'title': title,
                               'videoUrl': finalVideoUrl,
+                              'thumbnailBase64': coverBase64,
                               'thumbnailUrl': '',
                               'artisanName': authorName,
                               'trade': selectedCat,
