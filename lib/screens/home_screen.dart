@@ -1788,6 +1788,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final phoneController = TextEditingController(text: userData?['phone'] ?? '');
     String selectedRole = userData?['role'] ?? 'usta';
     String selectedUstaCategory = userData?['category'] ?? 'Tikinti';
+    bool isWorkingStatus = userData?['isWorking'] == true;
 
     showDialog(
       context: context,
@@ -1839,6 +1840,32 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (val != null) setDialogState(() => selectedUstaCategory = val);
                     },
                   ),
+                  const SizedBox(height: 12),
+
+                  // Hal-hazırda işləyir / Sərbəstdir Switch-i
+                  Container(
+                    decoration: BoxDecoration(
+                      color: isWorkingStatus ? const Color(0xFFFFF1F2) : const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isWorkingStatus ? const Color(0xFFFECDD3) : const Color(0xFFBBF7D0),
+                      ),
+                    ),
+                    child: SwitchListTile(
+                      dense: true,
+                      title: Text(
+                        isWorkingStatus ? 'Hal-hazırda işləyirəm' : 'Sərbəstəm (İşləmirəm)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: isWorkingStatus ? const Color(0xFFBE123C) : const Color(0xFF15803D),
+                        ),
+                      ),
+                      value: isWorkingStatus,
+                      activeColor: const Color(0xFFE11D48),
+                      onChanged: (val) => setDialogState(() => isWorkingStatus = val),
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -1856,6 +1883,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   'phone': phoneController.text.trim(),
                   'role': selectedRole,
                   'category': selectedRole == 'usta' ? selectedUstaCategory : '',
+                  'isWorking': selectedRole == 'usta' ? isWorkingStatus : false,
                 }, SetOptions(merge: true));
                 if (mounted) {
                   Navigator.pop(ctx);
@@ -2017,6 +2045,57 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(height: 24),
+
+            // Əgər Ustadırsa: Canlı İş Statusu (Hal-hazırda işləyir / Sərbəstdir)
+            if (userRole == 'usta') ...[
+              Container(
+                decoration: BoxDecoration(
+                  color: (userData?['isWorking'] == true) ? const Color(0xFFFFF1F2) : const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: (userData?['isWorking'] == true) ? const Color(0xFFFECDD3) : const Color(0xFFBBF7D0),
+                    width: 1.5,
+                  ),
+                ),
+                child: SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  secondary: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: (userData?['isWorking'] == true) ? const Color(0xFFE11D48) : const Color(0xFF16A34A),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      (userData?['isWorking'] == true) ? Icons.business_center : Icons.check_circle_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    (userData?['isWorking'] == true) ? 'Hal-hazırda işləyirəm (Məşğulam)' : 'Sərbəstəm (İşləmirəm)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: (userData?['isWorking'] == true) ? const Color(0xFFBE123C) : const Color(0xFF15803D),
+                    ),
+                  ),
+                  subtitle: Text(
+                    (userData?['isWorking'] == true)
+                        ? 'Kateqoriyalarda müştərilər sizin məşğul olduğunuzu görəcəklər'
+                        : 'Kateqoriyalarda müştərilər sizin sifariş qəbul etdiyinizi görəcəklər',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  value: userData?['isWorking'] == true,
+                  activeColor: const Color(0xFFE11D48),
+                  onChanged: (bool val) async {
+                    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                      'isWorking': val,
+                    }, SetOptions(merge: true));
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
 
             // Yalnız sistem rəhbəri (mirze3838@gmail.com və ya admin rolu olan) üçün Admin Paneli
             if (isAdmin || (user.email != null && user.email!.toLowerCase() == 'mirze3838@gmail.com') || (userData?['role'] == 'admin')) ...[

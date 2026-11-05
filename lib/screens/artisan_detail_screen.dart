@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
@@ -16,10 +17,12 @@ class ArtisanDetailScreen extends StatefulWidget {
 class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
   VideoPlayerController? _videoController;
   bool _isVideoInitialized = false;
+  late bool _isWorking;
 
   @override
   void initState() {
     super.initState();
+    _isWorking = widget.artisanData['isWorking'] == true;
     final videoUrl = widget.artisanData['videoUrl'] as String?;
     if (videoUrl != null && videoUrl.isNotEmpty) {
       _videoController = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
@@ -64,6 +67,8 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
     final isVerified = widget.artisanData['isVerified'] == true;
     final photoBase64 = widget.artisanData['photoBase64'] as String?;
     final userId = widget.artisanData['uid'] ?? widget.artisanData['userId'] ?? widget.artisanData['id'];
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final bool isMyProfile = currentUser != null && currentUser.uid == userId;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -132,18 +137,71 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                     style: const TextStyle(color: Color(0xFF1769D2), fontWeight: FontWeight.w600, fontSize: 13),
                   ),
                 ),
-                const SizedBox(height: 10),
-                const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.star_rounded, color: Colors.amber, size: 20),
-                    SizedBox(width: 4),
-                    Text('5.0', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    SizedBox(width: 4),
-                    Text('(Yoxlanılmış Usta)', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                  ],
+                const SizedBox(height: 12),
+
+                // HAL-HAZIRDA İŞLƏYİR VƏ YA İŞLƏMİR İŞARƏSİ / STATUŞ KARTI
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _isWorking ? const Color(0xFFFFF1F2) : const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: _isWorking ? const Color(0xFFFECDD3) : const Color(0xFFBBF7D0),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: _isWorking ? const Color(0xFFE11D48) : const Color(0xFF16A34A),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _isWorking ? 'Hal-hazırda işləyir (Məşğuldur)' : 'Sərbəstdir (Sifariş qəbul edir)',
+                        style: TextStyle(
+                          color: _isWorking ? const Color(0xFFBE123C) : const Color(0xFF15803D),
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 20),
+
+                // Əgər usta öz anketinə baxırsa, birbaşa statusu dəyişmək keçidi
+                if (isMyProfile) ...[
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    icon: Icon(_isWorking ? Icons.toggle_on : Icons.toggle_off, color: const Color(0xFF1769D2), size: 24),
+                    label: Text(
+                      _isWorking ? 'Statusu "Sərbəstdir" et' : 'Statusu "İşləyir" et',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    onPressed: () async {
+                      final newStatus = !_isWorking;
+                      setState(() => _isWorking = newStatus);
+                      await FirebaseFirestore.instance.collection('users').doc(userId.toString()).set({
+                        'isWorking': newStatus,
+                      }, SetOptions(merge: true));
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(newStatus ? 'Status "Hal-hazırda işləyir" olaraq dəyişdirildi!' : 'Status "Sərbəstdir" olaraq dəyişdirildi!'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ],
+
+                const SizedBox(height: 16),
 
                 // Əlaqə düymələri (Zəng və WhatsApp)
                 Row(
