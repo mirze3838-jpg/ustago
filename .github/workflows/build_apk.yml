@@ -102,11 +102,12 @@ jobs:
 
       - name: Update GitHub Release APK
         uses: softprops/action-gh-release@v2
-        if: github.ref == 'refs/heads/main'
         with:
           tag_name: v1.0.0
           name: UstaGo v1.0.0 (Android APK)
           files: build/app/outputs/flutter-apk/ustago.apk
+          prerelease: false
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
