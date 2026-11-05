@@ -1,8 +1,8 @@
 import 'dart:typed_data';
+import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
@@ -51,7 +51,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
     final linkController = TextEditingController();
     final phoneController = TextEditingController();
     final tradeController = TextEditingController(text: 'Peşəkar Usta');
-    
+
     XFile? pickedVideo;
     Uint8List? pickedVideoBytes;
     bool isUploading = false;
@@ -411,7 +411,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                 .snapshots(),
             builder: (context, snapshot) {
               final docs = snapshot.data?.docs ?? [];
-              
+
               final List<Map<String, dynamic>> items = [];
               if (docs.isNotEmpty) {
                 for (var d in docs) {
@@ -495,59 +495,88 @@ class _ShortVideoItem extends StatefulWidget {
 }
 
 class _ShortVideoItemState extends State<_ShortVideoItem> {
-  late VideoPlayerController _controller;
+  VideoPlayerController? _videoController;
+  ChewieController? _chewieController;
   bool _isInitialized = false;
-  bool _isPlaying = true;
   bool _hasError = false;
+  bool _isPlaying = true;
 
   @override
   void initState() {
     super.initState();
-    final url = widget.data['videoUrl'] ?? '';
-    if (url.isNotEmpty) {
-      _controller = VideoPlayerController.networkUrl(
-        Uri.parse(url),
-        httpHeaders: {'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile)'},
-      )
-        ..initialize().then((_) {
-          if (mounted) {
-            setState(() {
-              _isInitialized = true;
-              _hasError = false;
-            });
-            _controller.setLooping(true);
-            _controller.play();
-          }
-        }).catchError((error) {
-          debugPrint('Video error: $error');
-          if (mounted) {
-            setState(() {
-              _hasError = true;
-            });
-          }
-        });
+    _initializePlayer();
+  }
 
-      // Video kadrları dəyişdikcə ekranın yenilənməsi üçün dinləyici (ÇOX VACİB)
-      _controller.addListener(() {
-        if (mounted) setState(() {});
+  Future<void> _initializePlayer() async {
+    final url = widget.data['videoUrl'] ?? '';
+    if (url.isEmpty) {
+      if (mounted) setState(() => _hasError = true);
+      return;
+    }
+
+    try {
+      _videoController = VideoPlayerController.networkUrl(
+        Uri.parse(url),
+        httpHeaders: {
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36',
+        },
+      );
+
+      await _videoController!.initialize();
+
+      if (!mounted) return;
+
+      _chewieController = ChewieController(
+        videoPlayerController: _videoController!,
+        autoPlay: true,
+        looping: true,
+        showControls: false,          // Öz düymələrimizi istifadə edirik
+        allowFullScreen: false,
+        allowMuting: true,
+        aspectRatio: _videoController!.value.aspectRatio,
+        errorBuilder: (context, errorMessage) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.orange, size: 48),
+                const SizedBox(height: 8),
+                Text(
+                  errorMessage,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        },
+      );
+
+      setState(() {
+        _isInitialized = true;
+        _hasError = false;
       });
+    } catch (e) {
+      debugPrint('Video init xətası: $e');
+      if (mounted) setState(() => _hasError = true);
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _chewieController?.dispose();
+    _videoController?.dispose();
     super.dispose();
   }
 
   void _togglePlay() {
-    if (!_isInitialized) return;
+    if (!_isInitialized || _videoController == null) return;
     setState(() {
-      if (_controller.value.isPlaying) {
-        _controller.pause();
+      if (_videoController!.value.isPlaying) {
+        _videoController!.pause();
         _isPlaying = false;
       } else {
-        _controller.play();
+        _videoController!.play();
         _isPlaying = true;
       }
     });
@@ -577,18 +606,9 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. VİDEO EKRANI (Bütün ekranı örtən şaquli video)
-          if (_isInitialized && !_hasError)
-            SizedBox.expand(
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: _controller.value.size.width > 0 ? _controller.value.size.width : 1080,
-                  height: _controller.value.size.height > 0 ? _controller.value.size.height : 1920,
-                  child: VideoPlayer(_controller),
-                ),
-              ),
-            )
+          // 1. VİDEO EKRANI — Chewie ilə tam ekran video
+          if (_isInitialized && _chewieController != null && !_hasError)
+            Chewie(controller: _chewieController!)
           else if (_hasError)
             Center(
               child: Column(
@@ -596,23 +616,28 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                 children: const [
                   Icon(Icons.error_outline, color: Colors.orange, size: 48),
                   SizedBox(height: 8),
-                  Text('Video oxunmadı və ya format uyğun deyil', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  Text(
+                    'Video oxunmadı\nVideo linki keçərsiz ola bilər',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ),
             )
           else
             const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            ),
-
-          // Video yüklənərkən (buffering) çarx göstərici
-          if (_isInitialized && _controller.value.isBuffering)
-            const Center(
-              child: CircularProgressIndicator(color: Colors.white70),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: Colors.white),
+                  SizedBox(height: 12),
+                  Text('Video yüklənir...', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                ],
+              ),
             ),
 
           // Pause olduqda mərkəzdə böyük Play ikonu
-          if (!_isPlaying)
+          if (!_isPlaying && _isInitialized)
             Center(
               child: Container(
                 padding: const EdgeInsets.all(16),

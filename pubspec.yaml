@@ -23,6 +23,7 @@ dependencies:
   
   # Video oynatmaq (tətbiqdaxili baxış üçün)
   video_player: ^2.9.2
+  chewie: ^1.8.5
 
   # Zəng və WhatsApp əlaqəsi
   url_launcher: ^6.3.0
