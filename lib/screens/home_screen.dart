@@ -1218,18 +1218,24 @@ class _HomeScreenState extends State<HomeScreen> {
                                   }
                                 });
 
-                                final snapshot = await uploadTask.timeout(const Duration(seconds: 60));
+                                final snapshot = await uploadTask.timeout(const Duration(minutes: 5));
                                 finalVideoUrl = await snapshot.ref.getDownloadURL();
                               } catch (e) {
                                 debugPrint('Storage upload error: $e');
                                 if (finalVideoUrl.isEmpty) {
                                   setModalState(() => isUploading = false);
                                   if (mounted) {
+                                    String errText = 'Video yükləmə xətası: $e';
+                                    if (e.toString().contains('unauthorized') || e.toString().contains('permission-denied')) {
+                                      errText = 'Firebase Storage icazəsi bağlıdır! Firebase Console -> Storage -> Rules bölməsində yazma icazəsi (allow write: if true;) verilməlidir.';
+                                    } else if (e.toString().contains('TimeoutException')) {
+                                      errText = 'İnternet sürəti zəif olduğu üçün vaxt bitdi (Timeout). Zəhmət olmasa daha qısa video və ya stabil internet seçin.';
+                                    }
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
-                                        content: Text('Video yükləmə xətası ($e). Firebase Storage qaydalarını (Rules) yoxlayın və ya video linki qoyun.'),
-                                        backgroundColor: Colors.orange.shade800,
-                                        duration: const Duration(seconds: 6),
+                                        content: Text(errText),
+                                        backgroundColor: Colors.orange.shade900,
+                                        duration: const Duration(seconds: 8),
                                       ),
                                     );
                                   }

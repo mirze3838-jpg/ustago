@@ -319,17 +319,23 @@ class _ShortsScreenState extends State<ShortsScreen> {
                               }
                             });
 
-                            final snap = await uploadTask.timeout(const Duration(seconds: 90));
+                            final snap = await uploadTask.timeout(const Duration(minutes: 5));
                             finalVideoUrl = await snap.ref.getDownloadURL();
                           } catch (e) {
                             debugPrint('Storage upload error: $e');
                             setModalState(() => isUploading = false);
                             if (mounted) {
+                              String errText = 'Video yükləmə xətası: $e';
+                              if (e.toString().contains('unauthorized') || e.toString().contains('permission-denied')) {
+                                errText = 'Firebase Storage icazəsi bağlıdır! Firebase Console -> Storage -> Rules bölməsində yazma icazəsi (allow write: if true;) verilməlidir.';
+                              } else if (e.toString().contains('TimeoutException')) {
+                                errText = 'İnternet sürəti zəif olduğu üçün vaxt bitdi (Timeout). Zəhmət olmasa daha qısa video və ya stabil internet seçin.';
+                              }
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Video yükləmə xətası: $e\n\nFirebase Storage qaydalarını yoxlayın.'),
-                                  backgroundColor: Colors.orange.shade800,
-                                  duration: const Duration(seconds: 7),
+                                  content: Text(errText),
+                                  backgroundColor: Colors.orange.shade900,
+                                  duration: const Duration(seconds: 8),
                                 ),
                               );
                             }
