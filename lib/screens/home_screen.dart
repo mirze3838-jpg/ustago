@@ -728,6 +728,8 @@ class _HomeScreenState extends State<HomeScreen> {
         coverWidget = Image.memory(
           base64Decode(thumbnailBase64),
           fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
           errorBuilder: (_, __, ___) => fallbackVisual,
         );
       } catch (_) {
@@ -738,6 +740,12 @@ class _HomeScreenState extends State<HomeScreen> {
       coverWidget = Image.network(
         imgUrl,
         fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return fallbackVisual;
+        },
         errorBuilder: (_, __, ___) => fallbackVisual,
       );
     }
@@ -759,13 +767,19 @@ class _HomeScreenState extends State<HomeScreen> {
                     // 1. VİDEONUN REAL BAŞLIQ FOTOSU (Qaranlıq görünməsin deyə)
                     coverWidget,
 
-                    // 2. Qaranlıq zərif qradiyent
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
+                    // 2. Yalnız aşağıda zərif qradiyent (şəkli qaraltmır)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      height: 72,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Colors.transparent, Colors.black.withOpacity(0.65)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
                         ),
                       ),
                     ),

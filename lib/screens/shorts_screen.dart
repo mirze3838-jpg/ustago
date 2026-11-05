@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -689,9 +690,49 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       fallbackUrl = 'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=800&q=80';
     }
 
+    // Kateqoriyaya uyğun rəngli gradient fallback (qaranlıq qalmır)
+    final tl = trade.toLowerCase();
+    List<Color> gradColors = [const Color(0xFFE65100), const Color(0xFFBF360C)];
+    IconData gradIcon = Icons.foundation_rounded;
+    if (tl.contains('santexnik') || tl.contains('su')) {
+      gradColors = [const Color(0xFF0288D1), const Color(0xFF01579B)];
+      gradIcon = Icons.water_drop_rounded;
+    } else if (tl.contains('elektrik')) {
+      gradColors = [const Color(0xFFF57F17), const Color(0xFFE65100)];
+      gradIcon = Icons.bolt_rounded;
+    } else if (tl.contains('kondisioner')) {
+      gradColors = [const Color(0xFF0097A7), const Color(0xFF006064)];
+      gradIcon = Icons.ac_unit_rounded;
+    } else if (tl.contains('mebel') || tl.contains('dülgər')) {
+      gradColors = [const Color(0xFF8D6E63), const Color(0xFF4E342E)];
+      gradIcon = Icons.chair_rounded;
+    } else if (tl.contains('rəngsaz') || tl.contains('malyar')) {
+      gradColors = [const Color(0xFFFF7043), const Color(0xFFD84315)];
+      gradIcon = Icons.format_paint_rounded;
+    }
+
+    final fallbackWidget = Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: gradColors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Icon(gradIcon, size: 100, color: Colors.white.withOpacity(0.2)),
+    );
+
     if (thumbnailBase64 != null && thumbnailBase64.isNotEmpty) {
       try {
-        return Image.memory(base64Decode(thumbnailBase64), fit: BoxFit.cover, width: double.infinity, height: double.infinity);
+        return Image.memory(
+          base64Decode(thumbnailBase64),
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+          errorBuilder: (_, __, ___) => fallbackWidget,
+        );
       } catch (_) {}
     }
 
@@ -701,7 +742,11 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       fit: BoxFit.cover,
       width: double.infinity,
       height: double.infinity,
-      errorBuilder: (_, __, ___) => Container(color: const Color(0xFF0F172A)),
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return fallbackWidget;
+      },
+      errorBuilder: (_, __, ___) => fallbackWidget,
     );
   }
 
