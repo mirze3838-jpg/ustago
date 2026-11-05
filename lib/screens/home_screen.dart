@@ -660,26 +660,85 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildDynamicShortsCard(Map<String, dynamic> item) {
     final String? thumbnailBase64 = item['thumbnailBase64'];
     final String? thumbnailUrl = item['thumbnailUrl'];
-    final String defaultImg = _getCategoryPlaceholderImage(item['trade']);
+    final String trade = (item['trade'] ?? 'Tikinti').toString();
+    final String defaultImg = _getCategoryPlaceholderImage(trade);
+
+    // Qaranlıq qalmamaq üçün kateqoriyaya uyğun zəngin və rəngli fallback vizualı
+    final String tLower = trade.toLowerCase();
+    List<Color> gradientColors = [const Color(0xFFE65100), const Color(0xFFBF360C)]; // Tikinti (Narıncı/Kərpic)
+    IconData visualIcon = Icons.foundation_rounded;
+
+    if (tLower.contains('santexnik') || tLower.contains('su')) {
+      gradientColors = [const Color(0xFF0288D1), const Color(0xFF01579B)]; // Santexnik (Mavi)
+      visualIcon = Icons.water_drop_rounded;
+    } else if (tLower.contains('elektrik') || tLower.contains('şit')) {
+      gradientColors = [const Color(0xFFF57F17), const Color(0xFFE65100)]; // Elektrik (Qızılı)
+      visualIcon = Icons.bolt_rounded;
+    } else if (tLower.contains('kondisioner') || tLower.contains('kombi')) {
+      gradientColors = [const Color(0xFF0097A7), const Color(0xFF006064)]; // Kondisioner (Firuzəyi)
+      visualIcon = Icons.ac_unit_rounded;
+    } else if (tLower.contains('mebel') || tLower.contains('dülgər')) {
+      gradientColors = [const Color(0xFF8D6E63), const Color(0xFF4E342E)]; // Mebel (Qəhvəyi)
+      visualIcon = Icons.chair_rounded;
+    } else if (tLower.contains('rəngsaz') || tLower.contains('malyar')) {
+      gradientColors = [const Color(0xFFFF7043), const Color(0xFFD84315)]; // Rəngsaz (Parlaq)
+      visualIcon = Icons.format_paint_rounded;
+    }
+
+    final Widget fallbackVisual = Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: gradientColors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(visualIcon, size: 70, color: Colors.white.withOpacity(0.18)),
+          Positioned(
+            bottom: 40,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(visualIcon, color: Colors.white, size: 14),
+                  const SizedBox(width: 4),
+                  Text(
+                    trade,
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
 
     Widget coverWidget;
     if (thumbnailBase64 != null && thumbnailBase64.isNotEmpty) {
       try {
-        coverWidget = Image.memory(base64Decode(thumbnailBase64), fit: BoxFit.cover);
+        coverWidget = Image.memory(
+          base64Decode(thumbnailBase64),
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => fallbackVisual,
+        );
       } catch (_) {
-        coverWidget = Image.network(defaultImg, fit: BoxFit.cover);
+        coverWidget = fallbackVisual;
       }
-    } else if (thumbnailUrl != null && thumbnailUrl.isNotEmpty) {
-      coverWidget = Image.network(
-        thumbnailUrl,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Image.network(defaultImg, fit: BoxFit.cover),
-      );
     } else {
+      final imgUrl = (thumbnailUrl != null && thumbnailUrl.isNotEmpty) ? thumbnailUrl : defaultImg;
       coverWidget = Image.network(
-        defaultImg,
+        imgUrl,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Container(color: const Color(0xFF1E293B)),
+        errorBuilder: (_, __, ___) => fallbackVisual,
       );
     }
 
