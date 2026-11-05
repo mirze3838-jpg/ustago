@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import '../services/auth_service.dart';
@@ -2418,6 +2418,10 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
   }
 
   Future<void> _initThumbnail() async {
+    // Web-də video_player dəstəyi məhduddur — CORS bloku, codec problemi
+    // Thumbnail extraction-ı yalnız mobil cihazlarda edirik
+    if (kIsWeb) return;
+
     final url = widget.videoUrl.trim();
     if (url.isEmpty) return;
 
@@ -2425,11 +2429,20 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
       final controller = VideoPlayerController.networkUrl(Uri.parse(url));
       _controller = controller;
 
-      await controller.initialize();
+      // Timeout: 15 saniyə gözlə
+      await controller.initialize().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          debugPrint('Thumbnail initialize timeout: $url');
+        },
+      );
+
       if (!mounted) {
         controller.dispose();
         return;
       }
+
+      if (!controller.value.isInitialized) return;
 
       await controller.setVolume(0);
 

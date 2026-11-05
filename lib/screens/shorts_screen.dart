@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -620,16 +621,35 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       return;
     }
 
+    // Web-də video_player dəstəyi məhduddur — CORS bloku, codec problemi
+    // Catbox/TmpFiles web-də stream ola bilmir
+    if (kIsWeb) {
+      if (mounted) setState(() => _hasError = true);
+      return;
+    }
+
     try {
       // Heç bir zərərli httpHeaders ötürmürük - ExoPlayer birbaşa açır
       final uri = Uri.parse(url);
       final controller = VideoPlayerController.networkUrl(uri);
       _controller = controller;
 
-      await controller.initialize();
+      // Timeout: 20 saniyə gözlə, əgər yüklənmirsə xəta göstər
+      await controller.initialize().timeout(
+        const Duration(seconds: 20),
+        onTimeout: () {
+          debugPrint('Video initialize timeout: $url');
+        },
+      );
 
       if (!mounted) {
         controller.dispose();
+        return;
+      }
+
+      // Initialize sonrası yoxla
+      if (!controller.value.isInitialized) {
+        if (mounted) setState(() => _hasError = true);
         return;
       }
 
@@ -855,14 +875,56 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
             Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.play_disabled_rounded, color: Colors.orange, size: 52),
-                  SizedBox(height: 12),
-                  Text(
-                    'Video oxunmadı və ya format uyğun deyil',
-                    style: TextStyle(color: Colors.white70, fontSize: 13),
-                    textAlign: TextAlign.center,
-                  ),
+                children: [
+                  const Icon(Icons.play_circle_fill_rounded, color: Colors.white70, size: 72),
+                  const SizedBox(height: 16),
+                  if (kIsWeb) ...[
+                    const Text(
+                      'Videonu izləmək üçün toxunun',
+                      style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final url = widget.data['videoUrl']?.toString() ?? '';
+                        if (url.isNotEmpty) {
+                          final uri = Uri.parse(url);
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.open_in_new),
+                      label: const Text('Videonu Aç'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black87,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      ),
+                    ),
+                  ] else ...[
+                    const Text(
+                      'Video oxunmadı',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _hasError = false;
+                          _isInitialized = false;
+                        });
+                        _controller?.dispose();
+                        _controller = null;
+                        _initVideo();
+                      },
+                      icon: const Icon(Icons.refresh, color: Colors.white70),
+                      label: const Text('Yenidən cəhd et', style: TextStyle(color: Colors.white70)),
+                    ),
+                  ],
                 ],
               ),
             )
