@@ -70,15 +70,22 @@ class AuthService {
     );
   }
 
-  // 3. Google ilə Giriş
+  // 3. Google ilə Giriş (Hər dəfə Gmail hesab seçimi pəncərəsini açır)
   Future<UserCredential?> signInWithGoogle({String defaultRole = 'customer'}) async {
     UserCredential cred;
 
     if (kIsWeb) {
       final GoogleAuthProvider authProvider = GoogleAuthProvider();
+      // Web-də hər dəfə hesab seçimi dialoqunu məcbur edir
+      authProvider.setCustomParameters({'prompt': 'select_account'});
       cred = await _auth.signInWithPopup(authProvider);
     } else {
       final GoogleSignIn googleSignIn = GoogleSignIn();
+      // Əvvəlki sessiyanı təmizləyirik ki, istifadəçiyə telefondakı bütün Gmail hesabları göstərilsin
+      try {
+        await googleSignIn.signOut();
+      } catch (_) {}
+
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
 
       if (googleUser == null) return null;
@@ -112,8 +119,14 @@ class AuthService {
     return cred;
   }
 
-  // 4. Çıxış etmək (Logout)
+  // 4. Çıxış etmək (Logout - Həm Firebase, həm də Google sessiyasını təmizləyir)
   Future<void> signOut() async {
+    try {
+      if (!kIsWeb) {
+        final GoogleSignIn googleSignIn = GoogleSignIn();
+        await googleSignIn.signOut();
+      }
+    } catch (_) {}
     await _auth.signOut();
   }
 
