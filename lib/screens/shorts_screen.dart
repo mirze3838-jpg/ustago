@@ -9,14 +9,21 @@ import 'package:video_player/video_player.dart';
 import '../services/video_upload_service.dart';
 
 class ShortsScreen extends StatefulWidget {
-  const ShortsScreen({super.key});
+  final int initialIndex;
+  const ShortsScreen({super.key, this.initialIndex = 0});
 
   @override
   State<ShortsScreen> createState() => _ShortsScreenState();
 }
 
 class _ShortsScreenState extends State<ShortsScreen> {
-  final PageController _pageController = PageController();
+  late final PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
 
   // Nümayiş üçün nümunə usta videoları
   final List<Map<String, dynamic>> _sampleShorts = [
@@ -403,12 +410,6 @@ class _ShortsScreenState extends State<ShortsScreen> {
                           final uid = user?.uid ?? 'guest';
                           final tradeVal = tradeController.text.trim().isEmpty ? 'Tikinti' : tradeController.text.trim();
 
-                          String fallbackCover = 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80';
-                          final tLower = tradeVal.toLowerCase();
-                          if (tLower.contains('santexnik')) fallbackCover = 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=600&q=80';
-                          if (tLower.contains('elektrik')) fallbackCover = 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80';
-                          if (tLower.contains('kondisioner')) fallbackCover = 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=600&q=80';
-
                           final String coverBase64 = pickedCoverBytes != null ? base64Encode(pickedCoverBytes!) : '';
 
                           // 1. Shorts kolleksiyasına yazırıq
@@ -417,7 +418,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                             'title': title,
                             'videoUrl': finalVideoUrl,
                             'thumbnailBase64': coverBase64,
-                            'thumbnailUrl': fallbackCover,
+                            'thumbnailUrl': '',
                             'artisanName': authorName,
                             'trade': tradeVal,
                             'phone': phone.isEmpty ? '+994 50 000 00 00' : phone,
@@ -436,7 +437,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                               'videoUrl': finalVideoUrl,
                               'imageBase64': coverBase64,
                               'thumbnailBase64': coverBase64,
-                              'thumbnailUrl': fallbackCover,
+                              'thumbnailUrl': '',
                               'isVideo': true,
                               'createdAt': FieldValue.serverTimestamp(),
                               'likes': 0,
@@ -496,6 +497,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                   final data = d.data();
                   items.add({
                     'id': d.id,
+                    'userId': data['userId'] ?? '',
                     'title': data['title'] ?? 'Usta İşi',
                     'artisanName': data['artisanName'] ?? 'Usta',
                     'trade': data['trade'] ?? 'Usta',
@@ -507,8 +509,10 @@ class _ShortsScreenState extends State<ShortsScreen> {
                   });
                 }
               }
-              // Hər zaman axıcı olması üçün nümunə videoları da əlavə edirik
-              items.addAll(_sampleShorts);
+              // Yalnız heç bir real video yüklənməyibsə nümunə videoları göstəririk
+              if (items.isEmpty) {
+                items.addAll(_sampleShorts);
+              }
 
               return PageView.builder(
                 controller: _pageController,
@@ -531,22 +535,42 @@ class _ShortsScreenState extends State<ShortsScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      children: const [
-                        Icon(Icons.bolt, color: Colors.amber, size: 20),
-                        SizedBox(width: 4),
-                        Text(
-                          'UstaGo Shorts',
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                  Row(
+                    children: [
+                      if (Navigator.canPop(context))
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: InkWell(
+                            onTap: () => Navigator.pop(context),
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.5),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                            ),
+                          ),
                         ),
-                      ],
-                    ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          children: const [
+                            Icon(Icons.bolt, color: Colors.amber, size: 20),
+                            SizedBox(width: 4),
+                            Text(
+                              'UstaGo Shorts',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
@@ -674,26 +698,57 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     }
   }
 
+  Future<void> _confirmDeleteVideo() async {
+    final docId = widget.data['id'];
+    if (docId == null || docId.toString().isEmpty) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Shorts Videosunu Sil'),
+        content: const Text('Bu videonu silmək istədiyinizdən əminsiniz?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Xeyr'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Bəli, Sil', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await FirebaseFirestore.instance.collection('shorts').doc(docId.toString()).delete();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Video uğurla silindi!')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Silmə xətası: $e')),
+          );
+        }
+      }
+    }
+  }
+
   Widget _buildCoverImage(Map<String, dynamic> data) {
     final String? thumbnailBase64 = data['thumbnailBase64'];
     final String? thumbnailUrl = data['thumbnailUrl'];
-    final String trade = (data['trade'] ?? '').toString().toLowerCase();
+    final String trade = (data['trade'] ?? '').toString();
 
-    String fallbackUrl = 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80';
-    if (trade.contains('santexnik')) {
-      fallbackUrl = 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=800&q=80';
-    } else if (trade.contains('elektrik')) {
-      fallbackUrl = 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80';
-    } else if (trade.contains('kondisioner')) {
-      fallbackUrl = 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=800&q=80';
-    } else if (trade.contains('mebel') || trade.contains('dülgər')) {
-      fallbackUrl = 'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=800&q=80';
-    }
-
-    // Kateqoriyaya uyğun rəngli gradient fallback (qaranlıq qalmır)
+    // Kateqoriyaya uyğun rəngli və zərif gradient fallback (öz şəkli olmayan videolar üçün professional görünüş)
     final tl = trade.toLowerCase();
-    List<Color> gradColors = [const Color(0xFFE65100), const Color(0xFFBF360C)];
-    IconData gradIcon = Icons.foundation_rounded;
+    List<Color> gradColors = [const Color(0xFF1E293B), const Color(0xFF0F172A)];
+    IconData gradIcon = Icons.handyman_rounded;
+
     if (tl.contains('santexnik') || tl.contains('su')) {
       gradColors = [const Color(0xFF0288D1), const Color(0xFF01579B)];
       gradIcon = Icons.water_drop_rounded;
@@ -709,6 +764,9 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     } else if (tl.contains('rəngsaz') || tl.contains('malyar')) {
       gradColors = [const Color(0xFFFF7043), const Color(0xFFD84315)];
       gradIcon = Icons.format_paint_rounded;
+    } else if (tl.contains('tikinti')) {
+      gradColors = [const Color(0xFFE65100), const Color(0xFFBF360C)];
+      gradIcon = Icons.foundation_rounded;
     }
 
     final fallbackWidget = Container(
@@ -721,7 +779,26 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
           end: Alignment.bottomRight,
         ),
       ),
-      child: Icon(gradIcon, size: 100, color: Colors.white.withOpacity(0.2)),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(gradIcon, size: 85, color: Colors.white.withOpacity(0.3)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Text(
+                trade.isEmpty ? 'UstaGo Shorts' : trade,
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
 
     if (thumbnailBase64 != null && thumbnailBase64.isNotEmpty) {
@@ -736,18 +813,21 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       } catch (_) {}
     }
 
-    final imgUrl = (thumbnailUrl != null && thumbnailUrl.isNotEmpty) ? thumbnailUrl : fallbackUrl;
-    return Image.network(
-      imgUrl,
-      fit: BoxFit.cover,
-      width: double.infinity,
-      height: double.infinity,
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return fallbackWidget;
-      },
-      errorBuilder: (_, __, ___) => fallbackWidget,
-    );
+    if (thumbnailUrl != null && thumbnailUrl.isNotEmpty && !thumbnailUrl.contains('unsplash.com')) {
+      return Image.network(
+        thumbnailUrl,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return fallbackWidget;
+        },
+        errorBuilder: (_, __, ___) => fallbackWidget,
+      );
+    }
+
+    return fallbackWidget;
   }
 
   @override
@@ -834,18 +914,31 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
             ),
           ),
 
-          // Sağ tərəfdəki düymələr (Bəyən, WhatsApp, Zəng)
+          // Sağ tərəfdəki düymələr (Bəyən, WhatsApp, Zəng, Sil)
           Positioned(
             right: 16,
             bottom: 90,
-            child: Column(
-              children: [
-                _buildSideAction(Icons.favorite, widget.data['likes'], Colors.red),
-                const SizedBox(height: 18),
-                _buildSideAction(Icons.chat, 'WhatsApp', Colors.green, onTap: () => _openWhatsApp(widget.data['phone'])),
-                const SizedBox(height: 18),
-                _buildSideAction(Icons.call, 'Zəng', const Color(0xFF00C853), onTap: () => _makeCall(widget.data['phone'])),
-              ],
+            child: Builder(
+              builder: (context) {
+                final currentUser = FirebaseAuth.instance.currentUser;
+                final bool isOwnerOrAdmin = currentUser != null &&
+                    ((widget.data['userId'] != null && currentUser.uid == widget.data['userId']) ||
+                     currentUser.email == 'mirze3838@gmail.com');
+
+                return Column(
+                  children: [
+                    _buildSideAction(Icons.favorite, widget.data['likes'], Colors.red),
+                    const SizedBox(height: 18),
+                    _buildSideAction(Icons.chat, 'WhatsApp', Colors.green, onTap: () => _openWhatsApp(widget.data['phone'])),
+                    const SizedBox(height: 18),
+                    _buildSideAction(Icons.call, 'Zəng', const Color(0xFF00C853), onTap: () => _makeCall(widget.data['phone'])),
+                    if (isOwnerOrAdmin && widget.data['id'] != null) ...[
+                      const SizedBox(height: 18),
+                      _buildSideAction(Icons.delete_outline_rounded, 'Sil', Colors.redAccent, onTap: _confirmDeleteVideo),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
 

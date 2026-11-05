@@ -349,7 +349,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   itemCount: dynamicShorts.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 12),
                   itemBuilder: (context, index) {
-                    return _buildDynamicShortsCard(dynamicShorts[index]);
+                    return _buildDynamicShortsCard(dynamicShorts[index], index);
                   },
                 );
               },
@@ -657,11 +657,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // DİNAMİK YÜKLƏNƏN SHORTS KARTI (Videonun başlıq şəkli ilə, qaranlıq görünmür)
-  Widget _buildDynamicShortsCard(Map<String, dynamic> item) {
+  Widget _buildDynamicShortsCard(Map<String, dynamic> item, int index) {
     final String? thumbnailBase64 = item['thumbnailBase64'];
     final String? thumbnailUrl = item['thumbnailUrl'];
     final String trade = (item['trade'] ?? 'Tikinti').toString();
-    final String defaultImg = _getCategoryPlaceholderImage(trade);
 
     // Qaranlıq qalmamaq üçün kateqoriyaya uyğun zəngin və rəngli fallback vizualı
     final String tLower = trade.toLowerCase();
@@ -696,13 +695,13 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          Icon(visualIcon, size: 70, color: Colors.white.withOpacity(0.18)),
+          Icon(visualIcon, size: 60, color: Colors.white.withOpacity(0.22)),
           Positioned(
-            bottom: 40,
+            bottom: 30,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.black.withOpacity(0.25),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -735,10 +734,9 @@ class _HomeScreenState extends State<HomeScreen> {
       } catch (_) {
         coverWidget = fallbackVisual;
       }
-    } else {
-      final imgUrl = (thumbnailUrl != null && thumbnailUrl.isNotEmpty) ? thumbnailUrl : defaultImg;
+    } else if (thumbnailUrl != null && thumbnailUrl.isNotEmpty && !thumbnailUrl.contains('unsplash.com')) {
       coverWidget = Image.network(
-        imgUrl,
+        thumbnailUrl,
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
@@ -748,11 +746,20 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         errorBuilder: (_, __, ___) => fallbackVisual,
       );
+    } else {
+      coverWidget = fallbackVisual;
     }
 
     return InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: () => setState(() => _currentIndex = 1),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ShortsScreen(initialIndex: index),
+          ),
+        );
+      },
       child: SizedBox(
         width: 140,
         child: Column(
@@ -1509,8 +1516,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               }
                             }
 
-                            final defaultCover = _getCategoryPlaceholderImage(selectedCat);
-
                             // 1. Profil postlarına əlavə et
                             await FirebaseFirestore.instance.collection('posts').add({
                               'userId': uid,
@@ -1519,7 +1524,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               'title': title,
                               'category': selectedCat,
                               'videoUrl': finalVideoUrl,
-                              'thumbnailUrl': defaultCover,
+                              'thumbnailUrl': '',
                               'isVideo': true,
                               'createdAt': FieldValue.serverTimestamp(),
                               'likes': 0,
@@ -1530,7 +1535,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               'userId': uid,
                               'title': title,
                               'videoUrl': finalVideoUrl,
-                              'thumbnailUrl': defaultCover,
+                              'thumbnailUrl': '',
                               'artisanName': authorName,
                               'trade': selectedCat,
                               'phone': '+994 50 000 00 00',
