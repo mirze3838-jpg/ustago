@@ -18,6 +18,7 @@ class AuthService {
     required String email,
     required String password,
     required String role,
+    String? category,
     String? phone,
     Uint8List? profileImageBytes,
   }) async {
@@ -44,6 +45,7 @@ class AuthService {
       'email': email.trim(),
       'phone': phone?.trim() ?? '',
       'role': role,
+      'category': category ?? 'Tikinti',
       'photoBase64': photoBase64 ?? '',
       'isVerified': true,
       'createdAt': FieldValue.serverTimestamp(),

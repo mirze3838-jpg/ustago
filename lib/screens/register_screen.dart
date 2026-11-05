@@ -20,9 +20,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final AuthService _authService = AuthService();
 
   String _selectedRole = 'usta';
+  String _selectedCategory = 'Tikinti';
   Uint8List? _profileImageBytes;
   bool _isLoading = false;
   bool _obscurePass = true;
+
+  final List<String> _categories = [
+    'Tikinti',
+    'Santexnik',
+    'Elektrik',
+    'Təmir və Quraşdırma',
+    'Avtomobil Ustası',
+    'Mebel Ustası',
+    'Kondisioner Ustası',
+    'Dülgər',
+    'Rəngsaz',
+  ];
 
   final Map<String, String> _roles = {
     'usta': 'Usta kimi (Xidmət təklif etmək)',
@@ -78,6 +91,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _passController.text,
         phone: _phoneController.text,
         role: _selectedRole,
+        category: _selectedRole == 'usta' ? _selectedCategory : null,
         profileImageBytes: _profileImageBytes,
       );
 
@@ -219,6 +233,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
               },
             ),
             const SizedBox(height: 16),
+
+            // Əgər Usta seçilibsə, İxtisas (Kateqoriya) seçimi
+            if (_selectedRole == 'usta') ...[
+              DropdownButtonFormField<String>(
+                value: _selectedCategory,
+                decoration: const InputDecoration(
+                  labelText: 'Usta İxtisası / Fəaliyyət Sahəsi',
+                  prefixIcon: Icon(Icons.construction, color: Color(0xFF1769D2)),
+                ),
+                items: _categories.map((cat) {
+                  return DropdownMenuItem(
+                    value: cat,
+                    child: Text(cat, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) setState(() => _selectedCategory = val);
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
 
             // Telefon Nömrəsi
             TextFormField(

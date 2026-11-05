@@ -12,6 +12,7 @@ import 'admin_screen.dart';
 import 'shorts_screen.dart';
 import 'market_screen.dart';
 import 'artisan_detail_screen.dart';
+import 'category_artisans_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -550,36 +551,52 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // KATEQORİYA KARTI (Dizayndakı rəngli ikonlar)
+  // KATEQORİYA KARTI (Dizayndakı rəngli ikonlar - Toxunanda həmin kateqoriyanın ustaları açılır)
   Widget _buildCategoryItem(Map<String, dynamic> cat) {
-    return Column(
-      children: [
-        Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              color: cat['bgColor'],
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: (cat['color'] as Color).withOpacity(0.15)),
-            ),
-            child: Center(
-              child: Icon(cat['icon'], color: cat['color'], size: 30),
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CategoryArtisansScreen(
+              categoryTitle: cat['title'],
+              categoryIcon: cat['icon'],
+              categoryColor: cat['color'],
+              categoryBgColor: cat['bgColor'],
             ),
           ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          cat['title'],
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF1E293B),
-            height: 1.1,
+        );
+      },
+      child: Column(
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: cat['bgColor'],
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: (cat['color'] as Color).withOpacity(0.15)),
+              ),
+              child: Center(
+                child: Icon(cat['icon'], color: cat['color'], size: 30),
+              ),
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 6),
+          Text(
+            cat['title'],
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF1E293B),
+              height: 1.1,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1631,49 +1648,67 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showEditProfileDialog(String uid, Map<String, dynamic>? userData) {
     final nameController = TextEditingController(text: userData?['fullName'] ?? '');
     final phoneController = TextEditingController(text: userData?['phone'] ?? '');
+    String selectedUstaCategory = userData?['category'] ?? 'Tikinti';
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Profil Məlumatlarını Redaktə Et', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'Ad və Soyad', prefixIcon: Icon(Icons.person)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Profil Məlumatlarını Redaktə Et', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'Ad və Soyad', prefixIcon: Icon(Icons.person)),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(labelText: 'Mobil Nömrə', prefixIcon: Icon(Icons.phone)),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedUstaCategory,
+                  decoration: const InputDecoration(labelText: 'Usta İxtisası / Kateqoriya', prefixIcon: Icon(Icons.construction)),
+                  items: _categories.map((c) {
+                    final title = (c['title'] as String).replaceAll('\n', ' ');
+                    return DropdownMenuItem(value: title, child: Text(title));
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) setDialogState(() => selectedUstaCategory = val);
+                  },
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Mobil Nömrə', prefixIcon: Icon(Icons.phone)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Ləğv et'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1769D2)),
+              onPressed: () async {
+                await FirebaseFirestore.instance.collection('users').doc(uid).set({
+                  'fullName': nameController.text.trim(),
+                  'phone': phoneController.text.trim(),
+                  'category': selectedUstaCategory,
+                }, SetOptions(merge: true));
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Məlumatlar yadda saxlanıldı!'), backgroundColor: Colors.green),
+                  );
+                }
+              },
+              child: const Text('Yadda saxla', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Ləğv et'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1769D2)),
-            onPressed: () async {
-              await FirebaseFirestore.instance.collection('users').doc(uid).set({
-                'fullName': nameController.text.trim(),
-                'phone': phoneController.text.trim(),
-              }, SetOptions(merge: true));
-              if (mounted) {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Məlumatlar yadda saxlanıldı!'), backgroundColor: Colors.green),
-                );
-              }
-            },
-            child: const Text('Yadda saxla', style: TextStyle(color: Colors.white)),
-          ),
-        ],
       ),
     );
   }
@@ -1813,7 +1848,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? 'Sistem Administratoru'
                       : (userRole == 'seller'
                           ? 'Satıcı (Mağaza Sahibi)'
-                          : (userRole == 'usta' ? 'Usta' : 'Müştəri')),
+                          : (userRole == 'usta' ? '${userData?['category'] ?? 'Tikinti'} Ustası' : 'Müştəri')),
                   style: TextStyle(
                     color: isAdmin ? Colors.amber.shade900 : const Color(0xFF1769D2),
                     fontSize: 12,
