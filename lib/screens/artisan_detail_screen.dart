@@ -61,6 +61,141 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
     }
   }
 
+  void _showAddReviewDialog(String artisanUid, String artisanName) {
+    int rating = 5;
+    final commentController = TextEditingController();
+    final nameController = TextEditingController();
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null) {
+      nameController.text = currentUser.displayName ?? currentUser.email?.split('@').first ?? 'Müştəri';
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(
+            children: const [
+              Icon(Icons.rate_review_rounded, color: Color(0xFF1769D2), size: 24),
+              SizedBox(width: 8),
+              Text('Rəy və Qiymətləndirmə', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$artisanName tərəfindən görülən işi qiymətləndirin:',
+                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                ),
+                const SizedBox(height: 12),
+                Center(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (index) {
+                      final starValue = index + 1;
+                      return IconButton(
+                        icon: Icon(
+                          starValue <= rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                          color: Colors.amber,
+                          size: 34,
+                        ),
+                        onPressed: () {
+                          setDialogState(() => rating = starValue);
+                        },
+                      );
+                    }),
+                  ),
+                ),
+                Center(
+                  child: Text(
+                    rating == 5
+                        ? '⭐⭐⭐⭐⭐ Əla xidmət'
+                        : (rating == 4
+                            ? '⭐⭐⭐⭐ Çox yaxşı'
+                            : (rating == 3 ? '⭐⭐⭐ Orta' : '⭐⭐ Zəif')),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.amber),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: nameController,
+                  decoration: InputDecoration(
+                    labelText: 'Adınız *',
+                    hintText: 'Məs: Elçin Məmmədov',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: commentController,
+                  maxLines: 3,
+                  maxLength: 300,
+                  decoration: InputDecoration(
+                    labelText: 'Şərhiniz *',
+                    hintText: 'Görülən iş, operativlik və qiymət haqqında rəyiniz...',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Ləğv et'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1769D2),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () async {
+                final comment = commentController.text.trim();
+                final reviewer = nameController.text.trim();
+                if (comment.isEmpty || reviewer.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Zəhmət olmasa ad və rəyinizi qeyd edin!')),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx);
+                try {
+                  await FirebaseFirestore.instance.collection('reviews').add({
+                    'artisanId': artisanUid,
+                    'artisanName': artisanName,
+                    'reviewerName': reviewer,
+                    'rating': rating,
+                    'comment': comment,
+                    'createdAt': FieldValue.serverTimestamp(),
+                  });
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Təşəkkür edirik! Rəyiniz qeydə alındı.'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              },
+              child: const Text('Göndər', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showEditBioDialog(String uId, String currentBio, String defaultBio) {
     final controller = TextEditingController(text: currentBio.trim().isNotEmpty ? currentBio : defaultBio);
     showDialog(
@@ -490,6 +625,205 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                 },
               );
             },
+          ),
+        ],
+
+        const SizedBox(height: 20),
+
+        // 4. Müştəri Rəyləri və Qiymətləndirmə (Reviews & Ratings)
+        if (userId != null) ...[
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: const [
+                        Icon(Icons.star_rounded, color: Colors.amber, size: 24),
+                        SizedBox(width: 6),
+                        Text(
+                          'Müştəri Rəyləri',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1769D2),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: const Icon(Icons.edit, size: 14),
+                      label: const Text('Rəy Yaz', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      onPressed: () => _showAddReviewDialog(userId.toString(), name),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('reviews')
+                      .where('artisanId', isEqualTo: userId.toString())
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    final docs = snapshot.data?.docs ?? [];
+                    if (docs.isEmpty) {
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.rate_review_outlined, color: Colors.grey, size: 24),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: const [
+                                  Text(
+                                    'Hələ ki heç kim rəy bildirməyib',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                  Text(
+                                    'Bu ustanın ilk rəyini siz yazın və digər müştərilərə kömək edin!',
+                                    style: TextStyle(color: Colors.grey, fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    // Reytinq ortalaması
+                    double avgRating = 0;
+                    for (var d in docs) {
+                      avgRating += (d.data()['rating'] as num?)?.toDouble() ?? 5.0;
+                    }
+                    avgRating = avgRating / docs.length;
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Reytinq ümumi kartı
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.amber.shade200),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    avgRating.toStringAsFixed(1),
+                                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Row(
+                                    children: List.generate(5, (i) {
+                                      return Icon(
+                                        i < avgRating.round() ? Icons.star_rounded : Icons.star_border_rounded,
+                                        color: Colors.amber,
+                                        size: 18,
+                                      );
+                                    }),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                '${docs.length} rəy əsasında',
+                                style: TextStyle(color: Colors.amber.shade900, fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Rəylərin siyahısı
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: docs.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 10),
+                          itemBuilder: (context, idx) {
+                            final r = docs[idx].data();
+                            final revName = (r['reviewerName'] ?? 'Müştəri').toString();
+                            final revComment = (r['comment'] ?? '').toString();
+                            final revRating = (r['rating'] as num?)?.toInt() ?? 5;
+
+                            return Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 14,
+                                            backgroundColor: const Color(0xFF1769D2).withOpacity(0.15),
+                                            child: Text(
+                                              revName.isNotEmpty ? revName[0].toUpperCase() : 'M',
+                                              style: const TextStyle(color: Color(0xFF1769D2), fontWeight: FontWeight.bold, fontSize: 12),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            revName,
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                          ),
+                                        ],
+                                      ),
+                                      Row(
+                                        children: List.generate(5, (starIdx) {
+                                          return Icon(
+                                            starIdx < revRating ? Icons.star_rounded : Icons.star_border_rounded,
+                                            color: Colors.amber,
+                                            size: 15,
+                                          );
+                                        }),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    revComment,
+                                    style: const TextStyle(color: Color(0xFF334155), fontSize: 12, height: 1.3),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ],
       ],

@@ -31,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _currentUserRole;
   final TextEditingController _searchController = TextEditingController();
   int _adminSecretTap = 0;
+  int _unreadNotifications = 3;
 
   @override
   void initState() {
@@ -285,6 +286,81 @@ class _HomeScreenState extends State<HomeScreen> {
           child: _buildHeader(),
         ),
 
+        // Axtarış aktiv olduqda Canlı Nəticələr Bloku
+        if (_searchController.text.trim().isNotEmpty) ...[
+          SliverToBoxAdapter(
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF1769D2).withOpacity(0.3)),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.search, color: Color(0xFF1769D2), size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            '"${_searchController.text.trim()}" üzrə axtarış',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                      InkWell(
+                        onTap: () {
+                          _searchController.clear();
+                          setState(() {});
+                        },
+                        child: const Text('Təmizlə', style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _categories.where((c) {
+                      final q = _searchController.text.trim().toLowerCase();
+                      final title = (c['title'] as String).toLowerCase();
+                      return title.contains(q);
+                    }).map((c) {
+                      return ActionChip(
+                        avatar: Icon(c['icon'], size: 16, color: c['color']),
+                        label: Text((c['title'] as String).replaceAll('\n', ' ')),
+                        backgroundColor: c['bgColor'],
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CategoryArtisansScreen(
+                                categoryTitle: c['title'],
+                                categoryIcon: c['icon'],
+                                categoryColor: c['color'],
+                                categoryBgColor: c['bgColor'],
+                                selectedCity: _selectedCity,
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+
         // 2. Kateqoriyalar Bölməsi
         SliverToBoxAdapter(
           child: Padding(
@@ -436,6 +512,188 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // Bildirişlər pəncərəsi
+  void _showNotificationsSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) => Container(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.75,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Tutacaq
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1769D2).withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.notifications_active, color: Color(0xFF1769D2), size: 22),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'Bildirişlər',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                      ),
+                      if (_unreadNotifications > 0) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '$_unreadNotifications yeni',
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (_unreadNotifications > 0)
+                    TextButton(
+                      onPressed: () {
+                        setState(() => _unreadNotifications = 0);
+                        setSheetState(() {});
+                      },
+                      child: const Text('Hamısını oxu', style: TextStyle(color: Color(0xFF1769D2), fontSize: 13, fontWeight: FontWeight.bold)),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Divider(),
+              Expanded(
+                child: ListView(
+                  children: [
+                    _buildNotificationItem(
+                      icon: Icons.celebration,
+                      iconBg: Colors.amber.shade100,
+                      iconColor: Colors.amber.shade900,
+                      title: 'UstaGo-ya Xoş Gəlmisiniz! 🎉',
+                      body: 'Azərbaycanın peşəkar usta və xidmət platformasındasınız. Rahatlıqla usta tapın və ya sifariş qəbul edin.',
+                      time: 'İndi',
+                      isUnread: _unreadNotifications >= 1,
+                    ),
+                    _buildNotificationItem(
+                      icon: Icons.verified_user,
+                      iconBg: Colors.blue.shade100,
+                      iconColor: const Color(0xFF1769D2),
+                      title: 'Profil Təhlükəsizliyi 🛡️',
+                      body: 'Hesabınız uğurla aktivləşdirilib. Profilinizdə gördüyünüz işlərin foto və videolarını paylaşa bilərsiniz.',
+                      time: '2 saat əvvəl',
+                      isUnread: _unreadNotifications >= 2,
+                    ),
+                    _buildNotificationItem(
+                      icon: Icons.tips_and_updates,
+                      iconBg: Colors.green.shade100,
+                      iconColor: Colors.green.shade800,
+                      title: 'Yeni İmkan: Usta Haqqında Məlumat 💡',
+                      body: 'Artıq profilinizdə "Usta Haqqında" məlumatınızı istədiyiniz vaxt redaktə edib yeniləyə bilərsiniz!',
+                      time: 'Dünən',
+                      isUnread: _unreadNotifications >= 3,
+                    ),
+                    _buildNotificationItem(
+                      icon: Icons.video_collection,
+                      iconBg: Colors.purple.shade100,
+                      iconColor: Colors.purple.shade800,
+                      title: 'Shorts Video Bölməsi 🎬',
+                      body: 'İşlərinizin qısa videolarını yükləyin, minlərlə müştəri işinizi görsün!',
+                      time: '3 gün əvvəl',
+                      isUnread: false,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationItem({
+    required IconData icon,
+    required Color iconBg,
+    required Color iconColor,
+    required String title,
+    required String body,
+    required String time,
+    required bool isUnread,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isUnread ? const Color(0xFFF1F5F9) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: isUnread ? const Color(0xFFCBD5E1) : const Color(0xFFF1F5F9)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
+            child: Icon(icon, color: iconColor, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
+                    ),
+                    Text(time, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  body,
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF475569), height: 1.3),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // 1. MAVİ BAŞLIQ (Dizayndakı kimi qövsli kart)
   Widget _buildHeader() {
     return Container(
@@ -489,33 +747,38 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
-                  // Usta şəkli və bildiriş zəngi
-                  Stack(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.18),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 24),
-                      ),
-                      Positioned(
-                        right: 2,
-                        top: 2,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
+                  // Bildiriş zəngi
+                  InkWell(
+                    borderRadius: BorderRadius.circular(30),
+                    onTap: _showNotificationsSheet,
+                    child: Stack(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.18),
                             shape: BoxShape.circle,
                           ),
-                          child: const Text(
-                            '3',
-                            style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                          ),
+                          child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 24),
                         ),
-                      ),
-                    ],
+                        if (_unreadNotifications > 0)
+                          Positioned(
+                            right: 2,
+                            top: 2,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                '$_unreadNotifications',
+                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -544,12 +807,22 @@ class _HomeScreenState extends State<HomeScreen> {
                     Expanded(
                       child: TextField(
                         controller: _searchController,
-                        decoration: const InputDecoration(
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
                           hintText: 'Usta, xidmət və ya kateqoriya axtarın...',
-                          hintStyle: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                          hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
                           border: InputBorder.none,
                           isDense: true,
-                          contentPadding: EdgeInsets.symmetric(vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                          suffixIcon: _searchController.text.trim().isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18, color: Colors.grey),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() {});
+                                  },
+                                )
+                              : null,
                         ),
                       ),
                     ),
@@ -643,6 +916,7 @@ class _HomeScreenState extends State<HomeScreen> {
               categoryIcon: cat['icon'],
               categoryColor: cat['color'],
               categoryBgColor: cat['bgColor'],
+              selectedCity: _selectedCity,
             ),
           ),
         );
@@ -2594,8 +2868,26 @@ class _HomeScreenState extends State<HomeScreen> {
             ListTile(
               leading: const Icon(Icons.notifications_none),
               title: const Text('Bildirişlər'),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () {},
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_unreadNotifications > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '$_unreadNotifications',
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.arrow_forward_ios, size: 16),
+                ],
+              ),
+              onTap: _showNotificationsSheet,
             ),
             const Divider(),
             ListTile(

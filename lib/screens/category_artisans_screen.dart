@@ -9,6 +9,7 @@ class CategoryArtisansScreen extends StatefulWidget {
   final IconData categoryIcon;
   final Color categoryColor;
   final Color categoryBgColor;
+  final String selectedCity;
 
   const CategoryArtisansScreen({
     super.key,
@@ -16,6 +17,7 @@ class CategoryArtisansScreen extends StatefulWidget {
     required this.categoryIcon,
     required this.categoryColor,
     required this.categoryBgColor,
+    this.selectedCity = 'Bakı',
   });
 
   @override
@@ -25,6 +27,13 @@ class CategoryArtisansScreen extends StatefulWidget {
 class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  late String _activeCityFilter;
+
+  @override
+  void initState() {
+    super.initState();
+    _activeCityFilter = widget.selectedCity;
+  }
 
   @override
   void dispose() {
@@ -200,6 +209,44 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
             ),
           ),
 
+          // 1.1 ŞƏHƏR FİLTRİ (Çiplər)
+          SliverToBoxAdapter(
+            child: Container(
+              height: 48,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              margin: const EdgeInsets.only(top: 8, bottom: 4),
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: ['Bütün Şəhərlər', 'Bakı', 'Sumqayıt', 'Gəncə'].map((city) {
+                  final bool isSelected = _activeCityFilter == city;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(city),
+                      selected: isSelected,
+                      selectedColor: const Color(0xFF1769D2),
+                      labelStyle: TextStyle(
+                        color: isSelected ? Colors.white : const Color(0xFF334155),
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        fontSize: 12,
+                      ),
+                      backgroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: BorderSide(color: isSelected ? const Color(0xFF1769D2) : Colors.grey.shade300),
+                      ),
+                      onSelected: (val) {
+                        if (val) {
+                          setState(() => _activeCityFilter = city);
+                        }
+                      },
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+
           // 2. USTALAR SİYAHISI (Canlı Firestore datası)
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: FirebaseFirestore.instance
@@ -221,6 +268,15 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
                 final cat = (data['category'] ?? data['trade'] ?? '').toString();
                 return _isMatchingCategory(cat);
               }).toList();
+
+              // Şəhər filtri
+              if (_activeCityFilter != 'Bütün Şəhərlər') {
+                matchingArtisans = matchingArtisans.where((doc) {
+                  final data = doc.data();
+                  final city = (data['city'] ?? 'Bakı').toString().toLowerCase();
+                  return city.contains(_activeCityFilter.toLowerCase());
+                }).toList();
+              }
 
               // Əgər axtarış mətni varsa
               if (_searchQuery.isNotEmpty) {
