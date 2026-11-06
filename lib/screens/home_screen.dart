@@ -2617,9 +2617,6 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
   bool _isInit = false;
   bool _hasError = false;
   bool _isMuted = false;
-  // Web-də initState-dən play() çağırıla bilmir (user gesture lazımdır)
-  // İstifadəçi ekrana toxunanda başladırıq
-  bool _startedByUser = false;
 
   @override
   void initState() {
@@ -2638,7 +2635,6 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
       final controller = VideoPlayerController.networkUrl(Uri.parse(url));
       _controller = controller;
 
-      // Shorts ekranında işləyən eyni üsul ilə yükləyirik
       final timeout = kIsWeb ? const Duration(seconds: 15) : const Duration(seconds: 25);
       await controller.initialize().timeout(timeout, onTimeout: () {
         debugPrint('Video timeout: $url');
@@ -2661,16 +2657,16 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
         _hasError = false;
       });
 
-      // Web-də play() user gesture olmadan işləmə bilər
-      // Yenə də cəhd edirik - muted olsa da çalışsın
+      // Web-də autoplay üçün: əvvəlcə muted, sonra play
+      // play() user gesture-dan asılıdır, uğursuz olsa istifadəçi özü basacaq
+      if (kIsWeb) {
+        await controller.setVolume(0);
+        _isMuted = true;
+      }
       try {
-        if (kIsWeb) {
-          await controller.setVolume(0);
-          _isMuted = true;
-        }
         await controller.play();
-      } catch (e) {
-        debugPrint('Autoplay: $e — istifadəçi ekrana tıxlamalıdır');
+      } catch (_) {
+        // Autoplay blok olunubsa: istifadəçi böyük play düyməsinə basacaq
       }
     } catch (err) {
       debugPrint('Post video error: $err');
@@ -2728,20 +2724,18 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
-        onTap: () {
+        onTap: () async {
           if (_isInit && c != null) {
             if (!c.value.isPlaying) {
-              // Web-də user gesture ilə play() çağırılır — CORS/autoplay məhdudiyyəti aşılır
-              setState(() {
-                if (kIsWeb && _isMuted) {
-                  c.setVolume(0);
-                }
-                c.play();
-              });
+              // User gesture ilə play — web autoplay məhdudiyyətini aşır
+              if (kIsWeb) {
+                await c.setVolume(_isMuted ? 0 : 1.0);
+              }
+              await c.play();
+              setState(() {});
             } else {
-              setState(() {
-                c.pause();
-              });
+              await c.pause();
+              setState(() {});
             }
           }
         },
@@ -2830,16 +2824,33 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
                 child: CircularProgressIndicator(color: Colors.white),
               ),
 
-            // Pause olduqda mərkəzdə Play ikonu
+            // Pause/hazır amma oynanmır — Play ikonu + "Tıxla" yazısı
             if (_isInit && c != null && !c.value.isPlaying)
               Center(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 54),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.6),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 60),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        'Oynatmaq üçün tıxla',
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
@@ -2861,14 +2872,15 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
                       children: [
                         if (_isInit && c != null)
                           CircleAvatar(
-                            backgroundColor: Colors.black54,
+                            backgroundColor: _isMuted ? Colors.red.withOpacity(0.8) : Colors.black54,
                             child: IconButton(
+                              tooltip: _isMuted ? 'Səsi Aç' : 'Səsi Kapat',
                               icon: Icon(_isMuted ? Icons.volume_off : Icons.volume_up, color: Colors.white),
-                              onPressed: () {
+                              onPressed: () async {
                                 setState(() {
                                   _isMuted = !_isMuted;
-                                  c.setVolume(_isMuted ? 0 : 1.0);
                                 });
+                                await c.setVolume(_isMuted ? 0 : 1.0);
                               },
                             ),
                           ),
