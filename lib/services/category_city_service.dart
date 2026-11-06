@@ -102,6 +102,26 @@ class CategoryCityService {
     'Lənkəran',
   ];
 
+  // Sabit ikon uyğunluğu (Tree shaking xətalarının qarşısını alır)
+  static IconData getIconByCode(int? code) {
+    if (code == null) return Icons.handyman;
+    if (code == Icons.handyman.codePoint) return Icons.handyman;
+    if (code == Icons.cleaning_services.codePoint) return Icons.cleaning_services;
+    if (code == Icons.roofing.codePoint) return Icons.roofing;
+    if (code == Icons.yard.codePoint) return Icons.yard;
+    if (code == Icons.plumbing.codePoint) return Icons.plumbing;
+    if (code == Icons.kitchen.codePoint) return Icons.kitchen;
+    if (code == Icons.tv.codePoint) return Icons.tv;
+    if (code == Icons.security.codePoint) return Icons.security;
+    if (code == Icons.local_shipping.codePoint) return Icons.local_shipping;
+    if (code == Icons.brush.codePoint) return Icons.brush;
+    if (code == Icons.solar_power.codePoint) return Icons.solar_power;
+    if (code == Icons.lock.codePoint) return Icons.lock;
+    if (code == Icons.pest_control.codePoint) return Icons.pest_control;
+    if (code == Icons.camera_alt.codePoint) return Icons.camera_alt;
+    return Icons.handyman;
+  }
+
   // Canlı Kateqoriyalar axını (Standart + Firestore-dan Admin tərəfindən əlavə edilmişlər)
   static Stream<List<Map<String, dynamic>>> getCategoriesStream() {
     return _firestore
@@ -123,14 +143,14 @@ class CategoryCityService {
         );
         if (exists) continue;
 
-        int iconCode = data['iconCode'] ?? Icons.category.codePoint;
+        int? iconCode = data['iconCode'];
         int colorValue = data['color'] ?? 0xFF1976D2;
         int bgColorValue = data['bgColor'] ?? 0xFFE3F2FD;
 
         list.add({
           'id': doc.id,
           'title': title,
-          'icon': IconData(iconCode, fontFamily: 'MaterialIcons'),
+          'icon': getIconByCode(iconCode),
           'color': Color(colorValue),
           'bgColor': Color(bgColorValue),
           'isCustom': true,

@@ -87,7 +87,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Web App (for iOS Safari)
-        run: flutter build web --release --base-href "/ustago/"
+        run: flutter build web --release --base-href "/ustago/" --no-tree-shake-icons
 
       - name: Build Android APK
         run: |
