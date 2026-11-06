@@ -516,6 +516,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showNotificationsSheet() {
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
@@ -748,36 +750,43 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
 
                   // Bildiriş zəngi
-                  InkWell(
-                    borderRadius: BorderRadius.circular(30),
-                    onTap: _showNotificationsSheet,
-                    child: Stack(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.18),
-                            shape: BoxShape.circle,
+                  Material(
+                    color: Colors.transparent,
+                    child: IconButton(
+                      tooltip: 'Bildirişlər',
+                      onPressed: _showNotificationsSheet,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      splashRadius: 26,
+                      icon: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.18),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 24),
                           ),
-                          child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 24),
-                        ),
-                        if (_unreadNotifications > 0)
-                          Positioned(
-                            right: 2,
-                            top: 2,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Text(
-                                '$_unreadNotifications',
-                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          if (_unreadNotifications > 0)
+                            Positioned(
+                              right: -2,
+                              top: -2,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  '$_unreadNotifications',
+                                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
