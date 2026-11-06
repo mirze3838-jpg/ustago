@@ -131,12 +131,6 @@ class _HomeScreenState extends State<HomeScreen> {
     },
   ];
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
   /// Şəkili Firestore 1MB limitinə uyğun sıxışdırır (maks ~700KB)
   Future<Uint8List> _compressCoverImage(Uint8List bytes) async {
     // Əgər 700KB-dan azdırsa, əlavə sıxmaya ehtiyac yoxdur
