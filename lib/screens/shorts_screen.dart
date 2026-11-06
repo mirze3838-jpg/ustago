@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
+import 'package:http/http.dart' as http;
 import '../services/video_upload_service.dart';
 
 class ShortsScreen extends StatefulWidget {
@@ -927,10 +928,25 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
   }
 
   Future<void> _initVideo() async {
-    final url = widget.data['videoUrl']?.toString().trim() ?? '';
+    String url = widget.data['videoUrl']?.toString().trim() ?? '';
     if (url.isEmpty) {
       if (mounted) setState(() => _hasError = true);
       return;
+    }
+
+    if (url.contains('tmpfiles.org')) {
+      if (!url.contains('/dl/') || url.split('/').length < 7) {
+        try {
+          final pageUrl = url.replaceFirst('/dl/', '/');
+          final res = await http.get(Uri.parse(pageUrl)).timeout(const Duration(seconds: 4));
+          if (res.statusCode == 200) {
+            final m = RegExp(r'href="([^"]+/dl/[^"]+)"').firstMatch(res.body);
+            if (m != null) {
+              url = m.group(1)!;
+            }
+          }
+        } catch (_) {}
+      }
     }
 
     try {

@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
+import '../services/category_city_service.dart';
 import 'home_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -25,17 +27,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _isLoading = false;
   bool _obscurePass = true;
 
-  final List<String> _categories = [
-    'Tikinti',
-    'Santexnik',
-    'Elektrik',
-    'Təmir və Quraşdırma',
-    'Avtomobil Ustası',
-    'Mebel Ustası',
-    'Kondisioner Ustası',
-    'Dülgər',
-    'Rəngsaz',
-  ];
+  List<String> _categories = CategoryCityService.defaultCategories
+      .map((c) => (c['title'] as String).replaceAll('\n', ' '))
+      .toList();
+  StreamSubscription<List<Map<String, dynamic>>>? _catSub;
 
   final Map<String, String> _roles = {
     'usta': 'Usta kimi (Xidmət təklif etmək)',
@@ -45,7 +40,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    _catSub = CategoryCityService.getCategoriesStream().listen((cats) {
+      if (mounted) {
+        setState(() {
+          _categories = cats.map((c) => (c['title'] as String).replaceAll('\n', ' ')).toList();
+        });
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    _catSub?.cancel();
     _nameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();

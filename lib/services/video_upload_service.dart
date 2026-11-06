@@ -120,8 +120,25 @@ class VideoUploadService {
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         if (decoded['status'] == 'success' && decoded['data']?['url'] != null) {
-          String url = decoded['data']['url'].toString();
-          // Birbaşa video URL-nə çeviririk: https://tmpfiles.org/xxx/yyy -> https://tmpfiles.org/dl/xxx/yyy
+          final String pageUrl = decoded['data']['url'].toString();
+
+          // tmpfiles.org web səhifəsindən birbaşa MP4 stream linkini (/dl/.../.../name.mp4) əldə edirik
+          try {
+            final pageRes = await http.get(Uri.parse(pageUrl)).timeout(const Duration(seconds: 8));
+            if (pageRes.statusCode == 200) {
+              final match = RegExp(r'href="([^"]+/dl/[^"]+)"').firstMatch(pageRes.body);
+              if (match != null) {
+                final directUrl = match.group(1)!;
+                onProgress?.call(1.0);
+                return directUrl;
+              }
+            }
+          } catch (e) {
+            debugPrint('Direct link parsing error: $e');
+          }
+
+          // Fallback
+          String url = pageUrl;
           if (url.contains('tmpfiles.org/') && !url.contains('tmpfiles.org/dl/')) {
             url = url.replaceFirst('tmpfiles.org/', 'tmpfiles.org/dl/');
           }

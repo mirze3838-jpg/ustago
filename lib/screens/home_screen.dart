@@ -1,14 +1,17 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 import '../services/auth_service.dart';
 import '../services/video_upload_service.dart';
+import '../services/category_city_service.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
 import 'admin_screen.dart';
@@ -33,10 +36,41 @@ class _HomeScreenState extends State<HomeScreen> {
   int _adminSecretTap = 0;
   int _unreadNotifications = 3;
 
+  // Kateqoriyalar və Şəhərlər (Admin tərəfindən artırıla bilər, Firestore ilə canlı sinxronlaşır)
+  List<Map<String, dynamic>> _categories = List.from(CategoryCityService.defaultCategories);
+  List<String> _cities = List.from(CategoryCityService.defaultCities);
+  StreamSubscription<List<Map<String, dynamic>>>? _catSub;
+  StreamSubscription<List<String>>? _citySub;
+
   @override
   void initState() {
     super.initState();
     _loadUserRole();
+    _initCategoryAndCityStreams();
+  }
+
+  void _initCategoryAndCityStreams() {
+    _catSub = CategoryCityService.getCategoriesStream().listen((cats) {
+      if (mounted) setState(() => _categories = cats);
+    });
+    _citySub = CategoryCityService.getCitiesStream().listen((cities) {
+      if (mounted) {
+        setState(() {
+          _cities = cities;
+          if (!_cities.contains(_selectedCity) && _cities.isNotEmpty) {
+            _selectedCity = _cities.first;
+          }
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _catSub?.cancel();
+    _citySub?.cancel();
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadUserRole() async {
@@ -47,70 +81,6 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     }
   }
-
-  // Kateqoriyalar siyahısı (Dizayndakı rəng və ikonlara uyğun)
-  final List<Map<String, dynamic>> _categories = [
-    {
-      'title': 'Tikinti',
-      'icon': Icons.foundation,
-      'color': const Color(0xFFE65100),
-      'bgColor': const Color(0xFFFBE9E7),
-    },
-    {
-      'title': 'Santexnik',
-      'icon': Icons.water_drop,
-      'color': const Color(0xFF1976D2),
-      'bgColor': const Color(0xFFE3F2FD),
-    },
-    {
-      'title': 'Elektrik',
-      'icon': Icons.bolt,
-      'color': const Color(0xFFFBC02D),
-      'bgColor': const Color(0xFFFFFDE7),
-    },
-    {
-      'title': 'Təmir və\nQuraşdırma',
-      'icon': Icons.build_rounded,
-      'color': const Color(0xFF0288D1),
-      'bgColor': const Color(0xFFE1F5FE),
-    },
-    {
-      'title': 'Avtomobil\nUstası',
-      'icon': Icons.directions_car_filled,
-      'color': const Color(0xFF0277BD),
-      'bgColor': const Color(0xFFE1F5FE),
-    },
-    {
-      'title': 'Mebel\nUstası',
-      'icon': Icons.chair,
-      'color': const Color(0xFFE67E22),
-      'bgColor': const Color(0xFFFDF2E9),
-    },
-    {
-      'title': 'Kondisioner\nUstası',
-      'icon': Icons.ac_unit,
-      'color': const Color(0xFF29B6F6),
-      'bgColor': const Color(0xFFE1F5FE),
-    },
-    {
-      'title': 'Dülgər',
-      'icon': Icons.hardware,
-      'color': const Color(0xFF8D6E63),
-      'bgColor': const Color(0xFFEFEBE9),
-    },
-    {
-      'title': 'Rəngsaz',
-      'icon': Icons.format_paint,
-      'color': const Color(0xFFFF7043),
-      'bgColor': const Color(0xFFFBE9E7),
-    },
-    {
-      'title': 'Digər\nKateqoriyalar',
-      'icon': Icons.more_horiz,
-      'color': const Color(0xFF1565C0),
-      'bgColor': const Color(0xFFE3F2FD),
-    },
-  ];
 
   // Nümunə Shorts videoları
   final List<Map<String, String>> _shortsList = [
@@ -837,12 +807,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     Container(height: 24, width: 1, color: const Color(0xFFE2E8F0)),
                     const SizedBox(width: 8),
-                    // Şəhər seçimi
+                    // Şəhər seçimi (Admin tərəfindən artırılan şəhərlər daxil olmaqla)
                     DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
-                        value: _selectedCity,
+                        value: _cities.contains(_selectedCity) ? _selectedCity : (_cities.isNotEmpty ? _cities.first : 'Bakı'),
                         icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF1769D2), size: 18),
-                        items: ['Bakı', 'Sumqayıt', 'Gəncə'].map((String city) {
+                        items: _cities.map((String city) {
                           return DropdownMenuItem<String>(
                             value: city,
                             child: Row(
@@ -861,7 +831,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           );
                         }).toList(),
-                        onChanged: (v) => setState(() => _selectedCity = v!),
+                        onChanged: (v) {
+                          if (v != null) setState(() => _selectedCity = v);
+                        },
                       ),
                     ),
                   ],
@@ -988,18 +960,44 @@ class _HomeScreenState extends State<HomeScreen> {
     final String? thumbnailUrl = item['thumbnailUrl'];
     final String trade = (item['trade'] ?? 'Tikinti').toString();
 
-    // Səhifə yenilənərkən sarı/narıncı sıçrayış olmasın deyə zərif neytral qaranlıq kover (YouTube stili)
-    final Widget fallbackVisual = Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
+    // Videonun ilk kadrı yüklənənə qədər qaranlıq qalmamaq üçün kateqoriyaya uyğun real şık şəkil
+    final String placeholderImg = _getCategoryPlaceholderImage(trade);
+    final Widget fallbackVisual = Stack(
+      fit: StackFit.expand,
+      children: [
+        Image.network(
+          placeholderImg,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF1769D2), Color(0xFF0D47A1)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
         ),
-      ),
-      child: Center(
-        child: Icon(Icons.play_arrow_rounded, size: 44, color: Colors.white.withOpacity(0.3)),
-      ),
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.black.withOpacity(0.2), Colors.black.withOpacity(0.65)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+          ),
+        ),
+        Center(
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.25),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.play_arrow_rounded, size: 36, color: Colors.white),
+          ),
+        ),
+      ],
     );
 
     Widget coverWidget;
@@ -2973,8 +2971,24 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
   Future<void> _initThumbnail() async {
     // Web-də Flutter video_player brauzerin native <video> elementini işlədir —
     // cross-origin video göstərmək üçün CORS tələb olunmur (yalnız piksel oxumaq üçün lazımdır)
-    final url = widget.videoUrl.trim();
+    String url = widget.videoUrl.trim();
     if (url.isEmpty) return;
+
+    // Əgər tmpfiles köhnə formatdırsa, birbaşa MP4 stream linkini həll et:
+    if (url.contains('tmpfiles.org')) {
+      if (!url.contains('/dl/') || url.split('/').length < 7) {
+        try {
+          final pageUrl = url.replaceFirst('/dl/', '/');
+          final res = await http.get(Uri.parse(pageUrl)).timeout(const Duration(seconds: 4));
+          if (res.statusCode == 200) {
+            final m = RegExp(r'href="([^"]+/dl/[^"]+)"').firstMatch(res.body);
+            if (m != null) {
+              url = m.group(1)!;
+            }
+          }
+        } catch (_) {}
+      }
+    }
 
     try {
       final controller = VideoPlayerController.networkUrl(Uri.parse(url));

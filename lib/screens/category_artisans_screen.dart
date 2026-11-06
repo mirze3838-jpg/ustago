@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../services/category_city_service.dart';
 import 'artisan_detail_screen.dart';
 
 class CategoryArtisansScreen extends StatefulWidget {
@@ -28,15 +30,21 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   late String _activeCityFilter;
+  List<String> _cities = List.from(CategoryCityService.defaultCities);
+  StreamSubscription<List<String>>? _citySub;
 
   @override
   void initState() {
     super.initState();
     _activeCityFilter = widget.selectedCity;
+    _citySub = CategoryCityService.getCitiesStream().listen((cities) {
+      if (mounted) setState(() => _cities = cities);
+    });
   }
 
   @override
   void dispose() {
+    _citySub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -217,7 +225,7 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
               margin: const EdgeInsets.only(top: 8, bottom: 4),
               child: ListView(
                 scrollDirection: Axis.horizontal,
-                children: ['Bütün Şəhərlər', 'Bakı', 'Sumqayıt', 'Gəncə'].map((city) {
+                children: ['Bütün Şəhərlər', ..._cities].map((city) {
                   final bool isSelected = _activeCityFilter == city;
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
