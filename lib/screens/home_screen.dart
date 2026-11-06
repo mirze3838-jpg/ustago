@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -162,6 +163,27 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  /// Şəkili Firestore 1MB limitinə uyğun sıxışdırır (maks ~700KB)
+  Future<Uint8List> _compressCoverImage(Uint8List bytes) async {
+    // Əgər 700KB-dan azdırsa, əlavə sıxmaya ehtiyac yoxdur
+    if (bytes.length <= 700000) return bytes;
+    try {
+      // dart:ui ilə şəkili 600px enə qədər kiçildirik
+      final codec = await ui.instantiateImageCodec(bytes, targetWidth: 600);
+      final frame = await codec.getNextFrame();
+      final img = frame.image;
+      final bd = await img.toByteData(format: ui.ImageByteFormat.png);
+      img.dispose();
+      if (bd != null && bd.lengthInBytes < bytes.length) {
+        return bd.buffer.asUint8List();
+      }
+    } catch (e) {
+      debugPrint('Cover compress error: $e');
+    }
+    // Sıxma alınmadısa orijinalı qaytarırıq
+    return bytes;
   }
 
   @override
@@ -1436,12 +1458,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         TextButton(
                           onPressed: () async {
                             final picker = ImagePicker();
-                            final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 75);
+                            final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
                             if (img != null) {
-                              final bytes = await img.readAsBytes();
+                              final rawBytes = await img.readAsBytes();
+                              // Firestore 1MB limit üçün şəkli sıxışdırırıq
+                              final compressed = await _compressCoverImage(rawBytes);
                               setModalState(() {
                                 pickedCover = img;
-                                pickedCoverBytes = bytes;
+                                pickedCoverBytes = compressed;
                               });
                             }
                           },
@@ -2418,10 +2442,8 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
   }
 
   Future<void> _initThumbnail() async {
-    // Web-də video_player dəstəyi məhduddur — CORS bloku, codec problemi
-    // Thumbnail extraction-ı yalnız mobil cihazlarda edirik
-    if (kIsWeb) return;
-
+    // Web-də Flutter video_player brauzerin native <video> elementini işlədir —
+    // cross-origin video göstərmək üçün CORS tələb olunmur (yalnız piksel oxumaq üçün lazımdır)
     final url = widget.videoUrl.trim();
     if (url.isEmpty) return;
 
@@ -2429,9 +2451,10 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
       final controller = VideoPlayerController.networkUrl(Uri.parse(url));
       _controller = controller;
 
-      // Timeout: 15 saniyə gözlə
+      // Timeout: web üçün 10s, mobil üçün 15s
+      final timeoutDur = kIsWeb ? const Duration(seconds: 10) : const Duration(seconds: 15);
       await controller.initialize().timeout(
-        const Duration(seconds: 15),
+        timeoutDur,
         onTimeout: () {
           debugPrint('Thumbnail initialize timeout: $url');
         },
@@ -2446,7 +2469,7 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
 
       await controller.setVolume(0);
 
-      // Videonun ilk qaranlıq kadrı qalmasın deyə videonun içindən 700ms-ci kadra keçirik
+      // Videonun ilk qaranlıq kadrı qalmasın deyə 700ms-ci kadra keçirik
       final duration = controller.value.duration;
       final seekTarget = duration > const Duration(milliseconds: 700)
           ? const Duration(milliseconds: 700)

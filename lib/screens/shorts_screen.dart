@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -50,6 +51,24 @@ class _ShortsScreenState extends State<ShortsScreen> {
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+
+  /// Şəkili Firestore 1MB limitinə uyğun sıxışdırır (maks ~700KB)
+  Future<Uint8List> _compressCoverImage(Uint8List bytes) async {
+    if (bytes.length <= 700000) return bytes;
+    try {
+      final codec = await ui.instantiateImageCodec(bytes, targetWidth: 600);
+      final frame = await codec.getNextFrame();
+      final img = frame.image;
+      final bd = await img.toByteData(format: ui.ImageByteFormat.png);
+      img.dispose();
+      if (bd != null && bd.lengthInBytes < bytes.length) {
+        return bd.buffer.asUint8List();
+      }
+    } catch (e) {
+      debugPrint('Cover compress error: $e');
+    }
+    return bytes;
   }
 
   // Yeni Video / Shorts əlavə etmək pəncərəsi
@@ -252,12 +271,14 @@ class _ShortsScreenState extends State<ShortsScreen> {
                       TextButton(
                         onPressed: () async {
                           final picker = ImagePicker();
-                          final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 75);
+                          final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
                           if (img != null) {
-                            final bytes = await img.readAsBytes();
+                            final rawBytes = await img.readAsBytes();
+                            // Firestore 1MB limit üçün şəkli sıxışdırırıq
+                            final compressed = await _compressCoverImage(rawBytes);
                             setModalState(() {
                               pickedCover = img;
-                              pickedCoverBytes = bytes;
+                              pickedCoverBytes = compressed;
                             });
                           }
                         },
@@ -621,22 +642,17 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       return;
     }
 
-    // Web-də video_player dəstəyi məhduddur — CORS bloku, codec problemi
-    // Catbox/TmpFiles web-də stream ola bilmir
-    if (kIsWeb) {
-      if (mounted) setState(() => _hasError = true);
-      return;
-    }
-
     try {
       // Heç bir zərərli httpHeaders ötürmürük - ExoPlayer birbaşa açır
+      // Web-də Flutter video_player brauzerin native <video> elementini işlədir
       final uri = Uri.parse(url);
       final controller = VideoPlayerController.networkUrl(uri);
       _controller = controller;
 
-      // Timeout: 20 saniyə gözlə, əgər yüklənmirsə xəta göstər
+      // Timeout: web üçün 15s, mobil üçün 25s
+      final timeoutDur = kIsWeb ? const Duration(seconds: 15) : const Duration(seconds: 25);
       await controller.initialize().timeout(
-        const Duration(seconds: 20),
+        timeoutDur,
         onTimeout: () {
           debugPrint('Video initialize timeout: $url');
         },
