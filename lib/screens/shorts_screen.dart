@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 import 'package:http/http.dart' as http;
 import '../services/video_upload_service.dart';
+import 'artisan_detail_screen.dart';
 
 class ShortsScreen extends StatefulWidget {
   final int initialIndex;
@@ -678,6 +679,43 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     }
   }
 
+  Future<void> _openArtisanProfile() async {
+    final uid = widget.data['userId']?.toString() ?? '';
+    Map<String, dynamic> artisanMap = {
+      'id': uid,
+      'uid': uid,
+      'fullName': widget.data['artisanName'] ?? 'Usta',
+      'category': widget.data['trade'] ?? 'Usta',
+      'phone': widget.data['phone'] ?? '',
+      'photoBase64': _authorPhotoBase64 ?? widget.data['authorPhotoBase64'],
+      'photoUrl': _authorPhotoUrl ?? widget.data['photoUrl'],
+      'videoUrl': widget.data['videoUrl'],
+      'rating': 4.9,
+      'reviewsCount': 10,
+      'city': 'Bakı',
+    };
+
+    if (uid.isNotEmpty && uid != 'guest') {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        if (doc.exists && doc.data() != null) {
+          artisanMap = Map<String, dynamic>.from(doc.data()!);
+          artisanMap['id'] = doc.id;
+          artisanMap['uid'] = doc.id;
+        }
+      } catch (_) {}
+    }
+
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ArtisanDetailScreen(artisanData: artisanMap),
+        ),
+      );
+    }
+  }
+
   void _checkIfLiked() {
     final user = FirebaseAuth.instance.currentUser;
     final uid = user?.uid;
@@ -797,10 +835,18 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                         itemCount: comments.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
-                          final cData = comments[index].data();
+                          final cDoc = comments[index];
+                          final cData = cDoc.data();
                           final String author = cData['userName'] ?? 'İstifadəçi';
                           final String text = cData['text'] ?? '';
                           final String? photoBase64 = cData['userPhotoBase64'];
+                          final String commentUserId = (cData['userId'] ?? '').toString();
+                          final String videoOwnerId = (widget.data['userId'] ?? '').toString();
+                          final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+
+                          // Həm rəy yazan şəxs, həm də videosuna rəy yazılan şəxs (video sahibi) rəyi silə bilər!
+                          final bool canDelete = currentUserId.isNotEmpty &&
+                              (currentUserId == commentUserId || currentUserId == videoOwnerId);
 
                           ImageProvider? cAvatar;
                           if (photoBase64 != null && photoBase64.isNotEmpty) {
@@ -809,35 +855,156 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                             } catch (_) {}
                           }
 
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              CircleAvatar(
-                                radius: 16,
-                                backgroundColor: const Color(0xFF1769D2).withOpacity(0.1),
-                                backgroundImage: cAvatar,
-                                child: cAvatar == null
-                                    ? const Icon(Icons.person, size: 18, color: Color(0xFF1769D2))
-                                    : null,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      author,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF0F172A)),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      text,
-                                      style: const TextStyle(fontSize: 13, color: Colors.black87),
-                                    ),
-                                  ],
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onLongPress: () async {
+                              if (!canDelete) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Yalnız rəy müəllifi və ya video sahibi bu rəyi silə bilər.'),
+                                    duration: Duration(seconds: 2),
+                                    backgroundColor: Colors.black87,
+                                  ),
+                                );
+                                return;
+                              }
+
+                              final bool? confirm = await showModalBottomSheet<bool>(
+                                context: context,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                                 ),
+                                builder: (sheetCtx) => SafeArea(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(20),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: 40,
+                                          height: 4,
+                                          margin: const EdgeInsets.only(bottom: 16),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey.shade300,
+                                            borderRadius: BorderRadius.circular(2),
+                                          ),
+                                        ),
+                                        const Text(
+                                          'Rəyi silmək istəyirsiniz?',
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          '"$text"',
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(color: Colors.grey, fontSize: 13),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                        const SizedBox(height: 20),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: OutlinedButton(
+                                                onPressed: () => Navigator.pop(sheetCtx, false),
+                                                child: const Text('İmtina'),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: ElevatedButton.icon(
+                                                onPressed: () => Navigator.pop(sheetCtx, true),
+                                                icon: const Icon(Icons.delete_forever, color: Colors.white, size: 18),
+                                                label: const Text('Sil', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+
+                              if (confirm == true) {
+                                try {
+                                  await cDoc.reference.delete();
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Rəy uğurla silindi.'),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Xəta: $e'), backgroundColor: Colors.red),
+                                    );
+                                  }
+                                }
+                              }
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 16,
+                                    backgroundColor: const Color(0xFF1769D2).withOpacity(0.1),
+                                    backgroundImage: cAvatar,
+                                    child: cAvatar == null
+                                        ? const Icon(Icons.person, size: 18, color: Color(0xFF1769D2))
+                                        : null,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text(
+                                              author,
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF0F172A)),
+                                            ),
+                                            if (commentUserId == videoOwnerId) ...[
+                                              const SizedBox(width: 6),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF1769D2).withOpacity(0.12),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: const Text(
+                                                  'Müəllif',
+                                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          text,
+                                          style: const TextStyle(fontSize: 13, color: Colors.black87),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (canDelete)
+                                    Tooltip(
+                                      message: 'Silmək üçün basılı saxlayın',
+                                      child: Icon(Icons.more_horiz, size: 18, color: Colors.grey.shade400),
+                                    ),
+                                ],
                               ),
-                            ],
+                            ),
                           );
                         },
                       );
@@ -1349,49 +1516,62 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Builder(
-                      builder: (context) {
-                        ImageProvider? aAvatar;
-                        if (_authorPhotoBase64 != null && _authorPhotoBase64!.isNotEmpty) {
-                          try {
-                            aAvatar = MemoryImage(base64Decode(_authorPhotoBase64!));
-                          } catch (_) {}
-                        } else if (_authorPhotoUrl != null && _authorPhotoUrl!.isNotEmpty) {
-                          aAvatar = NetworkImage(_authorPhotoUrl!);
-                        }
-                        return CircleAvatar(
-                          radius: 20,
-                          backgroundColor: Colors.white,
-                          backgroundImage: aAvatar,
-                          child: aAvatar == null
-                              ? const Icon(Icons.person, color: Color(0xFF1769D2), size: 24)
-                              : null,
-                        );
-                      },
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.data['artisanName'],
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            widget.data['trade'],
-                            style: const TextStyle(color: Colors.white70, fontSize: 12),
-                          ),
-                        ],
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _openArtisanProfile,
+                  child: Row(
+                    children: [
+                      Builder(
+                        builder: (context) {
+                          ImageProvider? aAvatar;
+                          if (_authorPhotoBase64 != null && _authorPhotoBase64!.isNotEmpty) {
+                            try {
+                              aAvatar = MemoryImage(base64Decode(_authorPhotoBase64!));
+                            } catch (_) {}
+                          } else if (_authorPhotoUrl != null && _authorPhotoUrl!.isNotEmpty) {
+                            aAvatar = NetworkImage(_authorPhotoUrl!);
+                          }
+                          return CircleAvatar(
+                            radius: 20,
+                            backgroundColor: Colors.white,
+                            backgroundImage: aAvatar,
+                            child: aAvatar == null
+                                ? const Icon(Icons.person, color: Color(0xFF1769D2), size: 24)
+                                : null,
+                          );
+                        },
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    widget.data['artisanName'],
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 12),
+                              ],
+                            ),
+                            Text(
+                              widget.data['trade'],
+                              style: const TextStyle(color: Colors.white70, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
