@@ -1671,136 +1671,139 @@ class _HomeScreenState extends State<HomeScreen> {
     final bool isVideo = post['isVideo'] == true || videoUrl.isNotEmpty;
     final String? imgBase64 = (post['imageBase64'] ?? post['thumbnailBase64']) as String?;
 
-    // 1. Əgər VİDEO postudursa: birbaşa tam ekran video pleyerini açırıq (Shorts pəncərəsinə keçmədən)
+    // 1. Əgər VİDEO postudursa: birbaşa tam ekran video pleyer səhifəsinə keçirik (MaterialPageRoute)
     if (isVideo && videoUrl.isNotEmpty) {
-      showDialog(
-        context: context,
-        useSafeArea: false,
-        builder: (ctx) => _FullScreenVideoViewer(
-          videoUrl: videoUrl,
-          title: post['title'] ?? '',
-          category: post['category'] ?? 'Usta İşi',
-          postId: postId,
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => _FullScreenVideoViewer(
+            videoUrl: videoUrl,
+            title: post['title'] ?? '',
+            category: post['category'] ?? 'Usta İşi',
+            postId: postId,
+            coverBase64: imgBase64,
+          ),
         ),
       );
       return;
     }
 
-    // 2. Əgər FOTO postudursa (və ya şəkilli paylaşımdırsa): tam ekran foto baxışı
+    // 2. Əgər FOTO postudursa (və ya şəkilli paylaşımdırsa): tam ekran foto baxış səhifəsinə keçirik
     if (imgBase64 != null && imgBase64.isNotEmpty) {
-      showDialog(
-        context: context,
-        useSafeArea: false,
-        builder: (ctx) => Scaffold(
-          backgroundColor: Colors.black,
-          body: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Zoom və Pan dəstəkli tam ekran foto
-              Center(
-                child: InteractiveViewer(
-                  minScale: 0.8,
-                  maxScale: 4.0,
-                  child: Image.memory(
-                    base64Decode(imgBase64),
-                    fit: BoxFit.contain,
-                    width: double.infinity,
-                    height: double.infinity,
-                  ),
-                ),
-              ),
-
-              // Yuxarı naviqasiya (Geri və Sil düyməsi)
-              SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: Colors.black54,
-                        child: IconButton(
-                          icon: const Icon(Icons.arrow_back, color: Colors.white),
-                          onPressed: () => Navigator.pop(ctx),
-                        ),
-                      ),
-                      CircleAvatar(
-                        backgroundColor: Colors.black54,
-                        child: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                          onPressed: () async {
-                            final confirm = await showDialog<bool>(
-                              context: ctx,
-                              builder: (c) => AlertDialog(
-                                title: const Text('Şəkli Sil'),
-                                content: const Text('Bu şəkli qalereyanızdan silmək istəyirsiniz?'),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Xeyr')),
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                                    onPressed: () => Navigator.pop(c, true),
-                                    child: const Text('Bəli, Sil', style: TextStyle(color: Colors.white)),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (confirm == true) {
-                              await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
-                              if (mounted) {
-                                Navigator.pop(ctx);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Paylaşım silindi.')),
-                                );
-                              }
-                            }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Aşağı başlıq və kateqoriya
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (ctx) => Scaffold(
+            backgroundColor: Colors.black,
+            body: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Zoom və Pan dəstəkli tam ekran foto
+                Center(
+                  child: InteractiveViewer(
+                    minScale: 0.8,
+                    maxScale: 4.0,
+                    child: Image.memory(
+                      base64Decode(imgBase64),
+                      fit: BoxFit.contain,
+                      width: double.infinity,
+                      height: double.infinity,
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (post['category'] != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1769D2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            post['category'] ?? '',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+
+                // Yuxarı naviqasiya (Geri və Sil düyməsi)
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: Colors.black54,
+                          child: IconButton(
+                            icon: const Icon(Icons.arrow_back, color: Colors.white),
+                            onPressed: () => Navigator.pop(ctx),
                           ),
                         ),
-                      const SizedBox(height: 6),
-                      Text(
-                        post['title'] ?? '',
-                        style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
-                      ),
-                    ],
+                        CircleAvatar(
+                          backgroundColor: Colors.black54,
+                          child: IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                            onPressed: () async {
+                              final confirm = await showDialog<bool>(
+                                context: ctx,
+                                builder: (c) => AlertDialog(
+                                  title: const Text('Şəkli Sil'),
+                                  content: const Text('Bu şəkli qalereyanızdan silmək istəyirsiniz?'),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Xeyr')),
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                      onPressed: () => Navigator.pop(c, true),
+                                      child: const Text('Bəli, Sil', style: TextStyle(color: Colors.white)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
+                                if (mounted) {
+                                  Navigator.pop(ctx);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Paylaşım silindi.')),
+                                  );
+                                }
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+
+                // Aşağı başlıq və kateqoriya
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (post['category'] != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1769D2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              post['category'] ?? '',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ),
+                        const SizedBox(height: 6),
+                        Text(
+                          post['title'] ?? '',
+                          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -2593,12 +2596,14 @@ class _FullScreenVideoViewer extends StatefulWidget {
   final String title;
   final String category;
   final String postId;
+  final String? coverBase64;
 
   const _FullScreenVideoViewer({
     required this.videoUrl,
     required this.title,
     required this.category,
     required this.postId,
+    this.coverBase64,
   });
 
   @override
@@ -2609,6 +2614,7 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
   VideoPlayerController? _controller;
   bool _isInit = false;
   bool _hasError = false;
+  bool _isMuted = false;
 
   @override
   void initState() {
@@ -2626,6 +2632,12 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
     try {
       final controller = VideoPlayerController.networkUrl(Uri.parse(url));
       _controller = controller;
+
+      // Web-də brauzerlər autoplay üçün əvvəlcə səssiz (volume=0) başladılmasını tələb edir
+      if (kIsWeb) {
+        await controller.setVolume(0);
+        _isMuted = true;
+      }
 
       final timeout = kIsWeb ? const Duration(seconds: 15) : const Duration(seconds: 25);
       await controller.initialize().timeout(timeout);
@@ -2646,15 +2658,10 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
         _hasError = false;
       });
 
-      // Brauzerdə autoplay məhdudiyyətini nəzərə alırıq (səssiz play cəhdi)
       try {
         await controller.play();
       } catch (e) {
-        debugPrint('Autoplay unmuted blocked: $e, trying muted');
-        try {
-          await controller.setVolume(0);
-          await controller.play();
-        } catch (_) {}
+        debugPrint('Autoplay blocked: $e');
       }
     } catch (err) {
       debugPrint('Post video playback error: $err');
@@ -2722,7 +2729,20 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Video (Əsl en-boy nisbəti qorunur, kəsilmir)
+            // 0. Arxa fonda üz qabığı (Video açılana qədər qaranlıq qalmır)
+            if (widget.coverBase64 != null && widget.coverBase64!.isNotEmpty)
+              Center(
+                child: Image.memory(
+                  base64Decode(widget.coverBase64!),
+                  fit: BoxFit.contain,
+                  width: double.infinity,
+                  height: double.infinity,
+                ),
+              )
+            else
+              Container(color: Colors.black),
+
+            // 1. Video (Əsl en-boy nisbəti qorunur, kəsilmir)
             if (_isInit && c != null)
               Center(
                 child: AspectRatio(
@@ -2804,7 +2824,7 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
                 ),
               ),
 
-            // Yuxarı naviqasiya (Geri və Sil düyməsi)
+            // Yuxarı naviqasiya (Geri, Səs və Sil düymələri)
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -2818,12 +2838,30 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
                         onPressed: () => Navigator.pop(context),
                       ),
                     ),
-                    CircleAvatar(
-                      backgroundColor: Colors.black54,
-                      child: IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                        onPressed: _deletePostAndShorts,
-                      ),
+                    Row(
+                      children: [
+                        if (_isInit && c != null)
+                          CircleAvatar(
+                            backgroundColor: Colors.black54,
+                            child: IconButton(
+                              icon: Icon(_isMuted ? Icons.volume_off : Icons.volume_up, color: Colors.white),
+                              onPressed: () {
+                                setState(() {
+                                  _isMuted = !_isMuted;
+                                  c.setVolume(_isMuted ? 0 : 1.0);
+                                });
+                              },
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                        CircleAvatar(
+                          backgroundColor: Colors.black54,
+                          child: IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                            onPressed: _deletePostAndShorts,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
