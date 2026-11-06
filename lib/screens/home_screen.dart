@@ -1671,8 +1671,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final bool isVideo = post['isVideo'] == true || videoUrl.isNotEmpty;
     final String? imgBase64 = (post['imageBase64'] ?? post['thumbnailBase64']) as String?;
 
-    // 1. Əgər VİDEO postudursa: birbaşa tam ekran video pleyer səhifəsinə keçirik (MaterialPageRoute)
+    // 1. Əgər VİDEO postudursa: tam ekran video baxışı
     if (isVideo && videoUrl.isNotEmpty) {
+      // Web-də CORS məhdudiyyəti olduğundan birbaşa tam ekran açırıq
+      // Autoplay üçün istifadəçinin GestureDetector tap event-i lazımdır
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -2615,6 +2617,9 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
   bool _isInit = false;
   bool _hasError = false;
   bool _isMuted = false;
+  // Web-də initState-dən play() çağırıla bilmir (user gesture lazımdır)
+  // İstifadəçi ekrana toxunanda başladırıq
+  bool _startedByUser = false;
 
   @override
   void initState() {
@@ -2633,14 +2638,11 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
       final controller = VideoPlayerController.networkUrl(Uri.parse(url));
       _controller = controller;
 
-      // Web-də brauzerlər autoplay üçün əvvəlcə səssiz (volume=0) başladılmasını tələb edir
-      if (kIsWeb) {
-        await controller.setVolume(0);
-        _isMuted = true;
-      }
-
+      // Shorts ekranında işləyən eyni üsul ilə yükləyirik
       final timeout = kIsWeb ? const Duration(seconds: 15) : const Duration(seconds: 25);
-      await controller.initialize().timeout(timeout);
+      await controller.initialize().timeout(timeout, onTimeout: () {
+        debugPrint('Video timeout: $url');
+      });
 
       if (!mounted) {
         controller.dispose();
@@ -2653,18 +2655,25 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
       }
 
       controller.setLooping(true);
+
       setState(() {
         _isInit = true;
         _hasError = false;
       });
 
+      // Web-də play() user gesture olmadan işləmə bilər
+      // Yenə də cəhd edirik - muted olsa da çalışsın
       try {
+        if (kIsWeb) {
+          await controller.setVolume(0);
+          _isMuted = true;
+        }
         await controller.play();
       } catch (e) {
-        debugPrint('Autoplay blocked: $e');
+        debugPrint('Autoplay: $e — istifadəçi ekrana tıxlamalıdır');
       }
     } catch (err) {
-      debugPrint('Post video playback error: $err');
+      debugPrint('Post video error: $err');
       if (mounted) setState(() => _hasError = true);
     }
   }
@@ -2721,9 +2730,19 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
       body: GestureDetector(
         onTap: () {
           if (_isInit && c != null) {
-            setState(() {
-              c.value.isPlaying ? c.pause() : c.play();
-            });
+            if (!c.value.isPlaying) {
+              // Web-də user gesture ilə play() çağırılır — CORS/autoplay məhdudiyyəti aşılır
+              setState(() {
+                if (kIsWeb && _isMuted) {
+                  c.setVolume(0);
+                }
+                c.play();
+              });
+            } else {
+              setState(() {
+                c.pause();
+              });
+            }
           }
         },
         child: Stack(
