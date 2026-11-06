@@ -432,6 +432,16 @@ class _ShortsScreenState extends State<ShortsScreen> {
                           final uid = user?.uid ?? 'guest';
                           final tradeVal = tradeController.text.trim().isEmpty ? 'Tikinti' : tradeController.text.trim();
 
+                          String? uPhoto;
+                          if (user != null) {
+                            try {
+                              final uDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+                              if (uDoc.exists) {
+                                uPhoto = uDoc.data()?['photoBase64'];
+                              }
+                            } catch (_) {}
+                          }
+
                           final String coverBase64 = pickedCoverBytes != null ? base64Encode(pickedCoverBytes!) : '';
 
                           // 1. Shorts kolleksiyasına yazırıq
@@ -441,6 +451,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                             'videoUrl': finalVideoUrl,
                             'thumbnailBase64': coverBase64,
                             'thumbnailUrl': '',
+                            'authorPhotoBase64': uPhoto ?? '',
                             'artisanName': authorName,
                             'trade': tradeVal,
                             'phone': phone.isEmpty ? '+994 50 000 00 00' : phone,
@@ -525,7 +536,9 @@ class _ShortsScreenState extends State<ShortsScreen> {
                     'trade': data['trade'] ?? 'Usta',
                     'phone': data['phone'] ?? '',
                     'likes': (data['likes'] ?? 0).toString(),
+                    'likedBy': data['likedBy'],
                     'videoUrl': data['videoUrl'] ?? '',
+                    'authorPhotoBase64': data['authorPhotoBase64'],
                     'thumbnailBase64': data['thumbnailBase64'],
                     'thumbnailUrl': data['thumbnailUrl'],
                   });
@@ -629,10 +642,288 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
   bool _isPlaying = true;
   bool _hasError = false;
 
+  int _likeCount = 0;
+  bool _isLiked = false;
+  String? _authorPhotoBase64;
+  String? _authorPhotoUrl;
+
   @override
   void initState() {
     super.initState();
+    _likeCount = int.tryParse(widget.data['likes']?.toString() ?? '0') ?? 0;
+    _checkIfLiked();
+    _loadAuthorPhoto();
     _initVideo();
+  }
+
+  void _loadAuthorPhoto() async {
+    final photo = widget.data['authorPhotoBase64'] ?? widget.data['photoBase64'];
+    if (photo != null && photo.toString().isNotEmpty) {
+      if (mounted) setState(() => _authorPhotoBase64 = photo.toString());
+      return;
+    }
+    final uid = widget.data['userId']?.toString() ?? '';
+    if (uid.isNotEmpty && uid != 'guest') {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        if (doc.exists && mounted) {
+          final data = doc.data();
+          setState(() {
+            _authorPhotoBase64 = data?['photoBase64'];
+            _authorPhotoUrl = data?['photoUrl'];
+          });
+        }
+      } catch (_) {}
+    }
+  }
+
+  void _checkIfLiked() {
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid;
+    final likedBy = widget.data['likedBy'];
+    if (uid != null && likedBy is List && likedBy.contains(uid)) {
+      if (mounted) setState(() => _isLiked = true);
+    }
+  }
+
+  Future<void> _toggleLike() async {
+    final docId = widget.data['id']?.toString() ?? '';
+    if (docId.isEmpty) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid ?? 'guest';
+
+    setState(() {
+      if (_isLiked) {
+        _isLiked = false;
+        if (_likeCount > 0) _likeCount--;
+      } else {
+        _isLiked = true;
+        _likeCount++;
+      }
+    });
+
+    try {
+      final docRef = FirebaseFirestore.instance.collection('shorts').doc(docId);
+      if (_isLiked) {
+        await docRef.update({
+          'likes': FieldValue.increment(1),
+          'likedBy': FieldValue.arrayUnion([uid]),
+        });
+      } else {
+        await docRef.update({
+          'likes': FieldValue.increment(-1),
+          'likedBy': FieldValue.arrayRemove([uid]),
+        });
+      }
+    } catch (e) {
+      debugPrint('Like error: $e');
+    }
+  }
+
+  void _showCommentsModal(String docId) {
+    if (docId.isEmpty) return;
+    final commentController = TextEditingController();
+    bool isPosting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          child: SizedBox(
+            height: MediaQuery.of(ctx).size.height * 0.65,
+            child: Column(
+              children: [
+                // Başlıq
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Rəylər',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A)),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Rəylər siyahısı
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseFirestore.instance
+                        .collection('shorts')
+                        .doc(docId)
+                        .collection('comments')
+                        .orderBy('createdAt', descending: false)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final comments = snapshot.data?.docs ?? [];
+                      if (comments.isEmpty) {
+                        return const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.chat_bubble_outline, size: 48, color: Colors.grey),
+                              SizedBox(height: 8),
+                              Text('Hələ ki rəy yazılmayıb', style: TextStyle(color: Colors.grey, fontSize: 14)),
+                              Text('İlk rəyi siz yazın! ✍️', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                            ],
+                          ),
+                        );
+                      }
+
+                      return ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: comments.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final cData = comments[index].data();
+                          final String author = cData['userName'] ?? 'İstifadəçi';
+                          final String text = cData['text'] ?? '';
+                          final String? photoBase64 = cData['userPhotoBase64'];
+
+                          ImageProvider? cAvatar;
+                          if (photoBase64 != null && photoBase64.isNotEmpty) {
+                            try {
+                              cAvatar = MemoryImage(base64Decode(photoBase64));
+                            } catch (_) {}
+                          }
+
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              CircleAvatar(
+                                radius: 16,
+                                backgroundColor: const Color(0xFF1769D2).withOpacity(0.1),
+                                backgroundImage: cAvatar,
+                                child: cAvatar == null
+                                    ? const Icon(Icons.person, size: 18, color: Color(0xFF1769D2))
+                                    : null,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      author,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF0F172A)),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      text,
+                                      style: const TextStyle(fontSize: 13, color: Colors.black87),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+
+                // Rəy daxil etmə sahəsi
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                  ),
+                  child: SafeArea(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: commentController,
+                            decoration: InputDecoration(
+                              hintText: 'Rəy bildirin...',
+                              hintStyle: const TextStyle(fontSize: 13),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide(color: Colors.grey.shade300),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: isPosting
+                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.send_rounded, color: Color(0xFF1769D2)),
+                          onPressed: isPosting
+                              ? null
+                              : () async {
+                                  final text = commentController.text.trim();
+                                  if (text.isEmpty) return;
+                                  setModalState(() => isPosting = true);
+
+                                  final user = FirebaseAuth.instance.currentUser;
+                                  String userName = user?.displayName ?? 'İstifadəçi';
+                                  String? userPhoto;
+
+                                  if (user != null) {
+                                    try {
+                                      final uDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+                                      if (uDoc.exists) {
+                                        userName = uDoc.data()?['fullName'] ?? userName;
+                                        userPhoto = uDoc.data()?['photoBase64'];
+                                      }
+                                    } catch (_) {}
+                                  }
+
+                                  try {
+                                    await FirebaseFirestore.instance
+                                        .collection('shorts')
+                                        .doc(docId)
+                                        .collection('comments')
+                                        .add({
+                                      'userId': user?.uid ?? 'guest',
+                                      'userName': userName,
+                                      'userPhotoBase64': userPhoto,
+                                      'text': text,
+                                      'createdAt': FieldValue.serverTimestamp(),
+                                    });
+                                    commentController.clear();
+                                  } catch (e) {
+                                    debugPrint('Rəy əlavə xətası: $e');
+                                  } finally {
+                                    setModalState(() => isPosting = false);
+                                  }
+                                },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _initVideo() async {
@@ -839,27 +1130,31 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
 
     if (thumbnailBase64 != null && thumbnailBase64.isNotEmpty) {
       try {
-        return Image.memory(
-          base64Decode(thumbnailBase64),
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: double.infinity,
-          errorBuilder: (_, __, ___) => fallbackWidget,
+        return Center(
+          child: Image.memory(
+            base64Decode(thumbnailBase64),
+            fit: BoxFit.contain,
+            width: double.infinity,
+            height: double.infinity,
+            errorBuilder: (_, __, ___) => fallbackWidget,
+          ),
         );
       } catch (_) {}
     }
 
     if (thumbnailUrl != null && thumbnailUrl.isNotEmpty && !thumbnailUrl.contains('unsplash.com')) {
-      return Image.network(
-        thumbnailUrl,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return fallbackWidget;
-        },
-        errorBuilder: (_, __, ___) => fallbackWidget,
+      return Center(
+        child: Image.network(
+          thumbnailUrl,
+          fit: BoxFit.contain,
+          width: double.infinity,
+          height: double.infinity,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return fallbackWidget;
+          },
+          errorBuilder: (_, __, ___) => fallbackWidget,
+        ),
       );
     }
 
@@ -875,16 +1170,14 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
         children: [
           // 0. VİDEO AÇILANA QƏDƏR ARXA FONDA BAŞLIQ FOTOSU (Qaranlıq qalmır!)
           _buildCoverImage(widget.data),
-          // 1. VİDEO EKRANI (Bütün ekranı dolduran video)
+          // 1. VİDEO EKRANI (Əsl en-boy nisbəti qorunur, kənarları kəsilmir)
           if (_isInitialized && _controller != null && !_hasError)
-            SizedBox.expand(
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: _controller!.value.size.width > 0 ? _controller!.value.size.width : 1080,
-                  height: _controller!.value.size.height > 0 ? _controller!.value.size.height : 1920,
-                  child: VideoPlayer(_controller!),
-                ),
+            Center(
+              child: AspectRatio(
+                aspectRatio: _controller!.value.aspectRatio > 0
+                    ? _controller!.value.aspectRatio
+                    : (9 / 16),
+                child: VideoPlayer(_controller!),
               ),
             )
           else if (_hasError)
@@ -1005,7 +1298,19 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
 
                 return Column(
                   children: [
-                    _buildSideAction(Icons.favorite, widget.data['likes'], Colors.red),
+                    _buildSideAction(
+                      _isLiked ? Icons.favorite : Icons.favorite_border,
+                      _likeCount.toString(),
+                      _isLiked ? Colors.red : Colors.white,
+                      onTap: _toggleLike,
+                    ),
+                    const SizedBox(height: 18),
+                    _buildSideAction(
+                      Icons.chat_bubble_outline_rounded,
+                      'Rəy',
+                      Colors.white,
+                      onTap: () => _showCommentsModal(widget.data['id']?.toString() ?? ''),
+                    ),
                     const SizedBox(height: 18),
                     _buildSideAction(Icons.chat, 'WhatsApp', Colors.green, onTap: () => _openWhatsApp(widget.data['phone'])),
                     const SizedBox(height: 18),
@@ -1030,10 +1335,25 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
               children: [
                 Row(
                   children: [
-                    const CircleAvatar(
-                      radius: 20,
-                      backgroundColor: Colors.white,
-                      child: Icon(Icons.handyman, color: Color(0xFF1769D2)),
+                    Builder(
+                      builder: (context) {
+                        ImageProvider? aAvatar;
+                        if (_authorPhotoBase64 != null && _authorPhotoBase64!.isNotEmpty) {
+                          try {
+                            aAvatar = MemoryImage(base64Decode(_authorPhotoBase64!));
+                          } catch (_) {}
+                        } else if (_authorPhotoUrl != null && _authorPhotoUrl!.isNotEmpty) {
+                          aAvatar = NetworkImage(_authorPhotoUrl!);
+                        }
+                        return CircleAvatar(
+                          radius: 20,
+                          backgroundColor: Colors.white,
+                          backgroundImage: aAvatar,
+                          child: aAvatar == null
+                              ? const Icon(Icons.person, color: Color(0xFF1769D2), size: 24)
+                              : null,
+                        );
+                      },
                     ),
                     const SizedBox(width: 10),
                     Expanded(

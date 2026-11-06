@@ -713,25 +713,8 @@ class _HomeScreenState extends State<HomeScreen> {
           end: Alignment.bottomCenter,
         ),
       ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Icon(Icons.play_circle_fill_rounded, size: 44, color: Colors.white.withOpacity(0.2)),
-          Positioned(
-            bottom: 24,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                trade,
-                style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-        ],
+      child: Center(
+        child: Icon(Icons.play_arrow_rounded, size: 44, color: Colors.white.withOpacity(0.3)),
       ),
     );
 
@@ -815,37 +798,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
 
-                    // 3. Mərkəzdə Play ikonu
+                    // 3. Mərkəzdə Play ikonu (Mavi dairəsiz, təmiz ağ play)
                     Center(
                       child: Container(
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1769D2).withOpacity(0.85),
+                          color: Colors.black.withOpacity(0.3),
                           shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 6),
-                          ],
                         ),
-                        child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 28),
-                      ),
-                    ),
-
-                    // 4. Yuxarıda Usta etiketi
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.65),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          item['trade'] ?? 'Usta',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 34,
                         ),
                       ),
                     ),
@@ -1613,6 +1577,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
                             final String coverBase64 = pickedCoverBytes != null ? base64Encode(pickedCoverBytes!) : '';
 
+                            String? uPhoto;
+                            try {
+                              final uDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+                              if (uDoc.exists) {
+                                uPhoto = uDoc.data()?['photoBase64'];
+                              }
+                            } catch (_) {}
+
                             // 1. Profil postlarına əlavə et
                             await FirebaseFirestore.instance.collection('posts').add({
                               'userId': uid,
@@ -1636,6 +1608,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               'videoUrl': finalVideoUrl,
                               'thumbnailBase64': coverBase64,
                               'thumbnailUrl': '',
+                              'authorPhotoBase64': uPhoto ?? '',
                               'artisanName': authorName,
                               'trade': selectedCat,
                               'phone': '+994 50 000 00 00',
@@ -1696,6 +1669,128 @@ class _HomeScreenState extends State<HomeScreen> {
     final bool isVideo = post['isVideo'] == true || (post['videoUrl'] != null && (post['videoUrl'] as String).isNotEmpty);
     final String? imgBase64 = post['imageBase64'];
 
+    if (imgBase64 != null && imgBase64.isNotEmpty) {
+      // 1. TAM EKRAN ŞƏKİL BAXIŞI (Zoom, Pan, Sil, Bağla)
+      showDialog(
+        context: context,
+        useSafeArea: false,
+        builder: (ctx) => Scaffold(
+          backgroundColor: Colors.black,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Zoom və Pan dəstəkli tam ekran foto
+              Center(
+                child: InteractiveViewer(
+                  minScale: 0.8,
+                  maxScale: 4.0,
+                  child: Image.memory(
+                    base64Decode(imgBase64),
+                    fit: BoxFit.contain,
+                    width: double.infinity,
+                    height: double.infinity,
+                  ),
+                ),
+              ),
+
+              // Yuxarı naviqasiya (Geri və Sil düyməsi)
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: Colors.black54,
+                        child: IconButton(
+                          icon: const Icon(Icons.arrow_back, color: Colors.white),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ),
+                      CircleAvatar(
+                        backgroundColor: Colors.black54,
+                        child: IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                          onPressed: () async {
+                            final confirm = await showDialog<bool>(
+                              context: ctx,
+                              builder: (c) => AlertDialog(
+                                title: const Text('Şəkli Sil'),
+                                content: const Text('Bu şəkli qalereyanızdan silmək istəyirsiniz?'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Xeyr')),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                    onPressed: () => Navigator.pop(c, true),
+                                    child: const Text('Bəli, Sil', style: TextStyle(color: Colors.white)),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm == true) {
+                              await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
+                              if (mounted) {
+                                Navigator.pop(ctx);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Paylaşım silindi.')),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Aşağı başlıq və kateqoriya
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (post['category'] != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1769D2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            post['category'] ?? '',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ),
+                      const SizedBox(height: 6),
+                      Text(
+                        post['title'] ?? '',
+                        style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Əgər video postudursa
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -1704,40 +1799,29 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (imgBase64 != null && imgBase64.isNotEmpty)
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: Image.memory(
-                  base64Decode(imgBase64),
-                  width: double.infinity,
-                  height: 250,
-                  fit: BoxFit.cover,
-                ),
-              )
-            else if (isVideo)
-              Container(
-                width: double.infinity,
-                height: 180,
-                decoration: const BoxDecoration(
-                  color: Colors.black87,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.play_circle_filled, color: Colors.red, size: 54),
-                    const SizedBox(height: 8),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1769D2)),
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        setState(() => _currentIndex = 1); // Shorts bölməsinə keçir
-                      },
-                      child: const Text('Shorts Bölməsində Bax', style: TextStyle(color: Colors.white)),
-                    ),
-                  ],
-                ),
+            Container(
+              width: double.infinity,
+              height: 180,
+              decoration: const BoxDecoration(
+                color: Colors.black87,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
               ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.play_circle_filled, color: Colors.red, size: 54),
+                  const SizedBox(height: 8),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1769D2)),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      setState(() => _currentIndex = 1); // Shorts bölməsinə keçir
+                    },
+                    child: const Text('Shorts Bölməsində Bax', style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(

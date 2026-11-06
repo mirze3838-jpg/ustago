@@ -330,7 +330,14 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                     final isVid = post['isVideo'] == true;
                     final title = post['title'] ?? 'Görülən iş';
 
-                    return Container(
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () {
+                        if (img != null && img.isNotEmpty) {
+                          _showFullScreenImage(context, img, title);
+                        }
+                      },
+                      child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
@@ -367,13 +374,75 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                           ),
                         ],
                       ),
-                    );
-                  },
-                );
-              },
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
+  void _showFullScreenImage(BuildContext context, String imgBase64, String title) {
+    showDialog(
+      context: context,
+      useSafeArea: false,
+      builder: (ctx) => Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.8,
+                maxScale: 4.0,
+                child: Image.memory(
+                  base64Decode(imgBase64),
+                  fit: BoxFit.contain,
+                  width: double.infinity,
+                  height: double.infinity,
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: CircleAvatar(
+                    backgroundColor: Colors.black54,
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
+                child: Text(
+                  title,
+                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+              ),
             ),
           ],
-        ],
+        ),
       ),
     );
   }
