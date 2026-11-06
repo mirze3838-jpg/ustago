@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:firebase_storage/firebase_storage.dart';
 
 class VideoUploadService {
   /// Videonu buluda yükləyir və birbaşa MP4 linkini qaytarır.
-  /// - Veb brauzerdə (CORS dəstəyi ilə): TmpFiles
-  /// - Mobil tətbiqdə (Android): Catbox.moe və TmpFiles fallback
+  /// 1. Firebase Storage (Daimi, silinmir, limitsiz yüksək sürət)
+  /// 2. Catbox.moe (Ehtiyat pulsuz daimi server)
+  /// 3. TmpFiles (Veb brauzer üçün alternativ)
   static Future<String> uploadVideo({
     required Uint8List videoBytes,
     String? fileName,
@@ -15,6 +17,29 @@ class VideoUploadService {
   }) async {
     final name = fileName ?? 'usta_video_${DateTime.now().millisecondsSinceEpoch}.mp4';
 
+    // 1. Birinci cəhd: Firebase Storage (Daimi saxlanma, heç vaxt silinmir)
+    try {
+      final ref = FirebaseStorage.instance.ref().child('shorts_videos/$name');
+      final uploadTask = ref.putData(
+        videoBytes,
+        SettableMetadata(contentType: 'video/mp4'),
+      );
+      uploadTask.snapshotEvents.listen((event) {
+        if (event.totalBytes > 0) {
+          onProgress?.call(event.bytesTransferred / event.totalBytes);
+        }
+      });
+      final snapshot = await uploadTask.timeout(const Duration(minutes: 5));
+      final downloadUrl = await snapshot.ref.getDownloadURL();
+      if (downloadUrl.isNotEmpty) {
+        onProgress?.call(1.0);
+        return downloadUrl;
+      }
+    } catch (e) {
+      debugPrint('Firebase Storage upload xətası ($e), ehtiyat serverlərə keçilir...');
+    }
+
+    // 2. İkinci cəhd: Veb və ya Mobil fallback
     if (kIsWeb) {
       try {
         return await _uploadToTmpfiles(videoBytes, name, onProgress);

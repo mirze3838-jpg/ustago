@@ -1667,11 +1667,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Paylaşılan işin böyük təsviri və silinməsi
   void _showPostDetailModal(String postId, Map<String, dynamic> post) {
-    final bool isVideo = post['isVideo'] == true || (post['videoUrl'] != null && (post['videoUrl'] as String).isNotEmpty);
-    final String? imgBase64 = post['imageBase64'];
+    final String videoUrl = (post['videoUrl'] ?? '').toString().trim();
+    final bool isVideo = post['isVideo'] == true || videoUrl.isNotEmpty;
+    final String? imgBase64 = (post['imageBase64'] ?? post['thumbnailBase64']) as String?;
 
+    // 1. Əgər VİDEO postudursa: birbaşa tam ekran video pleyerini açırıq (Shorts pəncərəsinə keçmədən)
+    if (isVideo && videoUrl.isNotEmpty) {
+      showDialog(
+        context: context,
+        useSafeArea: false,
+        builder: (ctx) => _FullScreenVideoViewer(
+          videoUrl: videoUrl,
+          title: post['title'] ?? '',
+          category: post['category'] ?? 'Usta İşi',
+          postId: postId,
+        ),
+      );
+      return;
+    }
+
+    // 2. Əgər FOTO postudursa (və ya şəkilli paylaşımdırsa): tam ekran foto baxışı
     if (imgBase64 != null && imgBase64.isNotEmpty) {
-      // 1. TAM EKRAN ŞƏKİL BAXIŞI (Zoom, Pan, Sil, Bağla)
       showDialog(
         context: context,
         useSafeArea: false,
@@ -1790,22 +1806,6 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       return;
     }
-
-    // Əgər video postudursa, birbaşa buradan tam ekran videonu oxuduruq (Shorts pəncərəsinə keçmədən)
-    final String videoUrl = (post['videoUrl'] ?? '').toString().trim();
-    if (videoUrl.isNotEmpty) {
-      showDialog(
-        context: context,
-        useSafeArea: false,
-        builder: (ctx) => _FullScreenVideoViewer(
-          videoUrl: videoUrl,
-          title: post['title'] ?? '',
-          category: post['category'] ?? 'Usta İşi',
-          postId: postId,
-        ),
-      );
-      return;
-    }
   }
 
   // Profil daxilində İnstagram tərzi Qalereya
@@ -1889,7 +1889,7 @@ class _HomeScreenState extends State<HomeScreen> {
               itemBuilder: (context, index) {
                 final doc = docs[index];
                 final data = doc.data();
-                final base64Img = data['imageBase64'] as String?;
+                final base64Img = (data['imageBase64'] ?? data['thumbnailBase64']) as String?;
                 final bool isVideo = data['isVideo'] == true || (data['videoUrl'] != null && (data['videoUrl'] as String).isNotEmpty);
 
                 return InkWell(
@@ -1916,13 +1916,27 @@ class _HomeScreenState extends State<HomeScreen> {
                                 fallback: Container(
                                   decoration: const BoxDecoration(
                                     gradient: LinearGradient(
-                                      colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
+                                      colors: [Color(0xFF2C3E50), Color(0xFF1A252F)],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
                                     ),
                                   ),
-                                  child: const Center(
-                                    child: Icon(Icons.play_arrow_rounded, color: Colors.white70, size: 36),
+                                  padding: const EdgeInsets.all(8),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.play_circle_fill_rounded, color: Colors.white70, size: 36),
+                                      if ((data['title'] ?? '').toString().isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          data['title'].toString(),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w500),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ),
                               );
@@ -2517,7 +2531,7 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
 
       await controller.setVolume(0);
 
-      // Videonun ilk qaranlıq kadrı qalmasın deyə 700ms-ci kadra keçirik
+      // Videonun ilk qaranlıq kadrı qalmasın deyə irəli keçirik və brauzerin kadrı çəkməsi üçün qısa oxuduruq
       final duration = controller.value.duration;
       final seekTarget = duration > const Duration(milliseconds: 700)
           ? const Duration(milliseconds: 700)
@@ -2526,7 +2540,11 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
       if (seekTarget > Duration.zero) {
         await controller.seekTo(seekTarget);
       }
-      await controller.pause();
+      try {
+        await controller.play();
+        await Future.delayed(const Duration(milliseconds: 250));
+        await controller.pause();
+      } catch (_) {}
 
       if (mounted) {
         setState(() {
@@ -2588,41 +2606,116 @@ class _FullScreenVideoViewer extends StatefulWidget {
 }
 
 class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
-  late VideoPlayerController _controller;
+  VideoPlayerController? _controller;
   bool _isInit = false;
   bool _hasError = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl))
-      ..initialize().then((_) {
-        if (mounted) {
-          setState(() => _isInit = true);
-          _controller.setLooping(true);
-          _controller.play();
-        }
-      }).catchError((err) {
-        debugPrint('Post video playback error: $err');
+    _initVideo();
+  }
+
+  Future<void> _initVideo() async {
+    final url = widget.videoUrl.trim();
+    if (url.isEmpty) {
+      if (mounted) setState(() => _hasError = true);
+      return;
+    }
+
+    try {
+      final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+      _controller = controller;
+
+      final timeout = kIsWeb ? const Duration(seconds: 15) : const Duration(seconds: 25);
+      await controller.initialize().timeout(timeout);
+
+      if (!mounted) {
+        controller.dispose();
+        return;
+      }
+
+      if (!controller.value.isInitialized) {
         if (mounted) setState(() => _hasError = true);
+        return;
+      }
+
+      controller.setLooping(true);
+      setState(() {
+        _isInit = true;
+        _hasError = false;
       });
+
+      // Brauzerdə autoplay məhdudiyyətini nəzərə alırıq (səssiz play cəhdi)
+      try {
+        await controller.play();
+      } catch (e) {
+        debugPrint('Autoplay unmuted blocked: $e, trying muted');
+        try {
+          await controller.setVolume(0);
+          await controller.play();
+        } catch (_) {}
+      }
+    } catch (err) {
+      debugPrint('Post video playback error: $err');
+      if (mounted) setState(() => _hasError = true);
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
+  }
+
+  Future<void> _deletePostAndShorts() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Videonu Sil'),
+        content: const Text('Bu videonu qalereyanızdan və bazadan tamamilə silmək istəyirsiniz?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Xeyr')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Bəli, Sil', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      try {
+        await FirebaseFirestore.instance.collection('posts').doc(widget.postId).delete();
+      } catch (_) {}
+      try {
+        final shQ = await FirebaseFirestore.instance
+            .collection('shorts')
+            .where('videoUrl', isEqualTo: widget.videoUrl)
+            .get();
+        for (final d in shQ.docs) {
+          await d.reference.delete();
+        }
+      } catch (_) {}
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Video uğurla silindi.')),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = _controller;
     return Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
         onTap: () {
-          if (_isInit) {
+          if (_isInit && c != null) {
             setState(() {
-              _controller.value.isPlaying ? _controller.pause() : _controller.play();
+              c.value.isPlaying ? c.pause() : c.play();
             });
           }
         },
@@ -2630,37 +2723,67 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
           fit: StackFit.expand,
           children: [
             // Video (Əsl en-boy nisbəti qorunur, kəsilmir)
-            if (_isInit)
+            if (_isInit && c != null)
               Center(
                 child: AspectRatio(
-                  aspectRatio: _controller.value.aspectRatio > 0 ? _controller.value.aspectRatio : 9 / 16,
-                  child: VideoPlayer(_controller),
+                  aspectRatio: c.value.aspectRatio > 0 ? c.value.aspectRatio : 9 / 16,
+                  child: VideoPlayer(c),
                 ),
               )
             else if (_hasError)
               Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.play_disabled_rounded, color: Colors.orange, size: 52),
-                    const SizedBox(height: 12),
-                    const Text('Video oxunmadı və ya format uyğun deyil', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final uri = Uri.parse(widget.videoUrl);
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                        }
-                      },
-                      icon: const Icon(Icons.open_in_new),
-                      label: const Text('Videonu Aç'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black87,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.videocam_off_rounded, color: Colors.orangeAccent, size: 64),
+                      const SizedBox(height: 14),
+                      const Text(
+                        'Video oxunmadı və ya link köhnəlib',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Bu videonun serverdəki faylı köhnəlmiş və ya silinmiş ola bilər.\nVideonun linkinə baxa və ya açılmayan videonu silə bilərsiniz.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                      const SizedBox(height: 20),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 12,
+                        runSpacing: 10,
+                        children: [
+                          if (widget.videoUrl.isNotEmpty)
+                            OutlinedButton.icon(
+                              onPressed: () async {
+                                final uri = Uri.parse(widget.videoUrl);
+                                if (await canLaunchUrl(uri)) {
+                                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                }
+                              },
+                              icon: const Icon(Icons.open_in_new, size: 16),
+                              label: const Text('Linki Yoxla'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(color: Colors.white54),
+                              ),
+                            ),
+                          ElevatedButton.icon(
+                            onPressed: _deletePostAndShorts,
+                            icon: const Icon(Icons.delete_outline, size: 16),
+                            label: const Text('Bu Videonu Sil'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red.shade700,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               )
             else
@@ -2669,7 +2792,7 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
               ),
 
             // Pause olduqda mərkəzdə Play ikonu
-            if (_isInit && !_controller.value.isPlaying)
+            if (_isInit && c != null && !c.value.isPlaying)
               Center(
                 child: Container(
                   padding: const EdgeInsets.all(16),
@@ -2699,32 +2822,7 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
                       backgroundColor: Colors.black54,
                       child: IconButton(
                         icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                        onPressed: () async {
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (c) => AlertDialog(
-                              title: const Text('Videonu Sil'),
-                              content: const Text('Bu videonu qalereyanızdan silmək istəyirsiniz?'),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Xeyr')),
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                                  onPressed: () => Navigator.pop(c, true),
-                                  child: const Text('Bəli, Sil', style: TextStyle(color: Colors.white)),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirm == true) {
-                            await FirebaseFirestore.instance.collection('posts').doc(widget.postId).delete();
-                            if (mounted) {
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Video silindi.')),
-                              );
-                            }
-                          }
-                        },
+                        onPressed: _deletePostAndShorts,
                       ),
                     ),
                   ],
