@@ -2076,6 +2076,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showEditProfileDialog(String uid, Map<String, dynamic>? userData) {
     final nameController = TextEditingController(text: userData?['fullName'] ?? '');
     final phoneController = TextEditingController(text: userData?['phone'] ?? '');
+    final bioController = TextEditingController(text: userData?['bio'] ?? '');
     String selectedRole = userData?['role'] ?? 'usta';
     String selectedUstaCategory = userData?['category'] ?? 'Tikinti';
     bool isWorkingStatus = userData?['isWorking'] == true;
@@ -2132,6 +2133,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 12),
 
+                  // Usta Haqqında Məlumat (Bio / Təcrübə)
+                  TextField(
+                    controller: bioController,
+                    maxLines: 4,
+                    maxLength: 500,
+                    decoration: const InputDecoration(
+                      labelText: 'Usta Haqqında Məlumat',
+                      hintText: 'Təcrübəniz, gördüyünüz işlər və xidmət şərtləriniz...',
+                      prefixIcon: Icon(Icons.info_outline),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
                   // Hal-hazırda işləyir / Sərbəstdir Switch-i
                   Container(
                     decoration: BoxDecoration(
@@ -2174,6 +2188,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   'role': selectedRole,
                   'category': selectedRole == 'usta' ? selectedUstaCategory : '',
                   'isWorking': selectedRole == 'usta' ? isWorkingStatus : false,
+                  'bio': selectedRole == 'usta' ? bioController.text.trim() : (userData?['bio'] ?? ''),
                 }, SetOptions(merge: true));
                 if (mounted) {
                   Navigator.pop(ctx);
@@ -2186,6 +2201,84 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // Ustanın Haqqında məlumatını tez dəyişməsi üçün xüsusi dialoq
+  void _showEditBioDialog(String uid, String currentBio, String defaultBio) {
+    final controller = TextEditingController(text: currentBio.trim().isNotEmpty ? currentBio : defaultBio);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.edit_note_rounded, color: Color(0xFF1769D2), size: 26),
+            SizedBox(width: 8),
+            Text('Haqqımda Məlumatı Dəyiş', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Gördüyünüz işlər, təcrübəniz və müştərilərə xidmət şərtləriniz haqqında məlumat yazın:',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 5,
+              maxLength: 500,
+              decoration: InputDecoration(
+                hintText: 'Məsələn: 10 illik təcrübə, kafel-metlax və santexnika işlərinin keyfiyyətli görülməsi...',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFF1769D2), width: 1.5),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Ləğv et'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1769D2),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              final newBio = controller.text.trim();
+              Navigator.pop(ctx);
+              try {
+                await FirebaseFirestore.instance.collection('users').doc(uid).set({
+                  'bio': newBio,
+                }, SetOptions(merge: true));
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Haqqımda məlumatı uğurla yeniləndi!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            child: const Text('Yadda saxla', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }
@@ -2408,6 +2501,74 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 16),
             ],
 
+            // Usta Haqqında (Təcrübə və Xidmət) kartı — istədikdə birbaşa buradan redaktə edə bilər
+            if (userRole == 'usta') ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2)),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: const [
+                            Icon(Icons.badge_outlined, color: Color(0xFF1769D2), size: 20),
+                            SizedBox(width: 8),
+                            Text(
+                              'Usta Haqqında Məlumat',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                            ),
+                          ],
+                        ),
+                        InkWell(
+                          onTap: () => _showEditBioDialog(
+                            user.uid,
+                            userData?['bio'] ?? '',
+                            'Hörmətli müştərilər, ${(userData?['category'] ?? 'Tikinti')} sahəsində çoxillik təcrübəyə malik peşəkar usta olaraq yüksək keyfiyyətli xidmət təklif edirəm. Bütün işlər zəmanətlə və vaxtında təhvil verilir.',
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1769D2).withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: const [
+                                Icon(Icons.edit, size: 14, color: Color(0xFF1769D2)),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Dəyiş',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      (userData?['bio'] != null && (userData?['bio'] as String).trim().isNotEmpty)
+                          ? userData!['bio']
+                          : 'Hörmətli müştərilər, ${(userData?['category'] ?? 'Tikinti')} sahəsində çoxillik təcrübəyə malik peşəkar usta olaraq yüksək keyfiyyətli xidmət təklif edirəm. Bütün işlər zəmanətlə və vaxtında təhvil verilir.',
+                      style: const TextStyle(color: Color(0xFF475569), fontSize: 13, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
             // İnstagram tərzi Portfólio / İşlərim bölməsi
             _buildInstagramGallery(user.uid, displayName, userRole),
             const SizedBox(height: 20),
@@ -2416,7 +2577,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ListTile(
               leading: const Icon(Icons.person_outline),
               title: const Text('Profil məlumatlarını redaktə et'),
-              subtitle: const Text('Ad, nömrə və şəkil dəyiş'),
+              subtitle: const Text('Ad, nömrə, ixtisas və haqqında məlumat'),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () => _showEditProfileDialog(user.uid, userData),
             ),

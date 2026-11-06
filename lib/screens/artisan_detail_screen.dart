@@ -18,11 +18,13 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
   VideoPlayerController? _videoController;
   bool _isVideoInitialized = false;
   late bool _isWorking;
+  String? _customBio;
 
   @override
   void initState() {
     super.initState();
     _isWorking = widget.artisanData['isWorking'] == true;
+    _customBio = widget.artisanData['bio'] as String?;
     final videoUrl = widget.artisanData['videoUrl'] as String?;
     if (videoUrl != null && videoUrl.isNotEmpty) {
       _videoController = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
@@ -57,6 +59,86 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
+  }
+
+  void _showEditBioDialog(String uId, String currentBio, String defaultBio) {
+    final controller = TextEditingController(text: currentBio.trim().isNotEmpty ? currentBio : defaultBio);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.edit_note_rounded, color: Color(0xFF1769D2), size: 26),
+            SizedBox(width: 8),
+            Text('Haqqımda Məlumatı Dəyiş', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Gördüyünüz işlər, təcrübəniz və müştərilərə xidmət şərtləriniz haqqında məlumat yazın:',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 5,
+              maxLength: 500,
+              decoration: InputDecoration(
+                hintText: 'Məsələn: 10 illik təcrübə, santexnika və istilik sistemlərinin quraşdırılması...',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFF1769D2), width: 1.5),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Ləğv et'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1769D2),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              final newBio = controller.text.trim();
+              setState(() {
+                _customBio = newBio;
+              });
+              Navigator.pop(ctx);
+              try {
+                await FirebaseFirestore.instance.collection('users').doc(uId).set({
+                  'bio': newBio,
+                }, SetOptions(merge: true));
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Haqqımda məlumatı uğurla yeniləndi!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            child: const Text('Yadda saxla', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -252,16 +334,45 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  children: const [
-                    Icon(Icons.info_outline_rounded, color: Color(0xFF1769D2), size: 20),
-                    SizedBox(width: 8),
-                    Text('Usta Haqqında', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: const [
+                        Icon(Icons.info_outline_rounded, color: Color(0xFF1769D2), size: 20),
+                        SizedBox(width: 8),
+                        Text('Usta Haqqında', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    if (isMyProfile && userId != null)
+                      InkWell(
+                        onTap: () => _showEditBioDialog(
+                          userId.toString(),
+                          _customBio ?? '',
+                          'Hörmətli müştərilər, $category sahəsində çoxillik təcrübəyə malik peşəkar usta olaraq yüksək keyfiyyətli xidmət təklif edirəm. Bütün işlər zəmanətlə və vaxtında təhvil verilir.',
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1769D2).withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: const [
+                              Icon(Icons.edit, size: 14, color: Color(0xFF1769D2)),
+                              SizedBox(width: 4),
+                              Text('Dəyiş', style: TextStyle(color: Color(0xFF1769D2), fontSize: 12, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  widget.artisanData['bio'] ??
-                      'Hörmətli müştərilər, $category sahəsində çoxillik təcrübəyə malik peşəkar usta olaraq yüksək keyfiyyətli xidmət təklif edirəm. Bütün işlər zəmanətlə və vaxtında təhvil verilir.',
+                  (_customBio != null && _customBio!.trim().isNotEmpty)
+                      ? _customBio!
+                      : 'Hörmətli müştərilər, $category sahəsində çoxillik təcrübəyə malik peşəkar usta olaraq yüksək keyfiyyətli xidmət təklif edirəm. Bütün işlər zəmanətlə və vaxtında təhvil verilir.',
                   style: const TextStyle(color: Color(0xFF334155), height: 1.4, fontSize: 13),
                 ),
                 const SizedBox(height: 12),
