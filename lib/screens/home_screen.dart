@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 import '../services/auth_service.dart';
 import '../services/video_upload_service.dart';
@@ -1790,83 +1791,21 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    // Əgər video postudursa
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: double.infinity,
-              height: 180,
-              decoration: const BoxDecoration(
-                color: Colors.black87,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.play_circle_filled, color: Colors.red, size: 54),
-                  const SizedBox(height: 8),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1769D2)),
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      setState(() => _currentIndex = 1); // Shorts bölməsinə keçir
-                    },
-                    child: const Text('Shorts Bölməsində Bax', style: TextStyle(color: Colors.white)),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1769D2).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          post['category'] ?? 'Usta İşi',
-                          style: const TextStyle(color: Color(0xFF1769D2), fontWeight: FontWeight.bold, fontSize: 12),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.red),
-                        onPressed: () async {
-                          await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
-                          if (mounted) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Paylaşım silindi.')),
-                            );
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    post['title'] ?? '',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-          ],
+    // Əgər video postudursa, birbaşa buradan tam ekran videonu oxuduruq (Shorts pəncərəsinə keçmədən)
+    final String videoUrl = (post['videoUrl'] ?? '').toString().trim();
+    if (videoUrl.isNotEmpty) {
+      showDialog(
+        context: context,
+        useSafeArea: false,
+        builder: (ctx) => _FullScreenVideoViewer(
+          videoUrl: videoUrl,
+          title: post['title'] ?? '',
+          category: post['category'] ?? 'Usta İşi',
+          postId: postId,
         ),
-      ),
-    );
+      );
+      return;
+    }
   }
 
   // Profil daxilində İnstagram tərzi Qalereya
@@ -1960,17 +1899,42 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        base64Img != null && base64Img.isNotEmpty
-                            ? Image.memory(
-                                base64Decode(base64Img),
-                                fit: BoxFit.cover,
-                              )
-                            : Container(
-                                color: Colors.blueGrey.shade900,
-                                child: const Center(
-                                  child: Icon(Icons.videocam_rounded, color: Colors.white, size: 32),
+                        Builder(
+                          builder: (context) {
+                            if (base64Img != null && base64Img.isNotEmpty) {
+                              return Image.memory(base64Decode(base64Img), fit: BoxFit.cover);
+                            }
+                            final thumbUrl = data['thumbnailUrl']?.toString();
+                            if (thumbUrl != null && thumbUrl.isNotEmpty && !thumbUrl.contains('unsplash.com')) {
+                              return Image.network(thumbUrl, fit: BoxFit.cover);
+                            }
+                            final videoUrl = (data['videoUrl'] ?? '').toString();
+                            if (videoUrl.isNotEmpty) {
+                              return _ShortsVideoThumbnail(
+                                key: ValueKey('post_thumb_${doc.id}'),
+                                videoUrl: videoUrl,
+                                fallback: Container(
+                                  decoration: const BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                    ),
+                                  ),
+                                  child: const Center(
+                                    child: Icon(Icons.play_arrow_rounded, color: Colors.white70, size: 36),
+                                  ),
                                 ),
+                              );
+                            }
+                            return Container(
+                              color: const Color(0xFF1E293B),
+                              child: const Center(
+                                child: Icon(Icons.videocam_rounded, color: Colors.white54, size: 32),
                               ),
+                            );
+                          },
+                        ),
                         if (isVideo)
                           Positioned(
                             top: 6,
@@ -2601,6 +2565,215 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
               key: const ValueKey('video_fallback'),
               child: widget.fallback,
             ),
+    );
+  }
+}
+
+// Hesabdan və qalereyadan videolara birbaşa tam ekran baxış (Shorts bölməsinə keçmədən)
+class _FullScreenVideoViewer extends StatefulWidget {
+  final String videoUrl;
+  final String title;
+  final String category;
+  final String postId;
+
+  const _FullScreenVideoViewer({
+    required this.videoUrl,
+    required this.title,
+    required this.category,
+    required this.postId,
+  });
+
+  @override
+  State<_FullScreenVideoViewer> createState() => _FullScreenVideoViewerState();
+}
+
+class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
+  late VideoPlayerController _controller;
+  bool _isInit = false;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl))
+      ..initialize().then((_) {
+        if (mounted) {
+          setState(() => _isInit = true);
+          _controller.setLooping(true);
+          _controller.play();
+        }
+      }).catchError((err) {
+        debugPrint('Post video playback error: $err');
+        if (mounted) setState(() => _hasError = true);
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: GestureDetector(
+        onTap: () {
+          if (_isInit) {
+            setState(() {
+              _controller.value.isPlaying ? _controller.pause() : _controller.play();
+            });
+          }
+        },
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Video (Əsl en-boy nisbəti qorunur, kəsilmir)
+            if (_isInit)
+              Center(
+                child: AspectRatio(
+                  aspectRatio: _controller.value.aspectRatio > 0 ? _controller.value.aspectRatio : 9 / 16,
+                  child: VideoPlayer(_controller),
+                ),
+              )
+            else if (_hasError)
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.play_disabled_rounded, color: Colors.orange, size: 52),
+                    const SizedBox(height: 12),
+                    const Text('Video oxunmadı və ya format uyğun deyil', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final uri = Uri.parse(widget.videoUrl);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      },
+                      icon: const Icon(Icons.open_in_new),
+                      label: const Text('Videonu Aç'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
+
+            // Pause olduqda mərkəzdə Play ikonu
+            if (_isInit && !_controller.value.isPlaying)
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 54),
+                ),
+              ),
+
+            // Yuxarı naviqasiya (Geri və Sil düyməsi)
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: Colors.black54,
+                      child: IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ),
+                    CircleAvatar(
+                      backgroundColor: Colors.black54,
+                      child: IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (c) => AlertDialog(
+                              title: const Text('Videonu Sil'),
+                              content: const Text('Bu videonu qalereyanızdan silmək istəyirsiniz?'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Xeyr')),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                  onPressed: () => Navigator.pop(c, true),
+                                  child: const Text('Bəli, Sil', style: TextStyle(color: Colors.white)),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true) {
+                            await FirebaseFirestore.instance.collection('posts').doc(widget.postId).delete();
+                            if (mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Video silindi.')),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Aşağı başlıq və kateqoriya
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.category.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1769D2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          widget.category,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.title,
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
