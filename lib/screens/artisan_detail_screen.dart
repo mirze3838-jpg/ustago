@@ -283,6 +283,7 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
     final category = widget.artisanData['category'] ?? widget.artisanData['trade'] ?? 'Tikinti';
     final isVerified = widget.artisanData['isVerified'] == true;
     final photoBase64 = widget.artisanData['photoBase64'] as String?;
+    final city = widget.artisanData['city'] ?? 'Bakı';
     final userId = widget.artisanData['uid'] ?? widget.artisanData['userId'] ?? widget.artisanData['id'];
     final currentUser = FirebaseAuth.instance.currentUser;
     final bool isMyProfile = currentUser != null && currentUser.uid == userId;
@@ -353,6 +354,18 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                     '$category Ustası',
                     style: const TextStyle(color: Color(0xFF1769D2), fontWeight: FontWeight.w600, fontSize: 13),
                   ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.location_on, size: 15, color: Color(0xFFE53935)),
+                    const SizedBox(width: 4),
+                    Text(
+                      city,
+                      style: const TextStyle(color: Color(0xFF475569), fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
 

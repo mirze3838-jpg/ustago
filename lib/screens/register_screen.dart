@@ -19,10 +19,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passController = TextEditingController();
+  final _districtController = TextEditingController();
   final AuthService _authService = AuthService();
 
   String _selectedRole = 'usta';
   String _selectedCategory = 'Tikinti';
+  String _selectedCity = 'Bakı';
   Uint8List? _profileImageBytes;
   bool _isLoading = false;
   bool _obscurePass = true;
@@ -31,6 +33,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       .map((c) => (c['title'] as String).replaceAll('\n', ' '))
       .toList();
   StreamSubscription<List<Map<String, dynamic>>>? _catSub;
+
+  List<String> _cities = List.from(CategoryCityService.defaultCities);
+  StreamSubscription<List<String>>? _citySub;
 
   final Map<String, String> _roles = {
     'usta': 'Usta kimi (Xidmət təklif etmək)',
@@ -49,15 +54,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
         });
       }
     });
+    _citySub = CategoryCityService.getCitiesStream().listen((cities) {
+      if (mounted) {
+        setState(() {
+          _cities = cities;
+          if (!_cities.contains(_selectedCity) && _cities.isNotEmpty) {
+            _selectedCity = _cities.first;
+          }
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
     _catSub?.cancel();
+    _citySub?.cancel();
     _nameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
     _passController.dispose();
+    _districtController.dispose();
     super.dispose();
   }
 
@@ -93,6 +110,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _isLoading = true);
 
     try {
+      final String district = _districtController.text.trim();
+      final String fullCity = district.isNotEmpty ? '$_selectedCity, $district' : _selectedCity;
+
       await _authService.registerWithEmail(
         fullName: _nameController.text,
         email: _emailController.text,
@@ -100,6 +120,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         phone: _phoneController.text,
         role: _selectedRole,
         category: _selectedRole == 'usta' ? _selectedCategory : null,
+        city: fullCity,
         profileImageBytes: _profileImageBytes,
       );
 
@@ -262,6 +283,45 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 16),
             ],
+
+            // Fəaliyyət Göstərdiyi Şəhər və Rayon / Ərazi
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: DropdownButtonFormField<String>(
+                    value: _cities.contains(_selectedCity) ? _selectedCity : (_cities.isNotEmpty ? _cities.first : 'Bakı'),
+                    decoration: const InputDecoration(
+                      labelText: 'Şəhər *',
+                      prefixIcon: Icon(Icons.location_city, color: Color(0xFF1769D2)),
+                    ),
+                    items: _cities.map((city) {
+                      return DropdownMenuItem(
+                        value: city,
+                        child: Text(city, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) setState(() => _selectedCity = val);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 6,
+                  child: TextFormField(
+                    controller: _districtController,
+                    decoration: const InputDecoration(
+                      labelText: 'Rayon / Ərazi',
+                      hintText: 'Məs: Yasamal, Xətai',
+                      prefixIcon: Icon(Icons.pin_drop_outlined),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
 
             // Telefon Nömrəsi
             TextFormField(

@@ -242,6 +242,23 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _makeCall(String phone) async {
+    final cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    final uri = Uri.parse('tel:$cleanPhone');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
+
+  Future<void> _openWhatsApp(String phone) async {
+    var cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (cleanPhone.startsWith('0')) cleanPhone = '994${cleanPhone.substring(1)}';
+    final uri = Uri.parse('https://wa.me/$cleanPhone');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   Widget _buildHomeContent() {
     return CustomScrollView(
       slivers: [
@@ -250,7 +267,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: _buildHeader(),
         ),
 
-        // Axtarış aktiv olduqda Canlı Nəticələr Bloku
+        // Axtarış aktiv olduqda Canlı Nəticələr Bloku (Şəhər, Rayon, Usta adı və İxtisasa görə)
         if (_searchController.text.trim().isNotEmpty) ...[
           SliverToBoxAdapter(
             child: Container(
@@ -264,62 +281,261 @@ class _HomeScreenState extends State<HomeScreen> {
                   BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
                 ],
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: FirebaseFirestore.instance
+                    .collection('users')
+                    .where('role', isEqualTo: 'usta')
+                    .snapshots(),
+                builder: (context, uSnap) {
+                  final q = _searchController.text.trim().toLowerCase();
+                  final docs = uSnap.data?.docs ?? [];
+                  final matchingUstas = docs.where((d) {
+                    final data = d.data();
+                    final city = (data['city'] ?? '').toString().toLowerCase();
+                    final name = (data['fullName'] ?? '').toString().toLowerCase();
+                    final cat = (data['category'] ?? '').toString().toLowerCase();
+                    final bio = (data['bio'] ?? '').toString().toLowerCase();
+                    return city.contains(q) || name.contains(q) || cat.contains(q) || bio.contains(q);
+                  }).map((d) {
+                    final m = Map<String, dynamic>.from(d.data());
+                    m['id'] = d.id;
+                    m['uid'] = d.id;
+                    return m;
+                  }).toList();
+
+                  final matchingCats = _categories.where((c) {
+                    final title = (c['title'] as String).toLowerCase();
+                    return title.contains(q);
+                  }).toList();
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Icon(Icons.search, color: Color(0xFF1769D2), size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            '"${_searchController.text.trim()}" üzrə axtarış',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          Row(
+                            children: [
+                              const Icon(Icons.search, color: Color(0xFF1769D2), size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                '"${_searchController.text.trim()}" axtarış nəticələri',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              ),
+                            ],
+                          ),
+                          InkWell(
+                            onTap: () {
+                              _searchController.clear();
+                              setState(() {});
+                            },
+                            child: const Text('Təmizlə', style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
                           ),
                         ],
                       ),
-                      InkWell(
-                        onTap: () {
-                          _searchController.clear();
-                          setState(() {});
-                        },
-                        child: const Text('Təmizlə', style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _categories.where((c) {
-                      final q = _searchController.text.trim().toLowerCase();
-                      final title = (c['title'] as String).toLowerCase();
-                      return title.contains(q);
-                    }).map((c) {
-                      return ActionChip(
-                        avatar: Icon(c['icon'], size: 16, color: c['color']),
-                        label: Text((c['title'] as String).replaceAll('\n', ' ')),
-                        backgroundColor: c['bgColor'],
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => CategoryArtisansScreen(
-                                categoryTitle: c['title'],
-                                categoryIcon: c['icon'],
-                                categoryColor: c['color'],
-                                categoryBgColor: c['bgColor'],
-                                selectedCity: _selectedCity,
-                              ),
+                      const SizedBox(height: 12),
+
+                      if (matchingUstas.isEmpty && matchingCats.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Center(
+                            child: Column(
+                              children: [
+                                Icon(Icons.search_off_rounded, color: Colors.grey.shade400, size: 36),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '"$q" üzrə usta və ya kateqoriya tapılmadı',
+                                  style: const TextStyle(color: Colors.grey, fontSize: 13),
+                                ),
+                                const SizedBox(height: 2),
+                                const Text(
+                                  'Fərqli şəhər (məs: Yasamal, Gəncə, Bakı) və ya peşə daxil edin',
+                                  style: TextStyle(color: Colors.grey, fontSize: 11),
+                                ),
+                              ],
                             ),
-                          );
-                        },
-                      );
-                    }).toList(),
-                  ),
-                ],
+                          ),
+                        ),
+
+                      // 1. TAPILAN USTALAR SİYAHISI (Şəhər, Rayon, İxtisas və Əlaqə ilə)
+                      if (matchingUstas.isNotEmpty) ...[
+                        Row(
+                          children: [
+                            const Icon(Icons.people_alt_rounded, size: 16, color: Color(0xFF1769D2)),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Tapılan Ustalar (${matchingUstas.length})',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: matchingUstas.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          itemBuilder: (context, idx) {
+                            final u = matchingUstas[idx];
+                            final uName = (u['fullName'] ?? 'Usta').toString();
+                            final uTrade = (u['category'] ?? 'Usta').toString();
+                            final uCity = (u['city'] ?? 'Bakı').toString();
+                            final uPhone = (u['phone'] ?? '').toString();
+                            final uPhoto = u['photoBase64'] as String?;
+
+                            ImageProvider? avatarImg;
+                            if (uPhoto != null && uPhoto.isNotEmpty) {
+                              try {
+                                avatarImg = MemoryImage(base64Decode(uPhoto));
+                              } catch (_) {}
+                            }
+
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ArtisanDetailScreen(artisanData: u),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.grey.shade200),
+                                ),
+                                child: Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 22,
+                                      backgroundColor: const Color(0xFF1769D2).withOpacity(0.12),
+                                      backgroundImage: avatarImg,
+                                      child: avatarImg == null
+                                          ? Text(
+                                              uName.isNotEmpty ? uName[0].toUpperCase() : 'U',
+                                              style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
+                                            )
+                                          : null,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Flexible(
+                                                child: Text(
+                                                  uName,
+                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              const Icon(Icons.verified, color: Color(0xFF1769D2), size: 15),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Row(
+                                            children: [
+                                              Text(
+                                                uTrade,
+                                                style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.red.shade50,
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(Icons.location_on, size: 11, color: Colors.red),
+                                                    const SizedBox(width: 2),
+                                                    Text(
+                                                      uCity,
+                                                      style: TextStyle(
+                                                        color: Colors.red.shade800,
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 10,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (uPhone.isNotEmpty) ...[
+                                      IconButton(
+                                        icon: const Icon(Icons.call, color: Color(0xFF00C853), size: 20),
+                                        tooltip: 'Zəng et',
+                                        onPressed: () => _makeCall(uPhone),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.chat, color: Colors.green, size: 20),
+                                        tooltip: 'WhatsApp',
+                                        onPressed: () => _openWhatsApp(uPhone),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // 2. UYĞUN KATEQORİYALAR
+                      if (matchingCats.isNotEmpty) ...[
+                        Row(
+                          children: [
+                            const Icon(Icons.category_rounded, size: 16, color: Color(0xFF1769D2)),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'Uyğun Kateqoriyalar',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: matchingCats.map((c) {
+                            return ActionChip(
+                              avatar: Icon(c['icon'], size: 16, color: c['color']),
+                              label: Text((c['title'] as String).replaceAll('\n', ' ')),
+                              backgroundColor: c['bgColor'],
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => CategoryArtisansScreen(
+                                      categoryTitle: c['title'],
+                                      categoryIcon: c['icon'],
+                                      categoryColor: c['color'],
+                                      categoryBgColor: c['bgColor'],
+                                      selectedCity: _selectedCity,
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -440,7 +656,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
 
-        // 4. Populyar Ustalar Bölməsi
+        // 4. Populyar Ustalar Bölməsi (Canlı Firestore bazasından, seçilən şəhər öncəlikli)
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
@@ -454,17 +670,50 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         SliverToBoxAdapter(
-          child: SizedBox(
-            height: 140,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              scrollDirection: Axis.horizontal,
-              itemCount: _popularArtisans.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                return _buildArtisanCard(_popularArtisans[index]);
-              },
-            ),
+          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .where('role', isEqualTo: 'usta')
+                .snapshots(),
+            builder: (context, snapshot) {
+              final docs = snapshot.data?.docs ?? [];
+              List<Map<String, dynamic>> list = [];
+              if (docs.isNotEmpty) {
+                list = docs.map((d) {
+                  final m = Map<String, dynamic>.from(d.data());
+                  m['id'] = d.id;
+                  m['uid'] = d.id;
+                  return m;
+                }).toList();
+
+                // Seçilmiş şəhərə uyğun olan ustalar ön sıralarda çıxır
+                list.sort((a, b) {
+                  final aCity = (a['city'] ?? '').toString().toLowerCase();
+                  final bCity = (b['city'] ?? '').toString().toLowerCase();
+                  final sc = _selectedCity.toLowerCase();
+                  final aMatches = aCity.contains(sc);
+                  final bMatches = bCity.contains(sc);
+                  if (aMatches && !bMatches) return -1;
+                  if (!aMatches && bMatches) return 1;
+                  return 0;
+                });
+              } else {
+                list = _popularArtisans.map((a) => Map<String, dynamic>.from(a)).toList();
+              }
+
+              return SizedBox(
+                height: 155,
+                child: ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: list.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                  itemBuilder: (context, index) {
+                    return _buildArtisanCard(list[index]);
+                  },
+                ),
+              );
+            },
           ),
         ),
 
@@ -782,7 +1031,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         controller: _searchController,
                         onChanged: (_) => setState(() {}),
                         decoration: InputDecoration(
-                          hintText: 'Usta, xidmət və ya kateqoriya axtarın...',
+                          hintText: 'Usta, şəhər, rayon və ya xidmət axtarın...',
                           hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
                           border: InputBorder.none,
                           isDense: true,
@@ -1187,8 +1436,25 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // POPULYAR USTA KARTI (Zəng et düyməsi ilə)
-  Widget _buildArtisanCard(Map<String, String> artisan) {
+  // POPULYAR USTA KARTI (Şəhər, Rayon və Zəng et düyməsi ilə)
+  Widget _buildArtisanCard(Map<String, dynamic> artisan) {
+    final String name = (artisan['fullName'] ?? artisan['name'] ?? 'Usta').toString();
+    final String phone = (artisan['phone'] ?? '').toString();
+    final String city = (artisan['city'] ?? 'Bakı').toString();
+    final String? photoBase64 = artisan['photoBase64'] as String?;
+    final String? image = artisan['image'] as String?;
+    final String rating = (artisan['rating'] ?? '4.9').toString();
+    final String reviews = (artisan['reviews'] ?? artisan['reviewsCount'] ?? '10').toString();
+
+    ImageProvider? avatarImg;
+    if (photoBase64 != null && photoBase64.isNotEmpty) {
+      try {
+        avatarImg = MemoryImage(base64Decode(photoBase64));
+      } catch (_) {}
+    } else if (image != null && image.isNotEmpty) {
+      avatarImg = NetworkImage(image);
+    }
+
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: () {
@@ -1196,19 +1462,13 @@ class _HomeScreenState extends State<HomeScreen> {
           context,
           MaterialPageRoute(
             builder: (_) => ArtisanDetailScreen(
-              artisanData: {
-                'fullName': artisan['name'],
-                'phone': artisan['phone'],
-                'role': 'usta',
-                'isVerified': true,
-                'videoUrl': 'https://assets.mixkit.co/videos/preview/mixkit-hands-of-a-carpenter-measuring-a-piece-of-wood-41006-large.mp4',
-              },
+              artisanData: artisan,
             ),
           ),
         );
       },
       child: Container(
-        width: 140,
+        width: 145,
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -1226,11 +1486,18 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             CircleAvatar(
               radius: 22,
-              backgroundImage: NetworkImage(artisan['image']!),
+              backgroundColor: const Color(0xFF1769D2).withOpacity(0.12),
+              backgroundImage: avatarImg,
+              child: avatarImg == null
+                  ? Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : 'U',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
+                    )
+                  : null,
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 5),
             Text(
-              artisan['name']!,
+              name,
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1239,28 +1506,38 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.star, color: Colors.amber, size: 13),
+                const Icon(Icons.location_on, size: 10, color: Colors.red),
                 const SizedBox(width: 2),
+                Flexible(
+                  child: Text(
+                    city,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 9, color: Color(0xFF64748B), fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.star, color: Colors.amber, size: 11),
                 Text(
-                  '${artisan['rating']} (${artisan['reviews']})',
-                  style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w500),
+                  rating,
+                  style: const TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             SizedBox(
               width: double.infinity,
               height: 28,
               child: ElevatedButton.icon(
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('${artisan['name']} ilə əlaqə qurulur: ${artisan['phone']}')),
-                  );
+                  if (phone.isNotEmpty) {
+                    _makeCall(phone);
+                  }
                 },
                 icon: const Icon(Icons.call, size: 12, color: Colors.white),
                 label: const Text('Zəng et', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00C853), // Yaşıl zəng düyməsi
+                  backgroundColor: const Color(0xFF00C853),
                   padding: EdgeInsets.zero,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   elevation: 0,
@@ -2346,6 +2623,21 @@ class _HomeScreenState extends State<HomeScreen> {
     String selectedUstaCategory = userData?['category'] ?? 'Tikinti';
     bool isWorkingStatus = userData?['isWorking'] == true;
 
+    final rawCity = (userData?['city'] ?? 'Bakı').toString();
+    String selectedCityVal = 'Bakı';
+    String districtText = '';
+    if (rawCity.contains(',')) {
+      final parts = rawCity.split(',');
+      selectedCityVal = parts[0].trim();
+      districtText = parts.sublist(1).join(',').trim();
+    } else {
+      selectedCityVal = rawCity.trim();
+    }
+    if (!_cities.contains(selectedCityVal) && _cities.isNotEmpty) {
+      selectedCityVal = _cities.first;
+    }
+    final districtController = TextEditingController(text: districtText);
+
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -2380,6 +2672,37 @@ class _HomeScreenState extends State<HomeScreen> {
                   onChanged: (val) {
                     if (val != null) setDialogState(() => selectedRole = val);
                   },
+                ),
+                const SizedBox(height: 12),
+
+                // Şəhər və Rayon / Ərazi
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 5,
+                      child: DropdownButtonFormField<String>(
+                        value: _cities.contains(selectedCityVal) ? selectedCityVal : (_cities.isNotEmpty ? _cities.first : 'Bakı'),
+                        decoration: const InputDecoration(labelText: 'Şəhər', prefixIcon: Icon(Icons.location_city, color: Color(0xFF1769D2))),
+                        items: _cities.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)))).toList(),
+                        onChanged: (val) {
+                          if (val != null) setDialogState(() => selectedCityVal = val);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 6,
+                      child: TextField(
+                        controller: districtController,
+                        decoration: const InputDecoration(
+                          labelText: 'Rayon / Ərazi',
+                          hintText: 'Məs: Yasamal, Xətai',
+                          prefixIcon: Icon(Icons.pin_drop_outlined),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
 
@@ -2447,11 +2770,15 @@ class _HomeScreenState extends State<HomeScreen> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1769D2)),
               onPressed: () async {
+                final String district = districtController.text.trim();
+                final String fullCity = district.isNotEmpty ? '$selectedCityVal, $district' : selectedCityVal;
+
                 await FirebaseFirestore.instance.collection('users').doc(uid).set({
                   'fullName': nameController.text.trim(),
                   'phone': phoneController.text.trim(),
                   'role': selectedRole,
                   'category': selectedRole == 'usta' ? selectedUstaCategory : '',
+                  'city': fullCity,
                   'isWorking': selectedRole == 'usta' ? isWorkingStatus : false,
                   'bio': selectedRole == 'usta' ? bioController.text.trim() : (userData?['bio'] ?? ''),
                 }, SetOptions(merge: true));

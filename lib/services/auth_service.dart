@@ -19,6 +19,7 @@ class AuthService {
     required String password,
     required String role,
     String? category,
+    String? city,
     String? phone,
     Uint8List? profileImageBytes,
   }) async {
@@ -46,6 +47,7 @@ class AuthService {
       'phone': phone?.trim() ?? '',
       'role': role,
       'category': category ?? 'Tikinti',
+      'city': (city != null && city.trim().isNotEmpty) ? city.trim() : 'Bakı',
       'photoBase64': photoBase64 ?? '',
       'isVerified': true,
       'createdAt': FieldValue.serverTimestamp(),
