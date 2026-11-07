@@ -179,66 +179,516 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMessagesTab() {
-    final user = _authService.currentUser;
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Mesajlar', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Mesajlar və Dəstək', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF1769D2),
         foregroundColor: Colors.white,
       ),
-      body: user == null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Mesajlaşmaq üçün daxil olun',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Ustalar və müştərilərlə birbaşa yazışmaq üçün hesabınıza daxil olun.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1769D2),
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      ),
-                      onPressed: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
-                      },
-                      child: const Text('Daxil Ol', style: TextStyle(color: Colors.white)),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // 1. Rəsmi Dəstək Kartı
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            child: ListTile(
+              contentPadding: const EdgeInsets.all(12),
+              leading: const CircleAvatar(
+                radius: 24,
+                backgroundColor: Color(0xFF1769D2),
+                child: Icon(Icons.support_agent_rounded, color: Colors.white, size: 26),
+              ),
+              title: const Text('UstaGo Rəsmi Dəstək', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              subtitle: const Text('Sualınız və ya təklifiniz var? 7/24 əlaqə üçün toxunun.'),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF1769D2)),
+              onTap: _showSupportDialog,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 2. Məlumatlandırma kartı (Ustalarla birbaşa əlaqə bələdçisi)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: const [
+                    Icon(Icons.flash_on_rounded, color: Colors.amber, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Ustalarla Ən Sürətli Əlaqə',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                   ],
                 ),
-              ),
-            )
-          : ListView(
-              padding: const EdgeInsets.all(12),
-              children: [
-                Card(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  child: ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: Color(0xFF1769D2),
-                      child: Text('U', style: TextStyle(color: Colors.white)),
+                const SizedBox(height: 8),
+                const Text(
+                  'UstaGo platformasında hər bir ustanın profilində birbaşa "Zəng Et" və "WhatsApp" düymələri yerləşdirilib. Bu sayədə usta ilə gözləmədən, ən sürətli şəkildə əlaqə saxlayıb qiymət və vaxt təyin edə bilərsiniz.',
+                  style: TextStyle(color: Color(0xFF64748B), fontSize: 13, height: 1.4),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1769D2),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
-                    title: const Text('UstaGo Dəstək', style: TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: const Text('UstaGo platformasına xoş gəlmisiniz! Kömək lazımdırsa yazın.'),
-                    trailing: const Text('İndi', style: TextStyle(color: Colors.grey, fontSize: 11)),
-                    onTap: () {},
+                    icon: const Icon(Icons.search, size: 18),
+                    label: const Text('Usta Axtarışına Keç'),
+                    onPressed: () => setState(() => _currentIndex = 0),
                   ),
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Dəstək Dialoqu (WhatsApp, Zəng, Email)
+  void _showSupportDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1769D2).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.support_agent_rounded, color: Color(0xFF1769D2), size: 28),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        'UstaGo Dəstək Xidməti',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        'Suallarınızı operativ cavablandırırıq',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Bizimlə birbaşa əlaqə vasitələri:',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.green.shade200),
+              ),
+              tileColor: Colors.green.shade50.withOpacity(0.5),
+              leading: const CircleAvatar(
+                backgroundColor: Color(0xFF25D366),
+                child: Icon(Icons.chat, color: Colors.white, size: 20),
+              ),
+              title: const Text('WhatsApp Dəstək Xətti', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              subtitle: const Text('Aktiv (7/24 Dəstək)', style: TextStyle(fontSize: 12)),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.green),
+              onTap: () {
+                Navigator.pop(ctx);
+                _openWhatsApp('+994501234567');
+              },
+            ),
+            const SizedBox(height: 10),
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.blue.shade200),
+              ),
+              tileColor: Colors.blue.shade50.withOpacity(0.5),
+              leading: const CircleAvatar(
+                backgroundColor: Color(0xFF1769D2),
+                child: Icon(Icons.phone, color: Colors.white, size: 20),
+              ),
+              title: const Text('Qaynar Xəttə Zəng Et', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              subtitle: const Text('+994 50 123 45 67', style: TextStyle(fontSize: 12)),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFF1769D2)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _makeCall('+994501234567');
+              },
+            ),
+            const SizedBox(height: 10),
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.grey.shade300),
+              ),
+              tileColor: Colors.grey.shade50,
+              leading: const CircleAvatar(
+                backgroundColor: Colors.grey,
+                child: Icon(Icons.email, color: Colors.white, size: 20),
+              ),
+              title: const Text('E-mail ilə Əlaqə', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              subtitle: const Text('mirze3838@gmail.com', style: TextStyle(fontSize: 12)),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final uri = Uri.parse('mailto:mirze3838@gmail.com?subject=UstaGo%20K%C3%B6m%C9%99k');
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Bütün Kateqoriyalar Modal Pəncərəsi
+  void _showAllCategoriesSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        String filter = '';
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final filtered = _categories.where((c) {
+              final title = (c['title'] as String).replaceAll('\n', ' ').toLowerCase();
+              return title.contains(filter.toLowerCase());
+            }).toList();
+
+            return Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.85,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(Icons.grid_view_rounded, color: Color(0xFF1769D2), size: 24),
+                          SizedBox(width: 8),
+                          Text(
+                            'Bütün Kateqoriyalar',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    onChanged: (v) => setSheetState(() => filter = v),
+                    decoration: InputDecoration(
+                      hintText: 'Kateqoriya axtarın (məs: Santexnik, Mebel...)',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      filled: true,
+                      fillColor: const Color(0xFFF1F5F9),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? const Center(
+                            child: Text('Uyğun kateqoriya tapılmadı', style: TextStyle(color: Colors.grey)),
+                          )
+                        : GridView.builder(
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 3,
+                              mainAxisSpacing: 12,
+                              crossAxisSpacing: 12,
+                              childAspectRatio: 0.95,
+                            ),
+                            itemCount: filtered.length,
+                            itemBuilder: (context, i) {
+                              final cat = filtered[i];
+                              final isOther = cat['id'] == 'def_diger';
+                              return InkWell(
+                                borderRadius: BorderRadius.circular(14),
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => CategoryArtisansScreen(
+                                        categoryTitle: isOther ? 'Bütün Ustalar' : cat['title'],
+                                        categoryIcon: cat['icon'] as IconData? ?? Icons.handyman,
+                                        categoryColor: cat['color'] as Color? ?? const Color(0xFF1769D2),
+                                        categoryBgColor: cat['bgColor'] as Color? ?? const Color(0xFFEFF6FF),
+                                        selectedCity: _selectedCity,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: (cat['bgColor'] as Color? ?? const Color(0xFFEFF6FF)),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: (cat['color'] as Color? ?? const Color(0xFF1769D2)).withOpacity(0.2),
+                                    ),
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        cat['icon'] as IconData? ?? Icons.handyman,
+                                        color: cat['color'] as Color? ?? const Color(0xFF1769D2),
+                                        size: 32,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        (cat['title'] as String).replaceAll('\n', ' '),
+                                        textAlign: TextAlign.center,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Kömək və Dəstək Modal Pəncərəsi (FAQ, Təlimat və Əlaqə)
+  void _showHelpSupportSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: const [
+                      Icon(Icons.help_center_rounded, color: Color(0xFF1769D2), size: 26),
+                      SizedBox(width: 8),
+                      Text(
+                        'Kömək və Dəstək',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // FAQ 1
+              ExpansionTile(
+                initiallyExpanded: true,
+                leading: const Icon(Icons.question_answer_outlined, color: Color(0xFF1769D2)),
+                title: const Text('UstaGo xidmətləri ödənişlidirmi?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                children: const [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Text(
+                      'Xeyr! UstaGo həm müştərilər, həm də ustalar üçün tamamilə PULSUZDUR. Qeydiyyatdan keçmək, usta axtarmaq, Shorts video paylaşmaq və zəng etmək ödənişsizdir.',
+                      style: TextStyle(color: Color(0xFF475569), fontSize: 13, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+
+              // FAQ 2
+              ExpansionTile(
+                leading: const Icon(Icons.video_library_outlined, color: Color(0xFF1769D2)),
+                title: const Text('Portfolioma video necə əlavə edim?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                children: const [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Text(
+                      'Profil bölməsinə keçin, "İşlərim və Portfoliom" başlığının yanındakı "Yeni Paylaş" düyməsinə toxunun. "Shorts Video Paylaş" rejimini seçərək gördüyünüz işin videosunu yükləyin. Video avtomatik həm profilinizdə, həm də ana səhifədəki Shorts bölməsində yayımlanacaq.',
+                      style: TextStyle(color: Color(0xFF475569), fontSize: 13, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+
+              // FAQ 3
+              ExpansionTile(
+                leading: const Icon(Icons.verified_outlined, color: Color(0xFF1769D2)),
+                title: const Text('Usta kimi necə təsdiqlənə bilərəm?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                children: const [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Text(
+                      'Qeydiyyat zamanı şəhər, rayon və peşə məlumatlarınızı dəqiq qeyd edin. Portfolionuza real iş nümunələri əlavə edin. Məlumatlarınız yoxlandıqdan sonra profilinizə Mavi Təsdiq nişanı verilir.',
+                      style: TextStyle(color: Color(0xFF475569), fontSize: 13, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+              const Text(
+                'Birbaşa Dəstək Xətti:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _openWhatsApp('+994501234567');
+                      },
+                      icon: const Icon(Icons.chat, size: 18),
+                      label: const Text('WhatsApp'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF25D366),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _makeCall('+994501234567');
+                      },
+                      icon: const Icon(Icons.phone, size: 18),
+                      label: const Text('Zəng Et'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1769D2),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Center(
+                child: GestureDetector(
+                  onTap: () {
+                    _adminSecretTap++;
+                    if (_adminSecretTap >= 5) {
+                      _adminSecretTap = 0;
+                      Navigator.pop(ctx);
+                      _showAdminAccessDialog();
+                    }
+                  },
+                  child: Text(
+                    'UstaGo v1.0.0 (Bütün hüquqlar qorunur)',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -550,7 +1000,7 @@ class _HomeScreenState extends State<HomeScreen> {
               iconColor: const Color(0xFF1769D2),
               title: 'Kateqoriyalar',
               actionTitle: 'Hamısına bax',
-              onTap: () {},
+              onTap: _showAllCategoriesSheet,
             ),
           ),
         ),
@@ -665,7 +1115,20 @@ class _HomeScreenState extends State<HomeScreen> {
               iconColor: const Color(0xFFFFB300),
               title: 'Populyar Ustalar',
               actionTitle: 'Hamısına bax',
-              onTap: () {},
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CategoryArtisansScreen(
+                      categoryTitle: 'Bütün Ustalar',
+                      categoryIcon: Icons.people_alt_rounded,
+                      categoryColor: const Color(0xFF1769D2),
+                      categoryBgColor: const Color(0xFFEFF6FF),
+                      selectedCity: _selectedCity,
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ),
@@ -1129,9 +1592,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // KATEQORİYA KARTI (Dizayndakı rəngli ikonlar - Toxunanda həmin kateqoriyanın ustaları açılır)
   Widget _buildCategoryItem(Map<String, dynamic> cat) {
+    final bool isOther = cat['id'] == 'def_diger';
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: () {
+        if (isOther) {
+          _showAllCategoriesSheet();
+          return;
+        }
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -2920,7 +3388,7 @@ class _HomeScreenState extends State<HomeScreen> {
             leading: const Icon(Icons.help_outline),
             title: const Text('Kömək və Dəstək'),
             trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {},
+            onTap: _showHelpSupportSheet,
           ),
         ],
       );
@@ -3207,13 +3675,7 @@ class _HomeScreenState extends State<HomeScreen> {
               leading: const Icon(Icons.help_outline),
               title: const Text('Kömək və Dəstək'),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () {
-                _adminSecretTap++;
-                if (_adminSecretTap >= 5) {
-                  _adminSecretTap = 0;
-                  _showAdminAccessDialog();
-                }
-              },
+              onTap: _showHelpSupportSheet,
             ),
             const Divider(),
             ListTile(

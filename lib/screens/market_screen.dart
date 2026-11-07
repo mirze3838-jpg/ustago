@@ -679,16 +679,17 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
             ),
             title: Text(prod['title'] as String, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             subtitle: Text('${prod['store']} • ${prod['category']}'),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   prod['price'] as String,
-                  style: const TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold, fontSize: 15),
+                  style: const TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold, fontSize: 14),
                 ),
+                const SizedBox(width: 4),
                 IconButton(
                   icon: const Icon(Icons.phone, color: Color(0xFF2E7D32), size: 20),
+                  tooltip: 'Zəng et',
                   onPressed: () => _makeCall(prod['phone'] as String),
                 ),
               ],

@@ -54,6 +54,9 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
   // Kateqoriyanın dəqiq uyğunluğunu yoxlayır
   bool _isMatchingCategory(String? ustaCategory) {
     final t = _cleanTitle.toLowerCase();
+    // Bütün ustalar və ya Hamısı seçilibsə, bütün ustalar uyğun gəlir
+    if (t.contains('bütün') || t.contains('hamı')) return true;
+
     if (ustaCategory == null || ustaCategory.trim().isEmpty) {
       return t.contains('tikinti');
     }
