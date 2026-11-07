@@ -127,24 +127,23 @@ class _HomeScreenState extends State<HomeScreen> {
           .get();
 
       for (final doc in shortsSnap.docs) {
-        final data = doc.data();
         final Map<String, dynamic> updates = {};
 
-        if (newName != null && newName.trim().isNotEmpty && data['artisanName'] != newName.trim()) {
+        if (newName != null && newName.trim().isNotEmpty) {
           updates['artisanName'] = newName.trim();
         }
-        if (newPhone != null && newPhone.trim().isNotEmpty && data['phone'] != newPhone.trim()) {
+        if (newPhone != null && newPhone.trim().isNotEmpty) {
           updates['phone'] = newPhone.trim();
         }
-        if (newTrade != null && newTrade.trim().isNotEmpty && data['trade'] != newTrade.trim()) {
+        if (newTrade != null && newTrade.trim().isNotEmpty) {
           updates['trade'] = newTrade.trim();
         }
-        if (newPhotoBase64 != null && data['authorPhotoBase64'] != newPhotoBase64) {
+        if (newPhotoBase64 != null) {
           updates['authorPhotoBase64'] = newPhotoBase64;
         }
 
         if (updates.isNotEmpty) {
-          await doc.reference.update(updates);
+          await doc.reference.set(updates, SetOptions(merge: true));
         }
       }
 
@@ -155,22 +154,21 @@ class _HomeScreenState extends State<HomeScreen> {
           .get();
 
       for (final doc in postsSnap.docs) {
-        final data = doc.data();
         final Map<String, dynamic> updates = {};
 
-        if (newName != null && newName.trim().isNotEmpty && data['authorName'] != newName.trim()) {
+        if (newName != null && newName.trim().isNotEmpty) {
           updates['authorName'] = newName.trim();
           updates['artisanName'] = newName.trim();
         }
-        if (newPhone != null && newPhone.trim().isNotEmpty && data['phone'] != newPhone.trim()) {
+        if (newPhone != null && newPhone.trim().isNotEmpty) {
           updates['phone'] = newPhone.trim();
         }
-        if (newTrade != null && newTrade.trim().isNotEmpty && data['category'] != newTrade.trim()) {
+        if (newTrade != null && newTrade.trim().isNotEmpty) {
           updates['category'] = newTrade.trim();
         }
 
         if (updates.isNotEmpty) {
-          await doc.reference.update(updates);
+          await doc.reference.set(updates, SetOptions(merge: true));
         }
       }
     } catch (e) {
@@ -1170,6 +1168,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   final data = d.data();
                   dynamicShorts.add({
                     'id': d.id,
+                    'userId': data['userId'] ?? '',
                     'title': data['title'] ?? 'Usta İşi',
                     'author': data['artisanName'] ?? 'Usta',
                     'trade': data['trade'] ?? 'Usta',
@@ -1900,15 +1899,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
 
-                    // 5. Aşağıda Müəllif adı
+                    // 5. Aşağıda Müəllif adı (Real-vaxtda istifadəçi bazasından oxunur və dərhal sinxronlaşır)
                     Positioned(
                       left: 8,
                       right: 8,
                       bottom: 8,
-                      child: Text(
-                        item['author'] ?? 'Usta',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      child: _AuthorNameText(
+                        userId: (item['userId'] ?? '').toString(),
+                        defaultName: (item['author'] ?? 'Usta').toString(),
                         style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
                       ),
                     ),
@@ -3359,7 +3357,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 }, SetOptions(merge: true));
 
                 // İstifadəçinin mövcud bütün Shorts videolarını və postlarını yeni ad və nömrə ilə sinxronlaşdır
-                _syncUserDataAcrossCollections(
+                await _syncUserDataAcrossCollections(
                   uid,
                   newName: updatedName,
                   newPhone: updatedPhone,
@@ -4477,6 +4475,47 @@ class FullScreenVideoViewerState extends State<FullScreenVideoViewer> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Shorts kartlarında müəllifin adını birbaşa 'users' sənədindən canlı dinləyən vidcet
+/// Beləliklə profil adı dəyişən kimi ana səhifədə də dərhal (0.01s) canlı yenilənir
+class _AuthorNameText extends StatelessWidget {
+  final String userId;
+  final String defaultName;
+  final TextStyle? style;
+
+  const _AuthorNameText({
+    super.key,
+    required this.userId,
+    required this.defaultName,
+    this.style,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (userId.isEmpty || userId == 'guest') {
+      return Text(
+        defaultName,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: style,
+      );
+    }
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('users').doc(userId).snapshots(),
+      builder: (context, snapshot) {
+        final liveName = snapshot.data?.data()?['fullName']?.toString().trim();
+        final name = (liveName != null && liveName.isNotEmpty) ? liveName : defaultName;
+        return Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: style,
+        );
+      },
     );
   }
 }
