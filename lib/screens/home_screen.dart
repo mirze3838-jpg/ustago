@@ -1256,7 +1256,7 @@ class _HomeScreenState extends State<HomeScreen> {
       } catch (_) {
         coverWidget = fallbackVisual;
       }
-    } else if (thumbnailUrl != null && thumbnailUrl.isNotEmpty) {
+    } else if (thumbnailUrl != null && thumbnailUrl.isNotEmpty && !thumbnailUrl.contains('unsplash.com')) {
       coverWidget = Image.network(
         thumbnailUrl,
         fit: BoxFit.cover,
@@ -1269,7 +1269,17 @@ class _HomeScreenState extends State<HomeScreen> {
         errorBuilder: (_, __, ___) => fallbackVisual,
       );
     } else {
-      coverWidget = fallbackVisual;
+      // İstifadəçi əllə şəkil qoymayıbsa, BİRBAŞA VİDEONUN ÖZÜNÜN İÇİNDƏN KADR ÇIXARILIR VƏ GÖSTƏRİLİR!
+      final videoUrl = (item['videoUrl'] ?? '').toString();
+      if (videoUrl.isNotEmpty) {
+        coverWidget = _ShortsVideoThumbnail(
+          key: ValueKey(item['id'] ?? videoUrl),
+          videoUrl: videoUrl,
+          fallback: fallbackVisual,
+        );
+      } else {
+        coverWidget = fallbackVisual;
+      }
     }
 
     return InkWell(

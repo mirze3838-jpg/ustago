@@ -470,9 +470,6 @@ class _ShortsScreenState extends State<ShortsScreen> {
                           }
 
                           final String coverBase64 = pickedCoverBytes != null ? base64Encode(pickedCoverBytes!) : '';
-                          final String coverUrl = coverBase64.isEmpty
-                              ? CategoryCityService.getCategoryPlaceholderImage(tradeVal)
-                              : '';
 
                           // 1. Shorts kolleksiyasına yazırıq
                           await FirebaseFirestore.instance.collection('shorts').add({
@@ -480,7 +477,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                             'title': title,
                             'videoUrl': finalVideoUrl,
                             'thumbnailBase64': coverBase64,
-                            'thumbnailUrl': coverUrl,
+                            'thumbnailUrl': '',
                             'authorPhotoBase64': uPhoto ?? '',
                             'artisanName': authorName,
                             'trade': tradeVal,
@@ -500,7 +497,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                               'videoUrl': finalVideoUrl,
                               'imageBase64': coverBase64,
                               'thumbnailBase64': coverBase64,
-                              'thumbnailUrl': coverUrl,
+                              'thumbnailUrl': '',
                               'isVideo': true,
                               'createdAt': FieldValue.serverTimestamp(),
                               'likes': 0,
