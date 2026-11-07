@@ -75,9 +75,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadUserRole() async {
     final role = await _authService.getUserRole();
+    final user = _authService.currentUser;
+    bool hasRead = false;
+    if (user != null) {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        if (doc.exists && doc.data()?['notificationsRead'] == true) {
+          hasRead = true;
+        }
+      } catch (_) {}
+    }
     if (mounted) {
       setState(() {
         _currentUserRole = role;
+        if (hasRead) _unreadNotifications = 0;
       });
     }
   }
@@ -1190,6 +1201,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Bildirişlər pəncərəsi
   void _showNotificationsSheet() {
+    if (_unreadNotifications > 0) {
+      setState(() {
+        _unreadNotifications = 0;
+      });
+      final user = _authService.currentUser;
+      if (user != null) {
+        FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'notificationsRead': true,
+        }, SetOptions(merge: true));
+      }
+    }
     showModalBottomSheet(
       context: context,
       useRootNavigator: true,
@@ -2053,27 +2075,9 @@ class _HomeScreenState extends State<HomeScreen> {
             activeIcon: Icon(Icons.storefront_rounded),
             label: 'Alış-Satış',
           ),
-          BottomNavigationBarItem(
-            icon: Stack(
-              children: [
-                const Icon(Icons.chat_bubble_outline),
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(3),
-                    decoration: const BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Text(
-                      '1',
-                      style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.chat_bubble_outline),
+            activeIcon: Icon(Icons.chat_bubble),
             label: 'Mesajlar',
           ),
           const BottomNavigationBarItem(

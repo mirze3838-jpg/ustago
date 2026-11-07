@@ -660,6 +660,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
   bool _isInitialized = false;
   bool _isPlaying = true;
   bool _hasError = false;
+  bool _isMuted = false;
 
   int _likeCount = 0;
   bool _isLiked = false;
@@ -1161,7 +1162,18 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       }
 
       controller.setLooping(true);
-      await controller.play();
+
+      // Web-də brauzerlər səsli autoplay-i bloklayır, ona görə default olaraq muted başlayırıq
+      if (kIsWeb) {
+        await controller.setVolume(0);
+        _isMuted = true;
+      } else {
+        await controller.setVolume(1.0);
+        _isMuted = false;
+      }
+      try {
+        await controller.play();
+      } catch (_) {}
 
       setState(() {
         _isInitialized = true;
@@ -1186,6 +1198,15 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
         });
       }
     }
+  }
+
+  Future<void> _toggleMute() async {
+    final c = _controller;
+    if (c == null) return;
+    setState(() {
+      _isMuted = !_isMuted;
+    });
+    await c.setVolume(_isMuted ? 0 : 1.0);
   }
 
   @override
@@ -1451,7 +1472,35 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
             ),
           ),
 
-          // Sağ tərəfdəki düymələr (Bəyən, WhatsApp, Zəng, Sil)
+          // Web üçün Səsi Aç bildirişi
+          if (_isInitialized && _isMuted)
+            Positioned(
+              top: 50,
+              right: 16,
+              child: GestureDetector(
+                onTap: _toggleMute,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade700,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 6),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.volume_off, color: Colors.white, size: 16),
+                      SizedBox(width: 6),
+                      Text('Səsi Aç', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // Sağ tərəfdəki düymələr (Bəyən, Səs, WhatsApp, Zəng, Sil)
           Positioned(
             right: 16,
             bottom: 90,
@@ -1469,6 +1518,13 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                       _likeCount.toString(),
                       _isLiked ? Colors.red : Colors.white,
                       onTap: _toggleLike,
+                    ),
+                    const SizedBox(height: 18),
+                    _buildSideAction(
+                      _isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                      _isMuted ? 'Səssiz' : 'Səsli',
+                      _isMuted ? Colors.amber : Colors.white,
+                      onTap: _toggleMute,
                     ),
                     const SizedBox(height: 18),
                     _buildSideAction(
