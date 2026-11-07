@@ -225,4 +225,28 @@ class CategoryCityService {
     final docId = cityName.trim().replaceAll(' ', '_').toLowerCase();
     await _firestore.collection('cities').doc(docId).delete();
   }
+
+  /// Kateqoriyaya / peşəyə uyğun gözəl HD başlıq kadr fotosu (videolarda qaranlıq qalmamaq üçün)
+  static String getCategoryPlaceholderImage(String? trade) {
+    final t = (trade ?? '').toLowerCase();
+    if (t.contains('santexnik') || t.contains('su') || t.contains('kafel') || t.contains('metlax')) {
+      return 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=600&q=80';
+    } else if (t.contains('elektrik') || t.contains('şit') || t.contains('naqil')) {
+      return 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80';
+    } else if (t.contains('kondisioner') || t.contains('kombi') || t.contains('soyuducu') || t.contains('iqlim')) {
+      return 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=600&q=80';
+    } else if (t.contains('mebel') || t.contains('dülgər')) {
+      return 'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=600&q=80';
+    } else if (t.contains('avto') || t.contains('avtomobil') || t.contains('maşın')) {
+      return 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&w=600&q=80';
+    } else if (t.contains('rəngsaz') || t.contains('malyar') || t.contains('boya')) {
+      return 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=600&q=80';
+    } else if (t.contains('qapı') || t.contains('pəncərə')) {
+      return 'https://images.unsplash.com/photo-1509644851169-2acc08aa25b5?auto=format&fit=crop&w=600&q=80';
+    } else if (t.contains('təmizlik') || t.contains('xadimə')) {
+      return 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=600&q=80';
+    }
+    // Tikinti və ümumi usta işləri üçün keyfiyyətli real kadr
+    return 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80';
+  }
 }

@@ -1007,7 +1007,7 @@ class _HomeScreenState extends State<HomeScreen> {
       } catch (_) {
         coverWidget = fallbackVisual;
       }
-    } else if (thumbnailUrl != null && thumbnailUrl.isNotEmpty && !thumbnailUrl.contains('unsplash.com')) {
+    } else if (thumbnailUrl != null && thumbnailUrl.isNotEmpty) {
       coverWidget = Image.network(
         thumbnailUrl,
         fit: BoxFit.cover,
@@ -1020,17 +1020,7 @@ class _HomeScreenState extends State<HomeScreen> {
         errorBuilder: (_, __, ___) => fallbackVisual,
       );
     } else {
-      // İstifadəçi başlıq şəkli qoymayıbsa belə, birbaşa VİDEONUN ÖZÜNÜN İÇİNDƏN kadr çıxarılır və göstərilir!
-      final videoUrl = (item['videoUrl'] ?? '').toString();
-      if (videoUrl.isNotEmpty) {
-        coverWidget = _ShortsVideoThumbnail(
-          key: ValueKey(item['id'] ?? videoUrl),
-          videoUrl: videoUrl,
-          fallback: fallbackVisual,
-        );
-      } else {
-        coverWidget = fallbackVisual;
-      }
+      coverWidget = fallbackVisual;
     }
 
     return InkWell(

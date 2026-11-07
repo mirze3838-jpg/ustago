@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 import 'package:http/http.dart' as http;
 import '../services/video_upload_service.dart';
+import '../services/category_city_service.dart';
 import 'artisan_detail_screen.dart';
 
 class ShortsScreen extends StatefulWidget {
@@ -239,8 +240,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
                   child: Row(
                     children: [
                       Container(
-                        width: 44,
-                        height: 44,
+                        width: 46,
+                        height: 46,
                         decoration: BoxDecoration(
                           color: Colors.blue.shade50,
                           borderRadius: BorderRadius.circular(8),
@@ -250,19 +251,43 @@ class _ShortsScreenState extends State<ShortsScreen> {
                                 borderRadius: BorderRadius.circular(8),
                                 child: Image.memory(pickedCoverBytes!, fit: BoxFit.cover),
                               )
-                            : const Icon(Icons.add_photo_alternate_rounded, color: Color(0xFF1769D2)),
+                            : ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(
+                                  CategoryCityService.getCategoryPlaceholderImage(tradeController.text),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const Icon(Icons.movie_filter_rounded, color: Color(0xFF1769D2)),
+                                ),
+                              ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              pickedCoverBytes != null ? 'Başlıq şəkli seçildi' : 'Videonun Başlıq Şəkli (Kover)',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            Row(
+                              children: [
+                                Text(
+                                  pickedCoverBytes != null ? 'Xüsusi şəkil seçildi' : 'Başlıq Şəkli (Kover)',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                                const SizedBox(width: 6),
+                                if (pickedCoverBytes == null)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade50,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: Colors.green.shade300),
+                                    ),
+                                    child: const Text('Avtomatik HD', style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold)),
+                                  ),
+                              ],
                             ),
                             Text(
-                              pickedCoverBytes != null ? pickedCover!.name : 'Videoda qaranlıq qalmamaq üçün ilk kadr fotosu seçin',
+                              pickedCoverBytes != null
+                                  ? pickedCover!.name
+                                  : 'Qaranlıq qalmamaq üçün peşənizə uyğun canlı şəkil',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(color: Colors.grey, fontSize: 11),
@@ -445,6 +470,9 @@ class _ShortsScreenState extends State<ShortsScreen> {
                           }
 
                           final String coverBase64 = pickedCoverBytes != null ? base64Encode(pickedCoverBytes!) : '';
+                          final String coverUrl = coverBase64.isEmpty
+                              ? CategoryCityService.getCategoryPlaceholderImage(tradeVal)
+                              : '';
 
                           // 1. Shorts kolleksiyasına yazırıq
                           await FirebaseFirestore.instance.collection('shorts').add({
@@ -452,7 +480,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                             'title': title,
                             'videoUrl': finalVideoUrl,
                             'thumbnailBase64': coverBase64,
-                            'thumbnailUrl': '',
+                            'thumbnailUrl': coverUrl,
                             'authorPhotoBase64': uPhoto ?? '',
                             'artisanName': authorName,
                             'trade': tradeVal,
@@ -472,7 +500,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                               'videoUrl': finalVideoUrl,
                               'imageBase64': coverBase64,
                               'thumbnailBase64': coverBase64,
-                              'thumbnailUrl': '',
+                              'thumbnailUrl': coverUrl,
                               'isVideo': true,
                               'createdAt': FieldValue.serverTimestamp(),
                               'likes': 0,
@@ -1254,61 +1282,37 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     final String? thumbnailUrl = data['thumbnailUrl'];
     final String trade = (data['trade'] ?? '').toString();
 
-    // Kateqoriyaya uyğun rəngli və zərif gradient fallback (öz şəkli olmayan videolar üçün professional görünüş)
-    final tl = trade.toLowerCase();
-    List<Color> gradColors = [const Color(0xFF1E293B), const Color(0xFF0F172A)];
-    IconData gradIcon = Icons.handyman_rounded;
+    // Peşəyə uyğun gözəl HD foto kadrı
+    final String placeholderImg = CategoryCityService.getCategoryPlaceholderImage(trade);
 
-    if (tl.contains('santexnik') || tl.contains('su')) {
-      gradColors = [const Color(0xFF0288D1), const Color(0xFF01579B)];
-      gradIcon = Icons.water_drop_rounded;
-    } else if (tl.contains('elektrik')) {
-      gradColors = [const Color(0xFFF57F17), const Color(0xFFE65100)];
-      gradIcon = Icons.bolt_rounded;
-    } else if (tl.contains('kondisioner')) {
-      gradColors = [const Color(0xFF0097A7), const Color(0xFF006064)];
-      gradIcon = Icons.ac_unit_rounded;
-    } else if (tl.contains('mebel') || tl.contains('dülgər')) {
-      gradColors = [const Color(0xFF8D6E63), const Color(0xFF4E342E)];
-      gradIcon = Icons.chair_rounded;
-    } else if (tl.contains('rəngsaz') || tl.contains('malyar')) {
-      gradColors = [const Color(0xFFFF7043), const Color(0xFFD84315)];
-      gradIcon = Icons.format_paint_rounded;
-    } else if (tl.contains('tikinti')) {
-      gradColors = [const Color(0xFFE65100), const Color(0xFFBF360C)];
-      gradIcon = Icons.foundation_rounded;
-    }
-
-    final fallbackWidget = Container(
-      width: double.infinity,
-      height: double.infinity,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: gradColors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(gradIcon, size: 85, color: Colors.white.withOpacity(0.3)),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                trade.isEmpty ? 'UstaGo Shorts' : trade,
-                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+    final fallbackWidget = Stack(
+      fit: StackFit.expand,
+      children: [
+        Image.network(
+          placeholderImg,
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+          errorBuilder: (_, __, ___) => Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF1E3A8A), Color(0xFF0F172A)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
               ),
             ),
-          ],
+          ),
         ),
-      ),
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.black.withOpacity(0.2), Colors.black.withOpacity(0.75)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+          ),
+        ),
+      ],
     );
 
     if (thumbnailBase64 != null && thumbnailBase64.isNotEmpty) {
@@ -1316,7 +1320,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
         return Center(
           child: Image.memory(
             base64Decode(thumbnailBase64),
-            fit: BoxFit.contain,
+            fit: BoxFit.cover,
             width: double.infinity,
             height: double.infinity,
             errorBuilder: (_, __, ___) => fallbackWidget,
@@ -1325,11 +1329,11 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       } catch (_) {}
     }
 
-    if (thumbnailUrl != null && thumbnailUrl.isNotEmpty && !thumbnailUrl.contains('unsplash.com')) {
+    if (thumbnailUrl != null && thumbnailUrl.isNotEmpty) {
       return Center(
         child: Image.network(
           thumbnailUrl,
-          fit: BoxFit.contain,
+          fit: BoxFit.cover,
           width: double.infinity,
           height: double.infinity,
           loadingBuilder: (context, child, loadingProgress) {
