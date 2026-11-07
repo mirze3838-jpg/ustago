@@ -658,6 +658,7 @@ class _ShortVideoItem extends StatefulWidget {
 class _ShortVideoItemState extends State<_ShortVideoItem> {
   VideoPlayerController? _controller;
   bool _isInitialized = false;
+  bool _isVideoVisible = false; // Video tamamilə görünməyə hazırdır (fade-in üçün)
   bool _isPlaying = true;
   bool _hasError = false;
   bool _isMuted = false;
@@ -1181,6 +1182,11 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
         _isPlaying = true;
       });
 
+      // Qısa gecikmə sonra video fade-in edir (brauzer ilk frame-i render etsin)
+      Future.delayed(const Duration(milliseconds: 80), () {
+        if (mounted) setState(() => _isVideoVisible = true);
+      });
+
       controller.addListener(() {
         if (!mounted) return;
         final playing = controller.value.isPlaying;
@@ -1355,16 +1361,25 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // 0. VİDEO AÇILANA QƏDƏR ARXA FONDA BAŞLIQ FOTOSU (Qaranlıq qalmır!)
-          _buildCoverImage(widget.data),
-          // 1. VİDEO EKRANI (Əsl en-boy nisbəti qorunur, kənarları kəsilmir)
+          // 0. VİDEO AÇILANA QƏDƏR ARXA FONDA BAŞLIQ FOTOSU
+          // Video görünəndə AnimatedOpacity ilə hamarla yox olur (1 saniyelik flicker olmur)
+          AnimatedOpacity(
+            opacity: _isVideoVisible ? 0.0 : 1.0,
+            duration: const Duration(milliseconds: 400),
+            child: _buildCoverImage(widget.data),
+          ),
+          // 1. VİDEO EKRANI - AnimatedOpacity ilə smooth fade-in
           if (_isInitialized && _controller != null && !_hasError)
-            Center(
-              child: AspectRatio(
-                aspectRatio: _controller!.value.aspectRatio > 0
-                    ? _controller!.value.aspectRatio
-                    : (9 / 16),
-                child: VideoPlayer(_controller!),
+            AnimatedOpacity(
+              opacity: _isVideoVisible ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 400),
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: _controller!.value.aspectRatio > 0
+                      ? _controller!.value.aspectRatio
+                      : (9 / 16),
+                  child: VideoPlayer(_controller!),
+                ),
               ),
             )
           else if (_hasError)
@@ -1412,6 +1427,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                         setState(() {
                           _hasError = false;
                           _isInitialized = false;
+                          _isVideoVisible = false;
                         });
                         _controller?.dispose();
                         _controller = null;
