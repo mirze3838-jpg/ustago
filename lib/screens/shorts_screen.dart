@@ -447,16 +447,22 @@ class _ShortsScreenState extends State<ShortsScreen> {
                         }
 
                         try {
-                          final authorName = user?.displayName ?? 'UstaGo Ustası';
+                          String authorName = user?.displayName ?? 'UstaGo Ustası';
                           final uid = user?.uid ?? 'guest';
                           final tradeVal = tradeController.text.trim().isEmpty ? 'Tikinti' : tradeController.text.trim();
+                          String authorPhone = phone.isEmpty ? '+994 50 000 00 00' : phone;
 
                           String? uPhoto;
                           if (user != null) {
                             try {
                               final uDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
                               if (uDoc.exists) {
-                                uPhoto = uDoc.data()?['photoBase64'];
+                                final uData = uDoc.data();
+                                uPhoto = uData?['photoBase64'];
+                                final fn = uData?['fullName']?.toString().trim();
+                                if (fn != null && fn.isNotEmpty) authorName = fn;
+                                final ph = uData?['phone']?.toString().trim();
+                                if (ph != null && ph.isNotEmpty) authorPhone = ph;
                               }
                             } catch (_) {}
                           }
@@ -473,7 +479,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                             'authorPhotoBase64': uPhoto ?? '',
                             'artisanName': authorName,
                             'trade': tradeVal,
-                            'phone': phone.isEmpty ? '+994 50 000 00 00' : phone,
+                            'phone': authorPhone,
                             'likes': 0,
                             'createdAt': FieldValue.serverTimestamp(),
                           });
@@ -483,6 +489,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                             await FirebaseFirestore.instance.collection('posts').add({
                               'userId': uid,
                               'authorName': authorName,
+                              'phone': authorPhone,
                               'authorRole': 'usta',
                               'title': title,
                               'category': tradeVal,
@@ -667,21 +674,26 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
   bool _isLiked = false;
   String? _authorPhotoBase64;
   String? _authorPhotoUrl;
+  String? _authorName;
+  String? _authorTrade;
+  String? _authorPhone;
 
   @override
   void initState() {
     super.initState();
     _likeCount = int.tryParse(widget.data['likes']?.toString() ?? '0') ?? 0;
+    _authorName = widget.data['artisanName'];
+    _authorTrade = widget.data['trade'];
+    _authorPhone = widget.data['phone'];
     _checkIfLiked();
-    _loadAuthorPhoto();
+    _loadAuthorData();
     _initVideo();
   }
 
-  void _loadAuthorPhoto() async {
+  void _loadAuthorData() async {
     final photo = widget.data['authorPhotoBase64'] ?? widget.data['photoBase64'];
     if (photo != null && photo.toString().isNotEmpty) {
       if (mounted) setState(() => _authorPhotoBase64 = photo.toString());
-      return;
     }
     final uid = widget.data['userId']?.toString() ?? '';
     if (uid.isNotEmpty && uid != 'guest') {
@@ -689,10 +701,28 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
         final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
         if (doc.exists && mounted) {
           final data = doc.data();
-          setState(() {
-            _authorPhotoBase64 = data?['photoBase64'];
-            _authorPhotoUrl = data?['photoUrl'];
-          });
+          if (data != null) {
+            setState(() {
+              if (data['photoBase64'] != null && data['photoBase64'].toString().isNotEmpty) {
+                _authorPhotoBase64 = data['photoBase64'];
+              }
+              if (data['photoUrl'] != null && data['photoUrl'].toString().isNotEmpty) {
+                _authorPhotoUrl = data['photoUrl'];
+              }
+              final fn = data['fullName']?.toString().trim();
+              if (fn != null && fn.isNotEmpty) {
+                _authorName = fn;
+              }
+              final cat = data['category']?.toString().trim();
+              if (cat != null && cat.isNotEmpty) {
+                _authorTrade = cat;
+              }
+              final ph = data['phone']?.toString().trim();
+              if (ph != null && ph.isNotEmpty) {
+                _authorPhone = ph;
+              }
+            });
+          }
         }
       } catch (_) {}
     }
@@ -700,12 +730,15 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
 
   Future<void> _openArtisanProfile() async {
     final uid = widget.data['userId']?.toString() ?? '';
+    final curName = _authorName ?? widget.data['artisanName'] ?? 'Usta';
+    final curTrade = _authorTrade ?? widget.data['trade'] ?? 'Usta';
+    final curPhone = _authorPhone ?? widget.data['phone'] ?? '';
     Map<String, dynamic> artisanMap = {
       'id': uid,
       'uid': uid,
-      'fullName': widget.data['artisanName'] ?? 'Usta',
-      'category': widget.data['trade'] ?? 'Usta',
-      'phone': widget.data['phone'] ?? '',
+      'fullName': curName,
+      'category': curTrade,
+      'phone': curPhone,
       'photoBase64': _authorPhotoBase64 ?? widget.data['authorPhotoBase64'],
       'photoUrl': _authorPhotoUrl ?? widget.data['photoUrl'],
       'videoUrl': widget.data['videoUrl'],
@@ -1605,7 +1638,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                               children: [
                                 Flexible(
                                   child: Text(
-                                    widget.data['artisanName'],
+                                    _authorName ?? widget.data['artisanName'] ?? 'Usta',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 16,
@@ -1619,7 +1652,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                               ],
                             ),
                             Text(
-                              widget.data['trade'],
+                              _authorTrade ?? widget.data['trade'] ?? 'Usta',
                               style: const TextStyle(color: Colors.white70, fontSize: 12),
                             ),
                           ],
@@ -1630,7 +1663,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  widget.data['title'],
+                  widget.data['title'] ?? '',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white, fontSize: 14),
@@ -1639,7 +1672,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                 Row(
                   children: [
                     ElevatedButton.icon(
-                      onPressed: () => _makeCall(widget.data['phone']),
+                      onPressed: () => _makeCall(_authorPhone ?? widget.data['phone'] ?? ''),
                       icon: const Icon(Icons.phone, size: 16),
                       label: const Text('Zəng et'),
                       style: ElevatedButton.styleFrom(
@@ -1651,7 +1684,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                     ),
                     const SizedBox(width: 8),
                     OutlinedButton.icon(
-                      onPressed: () => _openWhatsApp(widget.data['phone']),
+                      onPressed: () => _openWhatsApp(_authorPhone ?? widget.data['phone'] ?? ''),
                       icon: const Icon(Icons.chat, size: 16, color: Colors.green),
                       label: const Text('WhatsApp', style: TextStyle(color: Colors.white)),
                       style: OutlinedButton.styleFrom(

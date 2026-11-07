@@ -80,8 +80,25 @@ class _HomeScreenState extends State<HomeScreen> {
     if (user != null) {
       try {
         final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-        if (doc.exists && doc.data()?['notificationsRead'] == true) {
-          hasRead = true;
+        if (doc.exists) {
+          final uData = doc.data();
+          if (uData?['notificationsRead'] == true) {
+            hasRead = true;
+          }
+          final String? fullName = uData?['fullName'];
+          final String? phone = uData?['phone'];
+          final String? category = uData?['category'];
+          final String? photoBase64 = uData?['photoBase64'];
+          // İstifadəçinin mövcud shorts və postlarını cari adı ilə arxa planda dərhal sinxronlaşdırırıq
+          if (fullName != null && fullName.isNotEmpty) {
+            _syncUserDataAcrossCollections(
+              user.uid,
+              newName: fullName,
+              newPhone: phone,
+              newTrade: category,
+              newPhotoBase64: photoBase64,
+            );
+          }
         }
       } catch (_) {}
     }
@@ -90,6 +107,74 @@ class _HomeScreenState extends State<HomeScreen> {
         _currentUserRole = role;
         if (hasRead) _unreadNotifications = 0;
       });
+    }
+  }
+
+  /// İstifadəçinin adı, nömrəsi, fotosu və ya ixtisası dəyişdikdə bütün Shorts və Post bazasını sinxronlaşdırır
+  Future<void> _syncUserDataAcrossCollections(
+    String uid, {
+    String? newName,
+    String? newPhone,
+    String? newTrade,
+    String? newPhotoBase64,
+  }) async {
+    if (uid.isEmpty || uid == 'guest') return;
+    try {
+      // 1. Shorts kolleksiyasında istifadəçinin videolarını tap və yenilə
+      final shortsSnap = await FirebaseFirestore.instance
+          .collection('shorts')
+          .where('userId', isEqualTo: uid)
+          .get();
+
+      for (final doc in shortsSnap.docs) {
+        final data = doc.data();
+        final Map<String, dynamic> updates = {};
+
+        if (newName != null && newName.trim().isNotEmpty && data['artisanName'] != newName.trim()) {
+          updates['artisanName'] = newName.trim();
+        }
+        if (newPhone != null && newPhone.trim().isNotEmpty && data['phone'] != newPhone.trim()) {
+          updates['phone'] = newPhone.trim();
+        }
+        if (newTrade != null && newTrade.trim().isNotEmpty && data['trade'] != newTrade.trim()) {
+          updates['trade'] = newTrade.trim();
+        }
+        if (newPhotoBase64 != null && data['authorPhotoBase64'] != newPhotoBase64) {
+          updates['authorPhotoBase64'] = newPhotoBase64;
+        }
+
+        if (updates.isNotEmpty) {
+          await doc.reference.update(updates);
+        }
+      }
+
+      // 2. Posts (portfolio) kolleksiyasında istifadəçinin postlarını tap və yenilə
+      final postsSnap = await FirebaseFirestore.instance
+          .collection('posts')
+          .where('userId', isEqualTo: uid)
+          .get();
+
+      for (final doc in postsSnap.docs) {
+        final data = doc.data();
+        final Map<String, dynamic> updates = {};
+
+        if (newName != null && newName.trim().isNotEmpty && data['authorName'] != newName.trim()) {
+          updates['authorName'] = newName.trim();
+          updates['artisanName'] = newName.trim();
+        }
+        if (newPhone != null && newPhone.trim().isNotEmpty && data['phone'] != newPhone.trim()) {
+          updates['phone'] = newPhone.trim();
+        }
+        if (newTrade != null && newTrade.trim().isNotEmpty && data['category'] != newTrade.trim()) {
+          updates['category'] = newTrade.trim();
+        }
+
+        if (updates.isNotEmpty) {
+          await doc.reference.update(updates);
+        }
+      }
+    } catch (e) {
+      debugPrint('Sync user data across collections error: $e');
     }
   }
 
@@ -2589,17 +2674,24 @@ class _HomeScreenState extends State<HomeScreen> {
                             final String coverBase64 = pickedCoverBytes != null ? base64Encode(pickedCoverBytes!) : '';
 
                             String? uPhoto;
+                            String currentAuthorName = authorName;
+                            String currentPhone = '+994 50 000 00 00';
                             try {
                               final uDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
                               if (uDoc.exists) {
-                                uPhoto = uDoc.data()?['photoBase64'];
+                                final uData = uDoc.data();
+                                uPhoto = uData?['photoBase64'];
+                                final fn = uData?['fullName']?.toString().trim();
+                                if (fn != null && fn.isNotEmpty) currentAuthorName = fn;
+                                final ph = uData?['phone']?.toString().trim();
+                                if (ph != null && ph.isNotEmpty) currentPhone = ph;
                               }
                             } catch (_) {}
 
                             // 1. Profil postlarına əlavə et
                             await FirebaseFirestore.instance.collection('posts').add({
                               'userId': uid,
-                              'authorName': authorName,
+                              'authorName': currentAuthorName,
                               'authorRole': role,
                               'title': title,
                               'category': selectedCat,
@@ -2608,6 +2700,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               'thumbnailBase64': coverBase64,
                               'thumbnailUrl': '',
                               'isVideo': true,
+                              'phone': currentPhone,
                               'createdAt': FieldValue.serverTimestamp(),
                               'likes': 0,
                             });
@@ -2620,18 +2713,27 @@ class _HomeScreenState extends State<HomeScreen> {
                               'thumbnailBase64': coverBase64,
                               'thumbnailUrl': '',
                               'authorPhotoBase64': uPhoto ?? '',
-                              'artisanName': authorName,
+                              'artisanName': currentAuthorName,
                               'trade': selectedCat,
-                              'phone': '+994 50 000 00 00',
+                              'phone': currentPhone,
                               'likes': 0,
                               'createdAt': FieldValue.serverTimestamp(),
                             });
                           } else {
                             final base64String = base64Encode(selectedImageBytes!);
 
+                            String currentAuthorName = authorName;
+                            try {
+                              final uDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+                              if (uDoc.exists) {
+                                final fn = uDoc.data()?['fullName']?.toString().trim();
+                                if (fn != null && fn.isNotEmpty) currentAuthorName = fn;
+                              }
+                            } catch (_) {}
+
                             await FirebaseFirestore.instance.collection('posts').add({
                               'userId': uid,
-                              'authorName': authorName,
+                              'authorName': currentAuthorName,
                               'authorRole': role,
                               'title': title,
                               'category': selectedCat,
@@ -3028,6 +3130,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   await FirebaseFirestore.instance.collection('users').doc(uid).set({
                     'photoBase64': '',
                   }, SetOptions(merge: true));
+                  _syncUserDataAcrossCollections(uid, newPhotoBase64: '');
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Profil şəkli silindi.')),
@@ -3065,6 +3168,8 @@ class _HomeScreenState extends State<HomeScreen> {
         await FirebaseFirestore.instance.collection('users').doc(uid).set({
           'photoBase64': base64String,
         }, SetOptions(merge: true));
+
+        _syncUserDataAcrossCollections(uid, newPhotoBase64: base64String);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -3239,16 +3344,27 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () async {
                 final String district = districtController.text.trim();
                 final String fullCity = district.isNotEmpty ? '$selectedCityVal, $district' : selectedCityVal;
+                final updatedName = nameController.text.trim();
+                final updatedPhone = phoneController.text.trim();
+                final updatedTrade = selectedRole == 'usta' ? selectedUstaCategory : '';
 
                 await FirebaseFirestore.instance.collection('users').doc(uid).set({
-                  'fullName': nameController.text.trim(),
-                  'phone': phoneController.text.trim(),
+                  'fullName': updatedName,
+                  'phone': updatedPhone,
                   'role': selectedRole,
-                  'category': selectedRole == 'usta' ? selectedUstaCategory : '',
+                  'category': updatedTrade,
                   'city': fullCity,
                   'isWorking': selectedRole == 'usta' ? isWorkingStatus : false,
                   'bio': selectedRole == 'usta' ? bioController.text.trim() : (userData?['bio'] ?? ''),
                 }, SetOptions(merge: true));
+
+                // İstifadəçinin mövcud bütün Shorts videolarını və postlarını yeni ad və nömrə ilə sinxronlaşdır
+                _syncUserDataAcrossCollections(
+                  uid,
+                  newName: updatedName,
+                  newPhone: updatedPhone,
+                  newTrade: updatedTrade,
+                );
                 if (mounted) {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
