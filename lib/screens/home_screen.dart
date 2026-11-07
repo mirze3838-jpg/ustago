@@ -1203,44 +1203,30 @@ class _HomeScreenState extends State<HomeScreen> {
     final String? thumbnailUrl = item['thumbnailUrl'];
     final String trade = (item['trade'] ?? 'Tikinti').toString();
 
-    // Videonun ilk kadrı yüklənənə qədər qaranlıq qalmamaq üçün kateqoriyaya uyğun real şık şəkil
-    final String placeholderImg = _getCategoryPlaceholderImage(trade);
-    final Widget fallbackVisual = Stack(
-      fit: StackFit.expand,
-      children: [
-        Image.network(
-          placeholderImg,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF1769D2), Color(0xFF0D47A1)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
-          ),
+    // Video kadrı yüklənənə qədər zərif tünd fon (köhnə stok şəkillər heç vaxt görünmür)
+    final Widget fallbackVisual = Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
         ),
-        Container(
+      ),
+      child: Center(
+        child: Container(
+          width: 44,
+          height: 44,
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.black.withOpacity(0.2), Colors.black.withOpacity(0.65)],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
+            color: Colors.white.withOpacity(0.08),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.play_arrow_rounded,
+            color: Colors.white38,
+            size: 28,
           ),
         ),
-        Center(
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.25),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.play_arrow_rounded, size: 36, color: Colors.white),
-          ),
-        ),
-      ],
+      ),
     );
 
     Widget coverWidget;
@@ -3333,10 +3319,10 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
 
       await controller.setVolume(0);
 
-      // Videonun ilk qaranlıq kadrı qalmasın deyə irəli keçirik və brauzerin kadrı çəkməsi üçün qısa oxuduruq
+      // Videonun ilk kadrını dərhal çəkirik
       final duration = controller.value.duration;
-      final seekTarget = duration > const Duration(milliseconds: 700)
-          ? const Duration(milliseconds: 700)
+      final seekTarget = duration > const Duration(milliseconds: 300)
+          ? const Duration(milliseconds: 300)
           : Duration.zero;
 
       if (seekTarget > Duration.zero) {
@@ -3344,7 +3330,7 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
       }
       try {
         await controller.play();
-        await Future.delayed(const Duration(milliseconds: 250));
+        await Future.delayed(const Duration(milliseconds: 100));
         await controller.pause();
       } catch (_) {}
 

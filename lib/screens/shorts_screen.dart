@@ -251,14 +251,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                                 borderRadius: BorderRadius.circular(8),
                                 child: Image.memory(pickedCoverBytes!, fit: BoxFit.cover),
                               )
-                            : ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.network(
-                                  CategoryCityService.getCategoryPlaceholderImage(tradeController.text),
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const Icon(Icons.movie_filter_rounded, color: Color(0xFF1769D2)),
-                                ),
-                              ),
+                            : const Icon(Icons.video_library_rounded, color: Color(0xFF1769D2)),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -276,18 +269,17 @@ class _ShortsScreenState extends State<ShortsScreen> {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                                     decoration: BoxDecoration(
-                                      color: Colors.green.shade50,
+                                      color: Colors.blue.shade50,
                                       borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(color: Colors.green.shade300),
                                     ),
-                                    child: const Text('Avtomatik HD', style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold)),
+                                    child: const Text('Videonun öz kadrı', style: TextStyle(color: Color(0xFF1769D2), fontSize: 10, fontWeight: FontWeight.bold)),
                                   ),
                               ],
                             ),
                             Text(
                               pickedCoverBytes != null
                                   ? pickedCover!.name
-                                  : 'Qaranlıq qalmamaq üçün peşənizə uyğun canlı şəkil',
+                                  : 'Videonun öz daxilindən avtomatik kadr çıxarılır',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(color: Colors.grey, fontSize: 11),
@@ -1279,37 +1271,27 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     final String? thumbnailUrl = data['thumbnailUrl'];
     final String trade = (data['trade'] ?? '').toString();
 
-    // Peşəyə uyğun gözəl HD foto kadrı
-    final String placeholderImg = CategoryCityService.getCategoryPlaceholderImage(trade);
-
-    final fallbackWidget = Stack(
-      fit: StackFit.expand,
-      children: [
-        Image.network(
-          placeholderImg,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: double.infinity,
-          errorBuilder: (_, __, ___) => Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF1E3A8A), Color(0xFF0F172A)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
+    // Video tam açılana qədər zərif tünd fon (köhnə stok şəkillər heç vaxt görünmür)
+    final fallbackWidget = Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: const Center(
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.white38),
           ),
         ),
-        Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.black.withOpacity(0.2), Colors.black.withOpacity(0.75)],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
-          ),
-        ),
-      ],
+      ),
     );
 
     if (thumbnailBase64 != null && thumbnailBase64.isNotEmpty) {
