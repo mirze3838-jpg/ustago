@@ -2211,17 +2211,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // 1. Əgər VİDEO postudursa: tam ekran video baxışı
     if (isVideo && videoUrl.isNotEmpty) {
-      // Web-də CORS məhdudiyyəti olduğundan birbaşa tam ekran açırıq
-      // Autoplay üçün istifadəçinin GestureDetector tap event-i lazımdır
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => _FullScreenVideoViewer(
+          builder: (_) => FullScreenVideoViewer(
             videoUrl: videoUrl,
             title: post['title'] ?? '',
             category: post['category'] ?? 'Usta İşi',
             postId: postId,
             coverBase64: imgBase64,
+            isOwner: true,
           ),
         ),
       );
@@ -3353,58 +3352,76 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
   @override
   Widget build(BuildContext context) {
     final bool ready = _isInitialized && _controller != null && _controller!.value.isInitialized;
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 300),
-      child: ready
-          ? SizedBox.expand(
-              key: const ValueKey('video_ready'),
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: _controller!.value.size.width > 0 ? _controller!.value.size.width : 1080,
-                  height: _controller!.value.size.height > 0 ? _controller!.value.size.height : 1920,
-                  child: VideoPlayer(_controller!),
+    return IgnorePointer(
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        child: ready
+            ? SizedBox.expand(
+                key: const ValueKey('video_ready'),
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width: _controller!.value.size.width > 0 ? _controller!.value.size.width : 1080,
+                    height: _controller!.value.size.height > 0 ? _controller!.value.size.height : 1920,
+                    child: VideoPlayer(_controller!),
+                  ),
                 ),
+              )
+            : SizedBox.expand(
+                key: const ValueKey('video_fallback'),
+                child: widget.fallback,
               ),
-            )
-          : SizedBox.expand(
-              key: const ValueKey('video_fallback'),
-              child: widget.fallback,
-            ),
+      ),
     );
   }
 }
 
 // Hesabdan və qalereyadan videolara birbaşa tam ekran baxış (Shorts bölməsinə keçmədən)
-class _FullScreenVideoViewer extends StatefulWidget {
+class FullScreenVideoViewer extends StatefulWidget {
   final String videoUrl;
   final String title;
   final String category;
   final String postId;
   final String? coverBase64;
+  final bool isOwner;
 
-  const _FullScreenVideoViewer({
+  const FullScreenVideoViewer({
+    super.key,
     required this.videoUrl,
     required this.title,
     required this.category,
-    required this.postId,
+    this.postId = '',
     this.coverBase64,
+    this.isOwner = true,
   });
 
   @override
-  State<_FullScreenVideoViewer> createState() => _FullScreenVideoViewerState();
+  State<FullScreenVideoViewer> createState() => FullScreenVideoViewerState();
 }
 
-class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
+class FullScreenVideoViewerState extends State<FullScreenVideoViewer> {
   VideoPlayerController? _controller;
   bool _isInit = false;
   bool _hasError = false;
   bool _isMuted = false;
+  bool _isPlaying = false;
+  bool _showControls = true;
+  Timer? _hideControlsTimer;
 
   @override
   void initState() {
     super.initState();
     _initVideo();
+  }
+
+  void _videoListener() {
+    if (!mounted || _controller == null) return;
+    final playing = _controller!.value.isPlaying;
+    if (playing != _isPlaying) {
+      setState(() {
+        _isPlaying = playing;
+      });
+    }
   }
 
   Future<void> _initVideo() async {
@@ -3415,7 +3432,8 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
     }
 
     try {
-      final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+      final uri = Uri.parse(url);
+      final controller = VideoPlayerController.networkUrl(uri);
       _controller = controller;
 
       final timeout = kIsWeb ? const Duration(seconds: 15) : const Duration(seconds: 25);
@@ -3434,22 +3452,26 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
       }
 
       controller.setLooping(true);
+      controller.addListener(_videoListener);
 
-      setState(() {
-        _isInit = true;
-        _hasError = false;
-      });
-
-      // Web-də autoplay üçün: əvvəlcə muted, sonra play
-      // play() user gesture-dan asılıdır, uğursuz olsa istifadəçi özü basacaq
+      // Web-də brauzerlər səsli autoplay-i bloklayır, ona görə default olaraq muted başlayırıq
       if (kIsWeb) {
         await controller.setVolume(0);
         _isMuted = true;
+      } else {
+        await controller.setVolume(1.0);
+        _isMuted = false;
       }
-      try {
-        await controller.play();
-      } catch (_) {
-        // Autoplay blok olunubsa: istifadəçi böyük play düyməsinə basacaq
+
+      await controller.play();
+
+      if (mounted) {
+        setState(() {
+          _isInit = true;
+          _hasError = false;
+          _isPlaying = true;
+        });
+        _startHideControlsTimer();
       }
     } catch (err) {
       debugPrint('Post video error: $err');
@@ -3457,8 +3479,42 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
     }
   }
 
+  void _startHideControlsTimer() {
+    _hideControlsTimer?.cancel();
+    _hideControlsTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted && _isPlaying) {
+        setState(() => _showControls = false);
+      }
+    });
+  }
+
+  Future<void> _togglePlay() async {
+    final c = _controller;
+    if (c == null || !_isInit) return;
+    if (c.value.isPlaying) {
+      await c.pause();
+    } else {
+      await c.play();
+    }
+    setState(() {
+      _showControls = true;
+    });
+    _startHideControlsTimer();
+  }
+
+  Future<void> _toggleMute() async {
+    final c = _controller;
+    if (c == null) return;
+    setState(() {
+      _isMuted = !_isMuted;
+    });
+    await c.setVolume(_isMuted ? 0 : 1.0);
+  }
+
   @override
   void dispose() {
+    _hideControlsTimer?.cancel();
+    _controller?.removeListener(_videoListener);
     _controller?.dispose();
     super.dispose();
   }
@@ -3501,31 +3557,31 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
     }
   }
 
+  String _formatDuration(Duration d) {
+    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = _controller;
     return Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
-        onTap: () async {
-          if (_isInit && c != null) {
-            if (!c.value.isPlaying) {
-              // User gesture ilə play — web autoplay məhdudiyyətini aşır
-              if (kIsWeb) {
-                await c.setVolume(_isMuted ? 0 : 1.0);
-              }
-              await c.play();
-              setState(() {});
-            } else {
-              await c.pause();
-              setState(() {});
-            }
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          setState(() {
+            _showControls = !_showControls;
+          });
+          if (_showControls) {
+            _startHideControlsTimer();
           }
         },
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 0. Arxa fonda üz qabığı (Video açılana qədər qaranlıq qalmır)
+            // 0. Arxa fonda üz qabığı
             if (widget.coverBase64 != null && widget.coverBase64!.isNotEmpty)
               Center(
                 child: Image.memory(
@@ -3536,14 +3592,24 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
                 ),
               )
             else
-              Container(color: Colors.black),
+              Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
+              ),
 
-            // 1. Video (Əsl en-boy nisbəti qorunur, kəsilmir)
+            // 1. Video (Əsl en-boy nisbəti qorunur, IgnorePointer ilə klikləri udmur)
             if (_isInit && c != null)
               Center(
                 child: AspectRatio(
                   aspectRatio: c.value.aspectRatio > 0 ? c.value.aspectRatio : 9 / 16,
-                  child: VideoPlayer(c),
+                  child: IgnorePointer(
+                    child: VideoPlayer(c),
+                  ),
                 ),
               )
             else if (_hasError)
@@ -3553,18 +3619,18 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.videocam_off_rounded, color: Colors.orangeAccent, size: 64),
+                      const Icon(Icons.play_circle_outline_rounded, color: Colors.amber, size: 72),
                       const SizedBox(height: 14),
                       const Text(
-                        'Video oxunmadı və ya link köhnəlib',
+                        'Video brauzerdə birbaşa açılmadı',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Bu videonun serverdəki faylı köhnəlmiş və ya silinmiş ola bilər.\nVideonun linkinə baxa və ya açılmayan videonu silə bilərsiniz.',
+                        'Videonun faylını xarici pəncərədə bir toxunuşla izləyə bilərsiniz.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
                       ),
                       const SizedBox(height: 20),
                       Wrap(
@@ -3573,29 +3639,48 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
                         runSpacing: 10,
                         children: [
                           if (widget.videoUrl.isNotEmpty)
-                            OutlinedButton.icon(
+                            ElevatedButton.icon(
                               onPressed: () async {
                                 final uri = Uri.parse(widget.videoUrl);
                                 if (await canLaunchUrl(uri)) {
                                   await launchUrl(uri, mode: LaunchMode.externalApplication);
                                 }
                               },
-                              icon: const Icon(Icons.open_in_new, size: 16),
-                              label: const Text('Linki Yoxla'),
-                              style: OutlinedButton.styleFrom(
+                              icon: const Icon(Icons.open_in_new, size: 18),
+                              label: const Text('Videonu Brauzerdə Aç'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF1769D2),
                                 foregroundColor: Colors.white,
-                                side: const BorderSide(color: Colors.white54),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               ),
                             ),
-                          ElevatedButton.icon(
-                            onPressed: _deletePostAndShorts,
-                            icon: const Icon(Icons.delete_outline, size: 16),
-                            label: const Text('Bu Videonu Sil'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red.shade700,
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _hasError = false;
+                                _isInit = false;
+                              });
+                              _initVideo();
+                            },
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: const Text('Yenidən Cəhd Et'),
+                            style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.white,
+                              side: const BorderSide(color: Colors.white54),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                             ),
                           ),
+                          if (widget.isOwner && widget.postId.isNotEmpty)
+                            ElevatedButton.icon(
+                              onPressed: _deletePostAndShorts,
+                              icon: const Icon(Icons.delete_outline, size: 18),
+                              label: const Text('Bu Videonu Sil'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red.shade700,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              ),
+                            ),
                         ],
                       ),
                     ],
@@ -3604,123 +3689,209 @@ class _FullScreenVideoViewerState extends State<_FullScreenVideoViewer> {
               )
             else
               const Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              ),
-
-            // Pause/hazır amma oynanmır — Play ikonu + "Tıxla" yazısı
-            if (_isInit && c != null && !c.value.isPlaying)
-              Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 60),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Text(
-                        'Oynatmaq üçün tıxla',
-                        style: TextStyle(color: Colors.white70, fontSize: 13),
-                      ),
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 14),
+                    Text(
+                      'Video yüklənir...',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
                     ),
                   ],
                 ),
               ),
 
-            // Yuxarı naviqasiya (Geri, Səs və Sil düymələri)
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: Colors.black54,
-                      child: IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
-                      ),
+            // 2. Mərkəzi böyük Play / Pause düyməsi
+            if (_isInit && c != null && (_showControls || !c.value.isPlaying))
+              Center(
+                child: GestureDetector(
+                  onTap: _togglePlay,
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.65),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white30, width: 2),
                     ),
-                    Row(
-                      children: [
-                        if (_isInit && c != null)
-                          CircleAvatar(
-                            backgroundColor: _isMuted ? Colors.red.withOpacity(0.8) : Colors.black54,
-                            child: IconButton(
-                              tooltip: _isMuted ? 'Səsi Aç' : 'Səsi Kapat',
-                              icon: Icon(_isMuted ? Icons.volume_off : Icons.volume_up, color: Colors.white),
-                              onPressed: () async {
-                                setState(() {
-                                  _isMuted = !_isMuted;
-                                });
-                                await c.setVolume(_isMuted ? 0 : 1.0);
-                              },
-                            ),
-                          ),
-                        const SizedBox(width: 8),
-                        CircleAvatar(
-                          backgroundColor: Colors.black54,
-                          child: IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                            onPressed: _deletePostAndShorts,
-                          ),
+                    child: Icon(
+                      c.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 56,
+                    ),
+                  ),
+                ),
+              ),
+
+            // 3. Web üçün Səs açma xəbərdarlıq pəncərəsi (Əgər muted-dirsə)
+            if (_isInit && _isMuted)
+              Positioned(
+                top: 70,
+                right: 16,
+                child: GestureDetector(
+                  onTap: _toggleMute,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade700,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 6),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.volume_off, color: Colors.white, size: 16),
+                        SizedBox(width: 6),
+                        Text(
+                          'Səsi Aç',
+                          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Aşağı başlıq və kateqoriya
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
                   ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (widget.category.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1769D2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          widget.category,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+
+            // 4. Yuxarı naviqasiya (Geri, Səs və Sil düymələri)
+            if (_showControls || _hasError || !_isInit)
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: Colors.black54,
+                        child: IconButton(
+                          icon: const Icon(Icons.arrow_back, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
                         ),
                       ),
-                    const SizedBox(height: 6),
-                    Text(
-                      widget.title,
-                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
-                    ),
-                  ],
+                      Row(
+                        children: [
+                          if (_isInit && c != null)
+                            CircleAvatar(
+                              backgroundColor: _isMuted ? Colors.amber.shade800 : Colors.black54,
+                              child: IconButton(
+                                tooltip: _isMuted ? 'Səsi Aç' : 'Səsi Kapat',
+                                icon: Icon(_isMuted ? Icons.volume_off : Icons.volume_up, color: Colors.white),
+                                onPressed: _toggleMute,
+                              ),
+                            ),
+                          const SizedBox(width: 8),
+                          if (widget.videoUrl.isNotEmpty)
+                            CircleAvatar(
+                              backgroundColor: Colors.black54,
+                              child: IconButton(
+                                tooltip: 'Brauzerdə Aç',
+                                icon: const Icon(Icons.open_in_new, color: Colors.white),
+                                onPressed: () async {
+                                  final uri = Uri.parse(widget.videoUrl);
+                                  if (await canLaunchUrl(uri)) {
+                                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                  }
+                                },
+                              ),
+                            ),
+                          if (widget.isOwner && widget.postId.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            CircleAvatar(
+                              backgroundColor: Colors.black54,
+                              child: IconButton(
+                                tooltip: 'Videonu Sil',
+                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                onPressed: _deletePostAndShorts,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
+
+            // 5. Aşağı idarəetmə paneli və başlıq
+            if (_showControls || _hasError || !_isInit)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 28),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.transparent, Colors.black.withOpacity(0.92)],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Vaxt xətti (Progress slider)
+                      if (_isInit && c != null) ...[
+                        VideoProgressIndicator(
+                          c,
+                          allowScrubbing: true,
+                          colors: const VideoProgressColors(
+                            playedColor: Color(0xFF1769D2),
+                            bufferedColor: Colors.white24,
+                            backgroundColor: Colors.white10,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _formatDuration(c.value.position),
+                              style: const TextStyle(color: Colors.white70, fontSize: 11),
+                            ),
+                            Text(
+                              _formatDuration(c.value.duration),
+                              style: const TextStyle(color: Colors.white70, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+
+                      // Kateqoriya və Başlıq
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          if (widget.category.isNotEmpty) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1769D2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                widget.category,
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          Expanded(
+                            child: Text(
+                              widget.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       ),

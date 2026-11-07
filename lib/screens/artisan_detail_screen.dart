@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
+import 'home_screen.dart';
 
 class ArtisanDetailScreen extends StatefulWidget {
   final Map<String, dynamic> artisanData;
@@ -592,7 +593,22 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                     return InkWell(
                       borderRadius: BorderRadius.circular(12),
                       onTap: () {
-                        if (img != null && img.isNotEmpty) {
+                        final videoUrl = (post['videoUrl'] ?? '').toString().trim();
+                        if (isVid && videoUrl.isNotEmpty) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => FullScreenVideoViewer(
+                                videoUrl: videoUrl,
+                                title: title,
+                                category: post['category'] ?? 'Usta İşi',
+                                postId: docs[index].id,
+                                coverBase64: img,
+                                isOwner: false,
+                              ),
+                            ),
+                          );
+                        } else if (img != null && img.isNotEmpty) {
                           _showFullScreenImage(context, img, title);
                         }
                       },
