@@ -23,10 +23,12 @@ class ShortsScreen extends StatefulWidget {
 
 class _ShortsScreenState extends State<ShortsScreen> {
   late final PageController _pageController;
+  int _currentIndex = 0;
 
   @override
   void initState() {
     super.initState();
+    _currentIndex = widget.initialIndex;
     _pageController = PageController(initialPage: widget.initialIndex);
   }
 
@@ -579,10 +581,19 @@ class _ShortsScreenState extends State<ShortsScreen> {
                 controller: _pageController,
                 scrollDirection: Axis.vertical,
                 itemCount: items.length,
+                onPageChanged: (idx) {
+                  setState(() => _currentIndex = idx);
+                },
                 itemBuilder: (context, index) {
+                  // Preload: cari video, həmçinin bir sonrakı və bir əvvəlki video aktiv hazırlaşır
+                  final bool isCurrent = index == _currentIndex;
+                  final bool shouldPreload = (index - _currentIndex).abs() <= 1;
+
                   return _ShortVideoItem(
                     key: ValueKey(items[index]['id'] ?? index),
                     data: items[index],
+                    isCurrent: isCurrent,
+                    shouldPreload: shouldPreload,
                   );
                 },
               );
@@ -656,7 +667,14 @@ class _ShortsScreenState extends State<ShortsScreen> {
 
 class _ShortVideoItem extends StatefulWidget {
   final Map<String, dynamic> data;
-  const _ShortVideoItem({super.key, required this.data});
+  final bool isCurrent;
+  final bool shouldPreload;
+  const _ShortVideoItem({
+    super.key,
+    required this.data,
+    this.isCurrent = true,
+    this.shouldPreload = true,
+  });
 
   @override
   State<_ShortVideoItem> createState() => _ShortVideoItemState();
@@ -687,7 +705,33 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     _authorPhone = widget.data['phone'];
     _checkIfLiked();
     _loadAuthorData();
-    _initVideo();
+    if (widget.shouldPreload) {
+      _initVideo();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _ShortVideoItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.shouldPreload && !_isInitialized && _controller == null && !_hasError) {
+      _initVideo();
+    }
+    if (oldWidget.isCurrent != widget.isCurrent) {
+      if (widget.isCurrent) {
+        if (_controller != null && _isInitialized) {
+          _controller!.play();
+          setState(() {
+            _isPlaying = true;
+            _isVideoVisible = true;
+          });
+        }
+      } else {
+        if (_controller != null && _isInitialized) {
+          _controller!.pause();
+          setState(() => _isPlaying = false);
+        }
+      }
+    }
   }
 
   void _loadAuthorData() async {
@@ -1205,20 +1249,29 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
         await controller.setVolume(1.0);
         _isMuted = false;
       }
-      try {
-        await controller.play();
-      } catch (_) {}
+      // Cari səhifədirsə dərhal oynadırıq, əgər növbəti səhifə kimi arxa fonda preload olunursa - pauzada gözləyir
+      if (widget.isCurrent) {
+        try {
+          await controller.play();
+        } catch (_) {}
+      } else {
+        try {
+          await controller.pause();
+        } catch (_) {}
+      }
 
       setState(() {
         _isInitialized = true;
         _hasError = false;
-        _isPlaying = true;
+        _isPlaying = widget.isCurrent;
       });
 
       // Qısa gecikmə sonra video fade-in edir (brauzer ilk frame-i render etsin)
-      Future.delayed(const Duration(milliseconds: 80), () {
-        if (mounted) setState(() => _isVideoVisible = true);
-      });
+      if (widget.isCurrent) {
+        Future.delayed(const Duration(milliseconds: 80), () {
+          if (mounted) setState(() => _isVideoVisible = true);
+        });
+      }
 
       controller.addListener(() {
         if (!mounted) return;
