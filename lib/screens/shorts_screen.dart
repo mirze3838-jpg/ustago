@@ -13,6 +13,62 @@ import '../services/video_upload_service.dart';
 import '../services/category_city_service.dart';
 import 'artisan_detail_screen.dart';
 
+/// Shorts videolarının qlobal öncədən yüklənməsi və keşlənməsi üçün nəzarətçi anbarı
+class _ShortsVideoManager {
+  static final Map<String, VideoPlayerController> _controllers = {};
+  static final Set<String> _loadingUrls = {};
+
+  static VideoPlayerController? getController(String url) {
+    return _controllers[url];
+  }
+
+  static Future<VideoPlayerController?> preload(String rawUrl) async {
+    final url = _normalizeUrl(rawUrl);
+    if (url.isEmpty) return null;
+    if (_controllers.containsKey(url)) {
+      return _controllers[url];
+    }
+    if (_loadingUrls.contains(url)) return null;
+
+    _loadingUrls.add(url);
+    try {
+      final uri = Uri.parse(url);
+      final controller = VideoPlayerController.networkUrl(uri);
+      await controller.initialize().timeout(
+        kIsWeb ? const Duration(seconds: 12) : const Duration(seconds: 20),
+      );
+      if (controller.value.isInitialized) {
+        controller.setLooping(true);
+        if (kIsWeb) {
+          await controller.setVolume(0);
+        }
+        _controllers[url] = controller;
+        // Ən çox 8 video kontrolleri keşdə saxlayırıq ki, yaddaş dolmasın
+        if (_controllers.length > 8) {
+          final oldestKey = _controllers.keys.first;
+          _controllers.remove(oldestKey)?.dispose();
+        }
+        return controller;
+      } else {
+        controller.dispose();
+      }
+    } catch (_) {
+      // Səssiz xəta
+    } finally {
+      _loadingUrls.remove(url);
+    }
+    return null;
+  }
+
+  static String _normalizeUrl(String url) {
+    var clean = url.trim();
+    if (clean.contains('tmpfiles.org') && (!clean.contains('/dl/') || clean.split('/').length < 7)) {
+      clean = clean.replaceFirst('/dl/', '/');
+    }
+    return clean;
+  }
+}
+
 class ShortsScreen extends StatefulWidget {
   final int initialIndex;
   const ShortsScreen({super.key, this.initialIndex = 0});
@@ -583,6 +639,16 @@ class _ShortsScreenState extends State<ShortsScreen> {
                 itemCount: items.length,
                 onPageChanged: (idx) {
                   setState(() => _currentIndex = idx);
+                  // Növbəti 2 videonu dərhal qabaqcadan yükləyirik (TikTok/Instagram Reels sürəti üçün)
+                  for (int step = 1; step <= 2; step++) {
+                    final nextIdx = idx + step;
+                    if (nextIdx < items.length) {
+                      final nextUrl = items[nextIdx]['videoUrl']?.toString() ?? '';
+                      if (nextUrl.isNotEmpty) {
+                        _ShortsVideoManager.preload(nextUrl);
+                      }
+                    }
+                  }
                 },
                 itemBuilder: (context, index) {
                   // Preload: cari video, həmçinin bir sonrakı və bir əvvəlki video aktiv hazırlaşır
@@ -803,12 +869,24 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     }
 
     if (mounted) {
-      Navigator.push(
+      final wasPlaying = _controller?.value.isPlaying ?? false;
+      if (wasPlaying) {
+        _controller?.pause();
+        setState(() => _isPlaying = false);
+      }
+
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => ArtisanDetailScreen(artisanData: artisanMap),
         ),
       );
+
+      // Profil səhifəsindən geri qayıdanda videonu yenidən davam etdiririk
+      if (mounted && widget.isCurrent && _controller != null && _isInitialized) {
+        _controller?.play();
+        setState(() => _isPlaying = true);
+      }
     }
   }
 
@@ -1213,20 +1291,25 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     }
 
     try {
-      // Heç bir zərərli httpHeaders ötürmürük - ExoPlayer birbaşa açır
-      // Web-də Flutter video_player brauzerin native <video> elementini işlədir
-      final uri = Uri.parse(url);
-      final controller = VideoPlayerController.networkUrl(uri);
-      _controller = controller;
+      final cleanUrl = _ShortsVideoManager._normalizeUrl(url);
 
-      // Timeout: web üçün 15s, mobil üçün 25s
-      final timeoutDur = kIsWeb ? const Duration(seconds: 15) : const Duration(seconds: 25);
-      await controller.initialize().timeout(
-        timeoutDur,
-        onTimeout: () {
-          debugPrint('Video initialize timeout: $url');
-        },
-      );
+      // 1. Əgər video artıq _ShortsVideoManager tərəfindən qabaqcadan yüklənibsə, dərhal işə salırıq! (0 saniyə)
+      VideoPlayerController? controller = _ShortsVideoManager.getController(cleanUrl);
+
+      if (controller == null || !controller.value.isInitialized) {
+        final uri = Uri.parse(cleanUrl);
+        controller = VideoPlayerController.networkUrl(uri);
+
+        final timeoutDur = kIsWeb ? const Duration(seconds: 15) : const Duration(seconds: 25);
+        await controller.initialize().timeout(
+          timeoutDur,
+          onTimeout: () {
+            debugPrint('Video initialize timeout: $cleanUrl');
+          },
+        );
+      }
+
+      _controller = controller;
 
       if (!mounted) {
         controller.dispose();
@@ -1303,7 +1386,11 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
 
   @override
   void dispose() {
-    _controller?.dispose();
+    // Keşdə olan kontrolleri dispose etmirik ki, geri qayıdanda dərhal hazır qalsın
+    // Sadəcə səsi və ifanı dayandırırıq
+    try {
+      _controller?.pause();
+    } catch (_) {}
     super.dispose();
   }
 
