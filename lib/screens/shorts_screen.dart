@@ -1356,9 +1356,10 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
         });
       }
 
-      controller.addListener(() {
+      final activeController = controller;
+      activeController.addListener(() {
         if (!mounted) return;
-        final playing = controller.value.isPlaying;
+        final playing = activeController.value.isPlaying;
         if (playing != _isPlaying) {
           setState(() {
             _isPlaying = playing;
