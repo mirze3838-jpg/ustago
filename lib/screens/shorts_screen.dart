@@ -13,78 +13,6 @@ import '../services/video_upload_service.dart';
 import '../services/category_city_service.dart';
 import 'artisan_detail_screen.dart';
 
-/// Shorts videolarının qlobal öncədən yüklənməsi və keşlənməsi üçün nəzarətçi anbarı
-class _ShortsVideoManager {
-  // Telefonun yaddaşını (RAM) qorumaq üçün eyni anda maksimum 3 aktiv kontroller saxlayırıq
-  static final Map<String, VideoPlayerController> _controllers = {};
-  static final Set<String> _loadingUrls = {};
-
-  static VideoPlayerController? getController(String rawUrl) {
-    final url = _normalizeUrl(rawUrl);
-    return _controllers[url];
-  }
-
-  static Future<VideoPlayerController?> preload(String rawUrl) async {
-    final url = _normalizeUrl(rawUrl);
-    if (url.isEmpty) return null;
-    if (_controllers.containsKey(url)) {
-      return _controllers[url];
-    }
-    if (_loadingUrls.contains(url)) return null;
-
-    _loadingUrls.add(url);
-    try {
-      final uri = Uri.parse(url);
-      final controller = VideoPlayerController.networkUrl(uri);
-      await controller.initialize().timeout(
-        kIsWeb ? const Duration(seconds: 10) : const Duration(seconds: 15),
-      );
-      if (controller.value.isInitialized) {
-        controller.setLooping(true);
-        if (kIsWeb) {
-          await controller.setVolume(0);
-        }
-        _controllers[url] = controller;
-        // Əgər 3-dən çox kontroller yığılıbsa, ən köhnəsini mütləq dispose edirik (tətbiqdən atmanı 100% önləyir)
-        while (_controllers.length > 3) {
-          final oldestKey = _controllers.keys.first;
-          final c = _controllers.remove(oldestKey);
-          try {
-            c?.dispose();
-          } catch (_) {}
-        }
-        return controller;
-      } else {
-        controller.dispose();
-      }
-    } catch (_) {
-      // Səssiz xəta
-    } finally {
-      _loadingUrls.remove(url);
-    }
-    return null;
-  }
-
-  static void cleanFarControllers(List<String> keepUrls) {
-    final keepSet = keepUrls.map(_normalizeUrl).toSet();
-    final toRemove = _controllers.keys.where((k) => !keepSet.contains(k)).toList();
-    for (var k in toRemove) {
-      final c = _controllers.remove(k);
-      try {
-        c?.dispose();
-      } catch (_) {}
-    }
-  }
-
-  static String _normalizeUrl(String url) {
-    var clean = url.trim();
-    if (clean.contains('tmpfiles.org') && (!clean.contains('/dl/') || clean.split('/').length < 7)) {
-      clean = clean.replaceFirst('/dl/', '/');
-    }
-    return clean;
-  }
-}
-
 class ShortsScreen extends StatefulWidget {
   final int initialIndex;
   const ShortsScreen({super.key, this.initialIndex = 0});
@@ -649,46 +577,19 @@ class _ShortsScreenState extends State<ShortsScreen> {
                 items.addAll(_sampleShorts);
               }
 
-              // İlk açılışda dərhal 1-ci və 2-ci videonun kontrollerini qabaqcadan hazırlayırıq
-              if (items.isNotEmpty) {
-                final firstUrl = items[0]['videoUrl']?.toString() ?? '';
-                if (firstUrl.isNotEmpty) _ShortsVideoManager.preload(firstUrl);
-                if (items.length > 1) {
-                  final secondUrl = items[1]['videoUrl']?.toString() ?? '';
-                  if (secondUrl.isNotEmpty) _ShortsVideoManager.preload(secondUrl);
-                }
-              }
-
               return PageView.builder(
                 controller: _pageController,
                 scrollDirection: Axis.vertical,
                 itemCount: items.length,
                 onPageChanged: (idx) {
                   setState(() => _currentIndex = idx);
-                  // Növbəti videonu dərhal qabaqcadan yükləyirik
-                  if (idx + 1 < items.length) {
-                    final nextUrl = items[idx + 1]['videoUrl']?.toString() ?? '';
-                    if (nextUrl.isNotEmpty) {
-                      _ShortsVideoManager.preload(nextUrl);
-                    }
-                  }
-                  // Yaddaşı təmiz saxlayırıq: cari, 1 əvvəl və 1 sonrakı saxlanır, uzaq videolar dərhal yaddaşdan silinir (crash olmasın deyə)
-                  final keep = <String>[];
-                  if (idx > 0) keep.add(items[idx - 1]['videoUrl']?.toString() ?? '');
-                  keep.add(items[idx]['videoUrl']?.toString() ?? '');
-                  if (idx + 1 < items.length) keep.add(items[idx + 1]['videoUrl']?.toString() ?? '');
-                  _ShortsVideoManager.cleanFarControllers(keep);
                 },
                 itemBuilder: (context, index) {
-                  // Preload: cari video, həmçinin bir sonrakı və bir əvvəlki video aktiv hazırlaşır
                   final bool isCurrent = index == _currentIndex;
-                  final bool shouldPreload = (index - _currentIndex).abs() <= 1;
-
                   return _ShortVideoItem(
                     key: ValueKey(items[index]['id'] ?? index),
                     data: items[index],
                     isCurrent: isCurrent,
-                    shouldPreload: shouldPreload,
                   );
                 },
               );
@@ -763,12 +664,10 @@ class _ShortsScreenState extends State<ShortsScreen> {
 class _ShortVideoItem extends StatefulWidget {
   final Map<String, dynamic> data;
   final bool isCurrent;
-  final bool shouldPreload;
   const _ShortVideoItem({
     super.key,
     required this.data,
     this.isCurrent = true,
-    this.shouldPreload = true,
   });
 
   @override
@@ -777,6 +676,7 @@ class _ShortVideoItem extends StatefulWidget {
 
 class _ShortVideoItemState extends State<_ShortVideoItem> {
   VideoPlayerController? _controller;
+  bool _isInitializing = false;
   bool _isInitialized = false;
   bool _isVideoVisible = false; // Video tamamilə görünməyə hazırdır (fade-in üçün)
   bool _isPlaying = true;
@@ -800,7 +700,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     _authorPhone = widget.data['phone'];
     _checkIfLiked();
     _loadAuthorData();
-    if (widget.shouldPreload) {
+    if (widget.isCurrent) {
       _initVideo();
     }
   }
@@ -808,12 +708,11 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
   @override
   void didUpdateWidget(covariant _ShortVideoItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.shouldPreload && !_isInitialized && _controller == null && !_hasError) {
-      _initVideo();
-    }
     if (oldWidget.isCurrent != widget.isCurrent) {
       if (widget.isCurrent) {
-        if (_controller != null && _isInitialized) {
+        if (_controller == null && !_hasError) {
+          _initVideo();
+        } else if (_controller != null && _isInitialized) {
           _controller!.play();
           setState(() {
             _isPlaying = true;
@@ -821,9 +720,16 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
           });
         }
       } else {
-        if (_controller != null && _isInitialized) {
-          _controller!.pause();
-          setState(() => _isPlaying = false);
+        // Ekranda olmayan videonu dərhal dayandırırıq və yaddaşını boşaldırıq (Heç vaxt atmır!)
+        _controller?.pause();
+        _controller?.dispose();
+        _controller = null;
+        if (mounted) {
+          setState(() {
+            _isPlaying = false;
+            _isInitialized = false;
+            _isVideoVisible = false;
+          });
         }
       }
     }
@@ -1298,52 +1204,56 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
   }
 
   Future<void> _initVideo() async {
-    String url = widget.data['videoUrl']?.toString().trim() ?? '';
-    if (url.isEmpty) {
-      if (mounted) setState(() => _hasError = true);
-      return;
-    }
-
-    if (url.contains('tmpfiles.org')) {
-      if (!url.contains('/dl/') || url.split('/').length < 7) {
-        try {
-          final pageUrl = url.replaceFirst('/dl/', '/');
-          final res = await http.get(Uri.parse(pageUrl)).timeout(const Duration(seconds: 4));
-          if (res.statusCode == 200) {
-            final m = RegExp(r'href="([^"]+/dl/[^"]+)"').firstMatch(res.body);
-            if (m != null) {
-              url = m.group(1)!;
-            }
-          }
-        } catch (_) {}
-      }
-    }
-
+    if (_isInitializing || _controller != null) return;
+    _isInitializing = true;
     try {
-      final cleanUrl = _ShortsVideoManager._normalizeUrl(url);
+      String url = widget.data['videoUrl']?.toString().trim() ?? '';
+      if (url.isEmpty) {
+        if (mounted) setState(() => _hasError = true);
+        return;
+      }
 
-      // 1. Əgər video artıq _ShortsVideoManager tərəfindən qabaqcadan yüklənibsə, dərhal işə salırıq! (0 saniyə)
-      VideoPlayerController? controller = _ShortsVideoManager.getController(cleanUrl);
+      if (url.contains('tmpfiles.org')) {
+        if (!url.contains('/dl/') || url.split('/').length < 7) {
+          try {
+            final pageUrl = url.replaceFirst('/dl/', '/');
+            final res = await http.get(Uri.parse(pageUrl)).timeout(const Duration(seconds: 4));
+            if (res.statusCode == 200) {
+              final m = RegExp(r'href="([^"]+/dl/[^"]+)"').firstMatch(res.body);
+              if (m != null) {
+                url = m.group(1)!;
+              }
+            }
+          } catch (_) {}
+        }
+      }
 
-      if (controller == null || !controller.value.isInitialized) {
-        final uri = Uri.parse(cleanUrl);
-        controller = VideoPlayerController.networkUrl(uri);
+      var cleanUrl = url.trim();
+      if (cleanUrl.contains('tmpfiles.org') && (!cleanUrl.contains('/dl/') || cleanUrl.split('/').length < 7)) {
+        cleanUrl = cleanUrl.replaceFirst('/dl/', '/');
+      }
 
-        final timeoutDur = kIsWeb ? const Duration(seconds: 15) : const Duration(seconds: 25);
-        await controller.initialize().timeout(
-          timeoutDur,
-          onTimeout: () {
-            debugPrint('Video initialize timeout: $cleanUrl');
-          },
-        );
+      if (!mounted || !widget.isCurrent) return;
+
+      final uri = Uri.parse(cleanUrl);
+      final controller = VideoPlayerController.networkUrl(uri);
+
+      final timeoutDur = kIsWeb ? const Duration(seconds: 10) : const Duration(seconds: 15);
+      await controller.initialize().timeout(
+        timeoutDur,
+        onTimeout: () {
+          debugPrint('Video initialize timeout: $cleanUrl');
+        },
+      );
+
+      if (!mounted || !widget.isCurrent) {
+        try {
+          controller.dispose();
+        } catch (_) {}
+        return;
       }
 
       _controller = controller;
-
-      if (!mounted) {
-        controller.dispose();
-        return;
-      }
 
       // Initialize sonrası yoxla
       if (!controller.value.isInitialized) {
@@ -1361,7 +1271,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
         await controller.setVolume(1.0);
         _isMuted = false;
       }
-      // Cari səhifədirsə dərhal oynadırıq, əgər növbəti səhifə kimi arxa fonda preload olunursa - pauzada gözləyir
+
+      // Cari səhifədirsə dərhal oynadırıq
       if (widget.isCurrent) {
         try {
           await controller.play();
@@ -1370,6 +1281,14 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
         try {
           await controller.pause();
         } catch (_) {}
+      }
+
+      if (!mounted || !widget.isCurrent) {
+        try {
+          controller.dispose();
+        } catch (_) {}
+        _controller = null;
+        return;
       }
 
       setState(() {
@@ -1381,7 +1300,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       // Qısa gecikmə sonra video fade-in edir (brauzer ilk frame-i render etsin)
       if (widget.isCurrent) {
         Future.delayed(const Duration(milliseconds: 80), () {
-          if (mounted) setState(() => _isVideoVisible = true);
+          if (mounted && widget.isCurrent) setState(() => _isVideoVisible = true);
         });
       }
 
@@ -1396,12 +1315,14 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
         }
       });
     } catch (e) {
-      debugPrint('Video oxutma xətası ($url): $e');
+      debugPrint('Video oxutma xətası: $e');
       if (mounted) {
         setState(() {
           _hasError = true;
         });
       }
+    } finally {
+      _isInitializing = false;
     }
   }
 
@@ -1416,11 +1337,13 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
 
   @override
   void dispose() {
-    // Səsi və ifanı dərhal kəsirik
+    // Səsi və ifanı dərhal kəsirik, videonu yaddaşdan tamamilə silirik
     try {
       _controller?.pause();
       _controller?.setVolume(0);
+      _controller?.dispose();
     } catch (_) {}
+    _controller = null;
     super.dispose();
   }
 
