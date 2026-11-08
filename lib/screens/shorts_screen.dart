@@ -15,10 +15,12 @@ import 'artisan_detail_screen.dart';
 
 /// Shorts videolarının qlobal öncədən yüklənməsi və keşlənməsi üçün nəzarətçi anbarı
 class _ShortsVideoManager {
+  // Telefonun yaddaşını (RAM) qorumaq üçün eyni anda maksimum 3 aktiv kontroller saxlayırıq
   static final Map<String, VideoPlayerController> _controllers = {};
   static final Set<String> _loadingUrls = {};
 
-  static VideoPlayerController? getController(String url) {
+  static VideoPlayerController? getController(String rawUrl) {
+    final url = _normalizeUrl(rawUrl);
     return _controllers[url];
   }
 
@@ -35,7 +37,7 @@ class _ShortsVideoManager {
       final uri = Uri.parse(url);
       final controller = VideoPlayerController.networkUrl(uri);
       await controller.initialize().timeout(
-        kIsWeb ? const Duration(seconds: 12) : const Duration(seconds: 20),
+        kIsWeb ? const Duration(seconds: 10) : const Duration(seconds: 15),
       );
       if (controller.value.isInitialized) {
         controller.setLooping(true);
@@ -43,10 +45,13 @@ class _ShortsVideoManager {
           await controller.setVolume(0);
         }
         _controllers[url] = controller;
-        // Ən çox 8 video kontrolleri keşdə saxlayırıq ki, yaddaş dolmasın
-        if (_controllers.length > 8) {
+        // Əgər 3-dən çox kontroller yığılıbsa, ən köhnəsini mütləq dispose edirik (tətbiqdən atmanı 100% önləyir)
+        while (_controllers.length > 3) {
           final oldestKey = _controllers.keys.first;
-          _controllers.remove(oldestKey)?.dispose();
+          final c = _controllers.remove(oldestKey);
+          try {
+            c?.dispose();
+          } catch (_) {}
         }
         return controller;
       } else {
@@ -58,6 +63,17 @@ class _ShortsVideoManager {
       _loadingUrls.remove(url);
     }
     return null;
+  }
+
+  static void cleanFarControllers(List<String> keepUrls) {
+    final keepSet = keepUrls.map(_normalizeUrl).toSet();
+    final toRemove = _controllers.keys.where((k) => !keepSet.contains(k)).toList();
+    for (var k in toRemove) {
+      final c = _controllers.remove(k);
+      try {
+        c?.dispose();
+      } catch (_) {}
+    }
   }
 
   static String _normalizeUrl(String url) {
@@ -633,22 +649,35 @@ class _ShortsScreenState extends State<ShortsScreen> {
                 items.addAll(_sampleShorts);
               }
 
+              // İlk açılışda dərhal 1-ci və 2-ci videonun kontrollerini qabaqcadan hazırlayırıq
+              if (items.isNotEmpty) {
+                final firstUrl = items[0]['videoUrl']?.toString() ?? '';
+                if (firstUrl.isNotEmpty) _ShortsVideoManager.preload(firstUrl);
+                if (items.length > 1) {
+                  final secondUrl = items[1]['videoUrl']?.toString() ?? '';
+                  if (secondUrl.isNotEmpty) _ShortsVideoManager.preload(secondUrl);
+                }
+              }
+
               return PageView.builder(
                 controller: _pageController,
                 scrollDirection: Axis.vertical,
                 itemCount: items.length,
                 onPageChanged: (idx) {
                   setState(() => _currentIndex = idx);
-                  // Növbəti 2 videonu dərhal qabaqcadan yükləyirik (TikTok/Instagram Reels sürəti üçün)
-                  for (int step = 1; step <= 2; step++) {
-                    final nextIdx = idx + step;
-                    if (nextIdx < items.length) {
-                      final nextUrl = items[nextIdx]['videoUrl']?.toString() ?? '';
-                      if (nextUrl.isNotEmpty) {
-                        _ShortsVideoManager.preload(nextUrl);
-                      }
+                  // Növbəti videonu dərhal qabaqcadan yükləyirik
+                  if (idx + 1 < items.length) {
+                    final nextUrl = items[idx + 1]['videoUrl']?.toString() ?? '';
+                    if (nextUrl.isNotEmpty) {
+                      _ShortsVideoManager.preload(nextUrl);
                     }
                   }
+                  // Yaddaşı təmiz saxlayırıq: cari, 1 əvvəl və 1 sonrakı saxlanır, uzaq videolar dərhal yaddaşdan silinir (crash olmasın deyə)
+                  final keep = <String>[];
+                  if (idx > 0) keep.add(items[idx - 1]['videoUrl']?.toString() ?? '');
+                  keep.add(items[idx]['videoUrl']?.toString() ?? '');
+                  if (idx + 1 < items.length) keep.add(items[idx + 1]['videoUrl']?.toString() ?? '');
+                  _ShortsVideoManager.cleanFarControllers(keep);
                 },
                 itemBuilder: (context, index) {
                   // Preload: cari video, həmçinin bir sonrakı və bir əvvəlki video aktiv hazırlaşır
@@ -1387,10 +1416,10 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
 
   @override
   void dispose() {
-    // Keşdə olan kontrolleri dispose etmirik ki, geri qayıdanda dərhal hazır qalsın
-    // Sadəcə səsi və ifanı dayandırırıq
+    // Səsi və ifanı dərhal kəsirik
     try {
       _controller?.pause();
+      _controller?.setVolume(0);
     } catch (_) {}
     super.dispose();
   }
@@ -1615,24 +1644,16 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
               ),
             )
           else
-            const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: Colors.white),
-                  SizedBox(height: 12),
-                  Text(
-                    'Video yüklənir...',
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox.shrink(),
 
-          // Video buferlənərkən fırlanan çarx
+          // Video buferlənərkən zərif balaca fırlanan çarx
           if (_isInitialized && _controller != null && _controller!.value.isBuffering)
             const Center(
-              child: CircularProgressIndicator(color: Colors.white70),
+              child: SizedBox(
+                width: 36,
+                height: 36,
+                child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white70),
+              ),
             ),
 
           // Pause olduqda mərkəzdə Play ikonu
