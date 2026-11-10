@@ -24,12 +24,89 @@ class ShortsScreen extends StatefulWidget {
 class _ShortsScreenState extends State<ShortsScreen> {
   late final PageController _pageController;
   int _currentIndex = 0;
+  final Map<int, VideoPlayerController> _controllers = {};
+  final Set<int> _initializing = {};
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
     _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  void _preloadControllers(List<Map<String, dynamic>> items) {
+    if (items.isEmpty) return;
+
+    final needed = <int>{_currentIndex};
+    if (_currentIndex + 1 < items.length) needed.add(_currentIndex + 1);
+    if (_currentIndex - 1 >= 0) needed.add(_currentIndex - 1);
+
+    final toRemove = <int>[];
+    _controllers.forEach((idx, c) {
+      if (!needed.contains(idx)) {
+        try {
+          c.pause();
+          c.dispose();
+        } catch (_) {}
+        toRemove.add(idx);
+      }
+    });
+    for (var idx in toRemove) {
+      _controllers.remove(idx);
+    }
+
+    for (var idx in needed) {
+      final url = items[idx]['videoUrl']?.toString().trim() ?? '';
+      _initController(idx, url);
+    }
+  }
+
+  Future<void> _initController(int index, String url) async {
+    if (url.trim().isEmpty) return;
+    if (_controllers.containsKey(index) || _initializing.contains(index)) return;
+    _initializing.add(index);
+
+    try {
+      final uri = Uri.parse(url.trim());
+      final controller = VideoPlayerController.networkUrl(uri);
+      await controller.initialize();
+      controller.setLooping(true);
+      if (kIsWeb) {
+        await controller.setVolume(0);
+      } else {
+        await controller.setVolume(1.0);
+      }
+
+      if (index == _currentIndex) {
+        await controller.play();
+      } else {
+        await controller.pause();
+        await controller.seekTo(Duration.zero);
+      }
+
+      if (mounted) {
+        setState(() {
+          _controllers[index] = controller;
+        });
+      } else {
+        controller.dispose();
+      }
+    } catch (e) {
+      debugPrint('Video preload error at index $index: $e');
+    } finally {
+      _initializing.remove(index);
+    }
+  }
+
+  void _onPageChanged(int newIndex, List<Map<String, dynamic>> items) {
+    final oldIndex = _currentIndex;
+    _currentIndex = newIndex;
+
+    _controllers[oldIndex]?.pause();
+    _controllers[newIndex]?.play();
+
+    setState(() {});
+    _preloadControllers(items);
   }
 
   // Nümayiş üçün nümunə usta videoları
@@ -55,6 +132,13 @@ class _ShortsScreenState extends State<ShortsScreen> {
   @override
   void dispose() {
     _pageController.dispose();
+    for (var c in _controllers.values) {
+      try {
+        c.pause();
+        c.dispose();
+      } catch (_) {}
+    }
+    _controllers.clear();
     super.dispose();
   }
 
@@ -577,21 +661,26 @@ class _ShortsScreenState extends State<ShortsScreen> {
                 items.addAll(_sampleShorts);
               }
 
+              // Cari və növbəti videoları arxa planda dərhal yükləyirik (TikTok kimi ani açılış)
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  _preloadControllers(items);
+                }
+              });
+
               return PageView.builder(
                 controller: _pageController,
                 scrollDirection: Axis.vertical,
                 itemCount: items.length,
-                onPageChanged: (idx) {
-                  setState(() => _currentIndex = idx);
-                },
+                onPageChanged: (idx) => _onPageChanged(idx, items),
                 itemBuilder: (context, index) {
                   final bool isCurrent = index == _currentIndex;
-                  final bool isNext = index == _currentIndex + 1;
                   return _ShortVideoItem(
                     key: ValueKey(items[index]['id'] ?? index),
                     data: items[index],
+                    controller: _controllers[index],
                     isCurrent: isCurrent,
-                    isNext: isNext,
+                    onRetry: () => _initController(index, items[index]['videoUrl']?.toString().trim() ?? ''),
                   );
                 },
               );
@@ -665,13 +754,16 @@ class _ShortsScreenState extends State<ShortsScreen> {
 
 class _ShortVideoItem extends StatefulWidget {
   final Map<String, dynamic> data;
+  final VideoPlayerController? controller;
   final bool isCurrent;
-  final bool isNext;
+  final VoidCallback? onRetry;
+
   const _ShortVideoItem({
     super.key,
     required this.data,
+    this.controller,
     this.isCurrent = true,
-    this.isNext = false,
+    this.onRetry,
   });
 
   @override
@@ -679,12 +771,7 @@ class _ShortVideoItem extends StatefulWidget {
 }
 
 class _ShortVideoItemState extends State<_ShortVideoItem> {
-  VideoPlayerController? _controller;
-  bool _isInitializing = false;
-  bool _isInitialized = false;
-  bool _isVideoVisible = false; // Video tamamilə görünməyə hazırdır (fade-in üçün)
   bool _isPlaying = true;
-  bool _hasError = false;
   bool _isMuted = false;
 
   int _likeCount = 0;
@@ -704,46 +791,53 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     _authorPhone = widget.data['phone'];
     _checkIfLiked();
     _loadAuthorData();
-    if (widget.isCurrent || widget.isNext) {
-      _initVideo();
+    _attachListener(widget.controller);
+    if (widget.isCurrent && widget.controller != null && widget.controller!.value.isInitialized) {
+      widget.controller!.play();
+      _isPlaying = true;
     }
   }
 
   @override
   void didUpdateWidget(covariant _ShortVideoItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isCurrent != widget.isCurrent || oldWidget.isNext != widget.isNext) {
-      if (widget.isCurrent) {
-        if (_controller == null && !_hasError) {
-          _initVideo();
-        } else if (_controller != null && _isInitialized) {
-          _controller!.play();
-          setState(() {
-            _isPlaying = true;
-            _isVideoVisible = true;
-          });
-        }
-      } else if (widget.isNext) {
-        // Növbəti video arxa fonda səssizcə qabaqcadan hazırlaşır (Preload)
-        if (_controller == null && !_hasError) {
-          _initVideo();
-        } else if (_controller != null && _isInitialized) {
-          _controller!.pause();
-        }
-      } else {
-        // Cari və ya növbəti olmayan köhnə videolar dərhal yaddaşdan silinir (RAM təmiz qalır!)
-        _controller?.pause();
-        _controller?.dispose();
-        _controller = null;
-        if (mounted) {
-          setState(() {
-            _isPlaying = false;
-            _isInitialized = false;
-            _isVideoVisible = false;
-          });
-        }
+    if (oldWidget.controller != widget.controller) {
+      _detachListener(oldWidget.controller);
+      _attachListener(widget.controller);
+    }
+    if (widget.isCurrent && widget.controller != null && widget.controller!.value.isInitialized) {
+      if (!widget.controller!.value.isPlaying) {
+        widget.controller!.play();
+      }
+    } else if (!widget.isCurrent && widget.controller != null) {
+      if (widget.controller!.value.isPlaying) {
+        widget.controller!.pause();
       }
     }
+  }
+
+  void _attachListener(VideoPlayerController? c) {
+    if (c == null) return;
+    c.addListener(_videoListener);
+  }
+
+  void _detachListener(VideoPlayerController? c) {
+    if (c == null) return;
+    c.removeListener(_videoListener);
+  }
+
+  void _videoListener() {
+    if (!mounted) return;
+    final isPlaying = widget.controller?.value.isPlaying ?? false;
+    if (isPlaying != _isPlaying) {
+      setState(() => _isPlaying = isPlaying);
+    }
+  }
+
+  @override
+  void dispose() {
+    _detachListener(widget.controller);
+    super.dispose();
   }
 
   void _loadAuthorData() async {
@@ -815,9 +909,9 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     }
 
     if (mounted) {
-      final wasPlaying = _controller?.value.isPlaying ?? false;
+      final wasPlaying = widget.controller?.value.isPlaying ?? false;
       if (wasPlaying) {
-        _controller?.pause();
+        widget.controller?.pause();
         setState(() => _isPlaying = false);
       }
 
@@ -829,8 +923,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       );
 
       // Profil səhifəsindən geri qayıdanda videonu yenidən davam etdiririk
-      if (mounted && widget.isCurrent && _controller != null && _isInitialized) {
-        _controller?.play();
+      if (mounted && widget.isCurrent && widget.controller != null && widget.controller!.value.isInitialized) {
+        widget.controller?.play();
         setState(() => _isPlaying = true);
       }
     }
@@ -1214,131 +1308,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     );
   }
 
-  Future<void> _initVideo() async {
-    if (_isInitializing || _controller != null) return;
-    _isInitializing = true;
-    try {
-      String url = widget.data['videoUrl']?.toString().trim() ?? '';
-      if (url.isEmpty) {
-        if (mounted) setState(() => _hasError = true);
-        return;
-      }
-
-      if (url.contains('tmpfiles.org')) {
-        if (!url.contains('/dl/') || url.split('/').length < 7) {
-          try {
-            final pageUrl = url.replaceFirst('/dl/', '/');
-            final res = await http.get(Uri.parse(pageUrl)).timeout(const Duration(seconds: 4));
-            if (res.statusCode == 200) {
-              final m = RegExp(r'href="([^"]+/dl/[^"]+)"').firstMatch(res.body);
-              if (m != null) {
-                url = m.group(1)!;
-              }
-            }
-          } catch (_) {}
-        }
-      }
-
-      var cleanUrl = url.trim();
-      if (cleanUrl.contains('tmpfiles.org') && (!cleanUrl.contains('/dl/') || cleanUrl.split('/').length < 7)) {
-        cleanUrl = cleanUrl.replaceFirst('/dl/', '/');
-      }
-
-      if (!mounted || !widget.isCurrent) return;
-
-      final uri = Uri.parse(cleanUrl);
-      final controller = VideoPlayerController.networkUrl(uri);
-
-      final timeoutDur = kIsWeb ? const Duration(seconds: 10) : const Duration(seconds: 15);
-      await controller.initialize().timeout(
-        timeoutDur,
-        onTimeout: () {
-          debugPrint('Video initialize timeout: $cleanUrl');
-        },
-      );
-
-      if (!mounted || (!widget.isCurrent && !widget.isNext)) {
-        try {
-          controller.dispose();
-        } catch (_) {}
-        return;
-      }
-
-      _controller = controller;
-
-      // Initialize sonrası yoxla
-      if (!controller.value.isInitialized) {
-        if (mounted) setState(() => _hasError = true);
-        return;
-      }
-
-      controller.setLooping(true);
-
-      // Web-də brauzerlər səsli autoplay-i bloklayır, ona görə default olaraq muted başlayırıq
-      if (kIsWeb) {
-        await controller.setVolume(0);
-        _isMuted = true;
-      } else {
-        await controller.setVolume(1.0);
-        _isMuted = false;
-      }
-
-      // Cari səhifədirsə dərhal oynadırıq
-      if (widget.isCurrent) {
-        try {
-          await controller.play();
-        } catch (_) {}
-      } else {
-        try {
-          await controller.pause();
-        } catch (_) {}
-      }
-
-      if (!mounted || (!widget.isCurrent && !widget.isNext)) {
-        try {
-          controller.dispose();
-        } catch (_) {}
-        _controller = null;
-        return;
-      }
-
-      setState(() {
-        _isInitialized = true;
-        _hasError = false;
-        _isPlaying = widget.isCurrent;
-      });
-
-      // Qısa gecikmə sonra video fade-in edir (brauzer ilk frame-i render etsin)
-      if (widget.isCurrent) {
-        Future.delayed(const Duration(milliseconds: 80), () {
-          if (mounted && widget.isCurrent) setState(() => _isVideoVisible = true);
-        });
-      }
-
-      final activeController = controller;
-      activeController.addListener(() {
-        if (!mounted) return;
-        final playing = activeController.value.isPlaying;
-        if (playing != _isPlaying) {
-          setState(() {
-            _isPlaying = playing;
-          });
-        }
-      });
-    } catch (e) {
-      debugPrint('Video oxutma xətası: $e');
-      if (mounted) {
-        setState(() {
-          _hasError = true;
-        });
-      }
-    } finally {
-      _isInitializing = false;
-    }
-  }
-
   Future<void> _toggleMute() async {
-    final c = _controller;
+    final c = widget.controller;
     if (c == null) return;
     setState(() {
       _isMuted = !_isMuted;
@@ -1346,21 +1317,9 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     await c.setVolume(_isMuted ? 0 : 1.0);
   }
 
-  @override
-  void dispose() {
-    // Səsi və ifanı dərhal kəsirik, videonu yaddaşdan tamamilə silirik
-    try {
-      _controller?.pause();
-      _controller?.setVolume(0);
-      _controller?.dispose();
-    } catch (_) {}
-    _controller = null;
-    super.dispose();
-  }
-
   void _togglePlay() {
-    final c = _controller;
-    if (c == null || !_isInitialized) return;
+    final c = widget.controller;
+    if (c == null || !c.value.isInitialized) return;
     setState(() {
       if (c.value.isPlaying) {
         c.pause();
@@ -1493,95 +1452,31 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
 
   @override
   Widget build(BuildContext context) {
+    final c = widget.controller;
+    final bool isReady = c != null && c.value.isInitialized;
+
     return GestureDetector(
       onTap: _togglePlay,
       child: Stack(
         fit: StackFit.expand,
         children: [
           // 0. VİDEO AÇILANA QƏDƏR ARXA FONDA BAŞLIQ FOTOSU
-          // Video görünəndə AnimatedOpacity ilə hamarla yox olur (1 saniyelik flicker olmur)
-          AnimatedOpacity(
-            opacity: _isVideoVisible ? 0.0 : 1.0,
-            duration: const Duration(milliseconds: 400),
-            child: _buildCoverImage(widget.data),
-          ),
-          // 1. VİDEO EKRANI - AnimatedOpacity ilə smooth fade-in
-          if (_isInitialized && _controller != null && !_hasError)
-            AnimatedOpacity(
-              opacity: _isVideoVisible ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 400),
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: _controller!.value.aspectRatio > 0
-                      ? _controller!.value.aspectRatio
-                      : (9 / 16),
-                  child: VideoPlayer(_controller!),
-                ),
-              ),
-            )
-          else if (_hasError)
+          if (!isReady)
+            _buildCoverImage(widget.data),
+
+          // 1. VİDEO EKRANI - ANINDA VƏ SIFIR GECİKMƏ İLƏ (TikTok / Instagram kimi)
+          if (isReady)
             Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.play_circle_fill_rounded, color: Colors.white70, size: 72),
-                  const SizedBox(height: 16),
-                  if (kIsWeb) ...[
-                    const Text(
-                      'Videonu izləmək üçün toxunun',
-                      style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final url = widget.data['videoUrl']?.toString() ?? '';
-                        if (url.isNotEmpty) {
-                          final uri = Uri.parse(url);
-                          if (await canLaunchUrl(uri)) {
-                            await launchUrl(uri, mode: LaunchMode.externalApplication);
-                          }
-                        }
-                      },
-                      icon: const Icon(Icons.open_in_new),
-                      label: const Text('Videonu Aç'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black87,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      ),
-                    ),
-                  ] else ...[
-                    const Text(
-                      'Video oxunmadı',
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 10),
-                    TextButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _hasError = false;
-                          _isInitialized = false;
-                          _isVideoVisible = false;
-                        });
-                        _controller?.dispose();
-                        _controller = null;
-                        _initVideo();
-                      },
-                      icon: const Icon(Icons.refresh, color: Colors.white70),
-                      label: const Text('Yenidən cəhd et', style: TextStyle(color: Colors.white70)),
-                    ),
-                  ],
-                ],
+              child: AspectRatio(
+                aspectRatio: c.value.aspectRatio > 0
+                    ? c.value.aspectRatio
+                    : (9 / 16),
+                child: VideoPlayer(c),
               ),
-            )
-          else
-            const SizedBox.shrink(),
+            ),
 
           // Video buferlənərkən zərif balaca fırlanan çarx
-          if (_isInitialized && _controller != null && _controller!.value.isBuffering)
+          if (isReady && c.value.isBuffering)
             const Center(
               child: SizedBox(
                 width: 36,
@@ -1591,7 +1486,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
             ),
 
           // Pause olduqda mərkəzdə Play ikonu
-          if (!_isPlaying && _isInitialized)
+          if (!_isPlaying && isReady)
             Center(
               child: Container(
                 padding: const EdgeInsets.all(16),
@@ -1618,7 +1513,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
           ),
 
           // Web üçün Səsi Aç bildirişi
-          if (_isInitialized && _isMuted)
+          if (isReady && _isMuted)
             Positioned(
               top: 50,
               right: 16,
