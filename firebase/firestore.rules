@@ -49,5 +49,54 @@ service cloud.firestore {
       allow create: if signedIn(); // İstənilən istifadəçi şikayət yaza bilər
       allow read, update, delete: if isAdmin(); // Yalnız admin oxuyub tədbir görə bilər
     }
+
+    // SHORTS VƏ SOSİAL FUNKSİYALAR (Like, Rəylər, İzləmə, Saxlama)
+    match /shorts/{shortId} {
+      allow read: if true; // Hər kəs videoları izləyə bilər
+      allow create: if signedIn();
+      // Bəyənmə, rəy sayı və ya müəllifin öz videosunu redaktəsi
+      allow update: if signedIn();
+      allow delete: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      // Şərhlər alt-kolleksiyası
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if signedIn();
+        allow update: if signedIn();
+        allow delete: if signedIn() && (
+          resource.data.userId == request.auth.uid ||
+          get(/databases/$(database)/documents/shorts/$(shortId)).data.userId == request.auth.uid ||
+          isAdmin()
+        );
+
+        // Şərh bəyənmələri
+        match /likes/{userId} {
+          allow read: if true;
+          allow write: if signedIn() && request.auth.uid == userId;
+        }
+      }
+
+      // Video bəyənmələri alt-kolleksiyası
+      match /likes/{userId} {
+        allow read: if true;
+        allow write: if signedIn() && request.auth.uid == userId;
+      }
+    }
+
+    // İZLƏMƏ SİSTEMİ (FOLLOWERS / FOLLOWING)
+    match /users/{userId}/followers/{followerId} {
+      allow read: if true;
+      allow write: if signedIn() && request.auth.uid == followerId;
+    }
+
+    match /users/{userId}/following/{targetUserId} {
+      allow read: if true;
+      allow write: if signedIn() && request.auth.uid == userId;
+    }
+
+    // SEÇİLMİŞ VİDEOLAR (SAVED SHORTS)
+    match /users/{userId}/saved_shorts/{shortId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
   }
 }
