@@ -290,7 +290,8 @@ class ShortsSocialService {
   }
 
   // ================= 7. VİDEO VƏ ALT-KOLLEKSİYALARIN TƏHLÜKƏSİZ SİLİNMƏSİ =================
-  /// Videonu və onun bütün alt-kolleksiyalarını (comments, likes) batch ilə tam təmizləyir
+  /// Videonu və onun bütün alt-kolleksiyalarını (comments, likes) dövr ilə (loop) tam təmizləyir
+  /// 500 sənədlik Firestore batch limitini aşmamaq üçün səhifələnmiş silmə istifadə olunur
   static Future<void> deleteShortVideoCompletely(String shortId) async {
     final uid = currentUid;
     if (uid == null || shortId.isEmpty) {
@@ -308,27 +309,49 @@ class ShortsSocialService {
       throw Exception('Yalnız öz videonuzu silə bilərsiniz');
     }
 
-    // 1. Şərhləri və onların likes alt-kolleksiyasını toplayıb silirik (batch limit: 500)
-    final commentsSnap = await shortRef.collection('comments').limit(200).get();
-    final batch = _firestore.batch();
-
-    for (var cDoc in commentsSnap.docs) {
-      final cLikesSnap = await cDoc.reference.collection('likes').limit(50).get();
-      for (var clDoc in cLikesSnap.docs) {
-        batch.delete(clDoc.reference);
+    // 1. Şərhləri və onların likes alt-kolleksiyalarını tam bitənə qədər hissə-hissə silirik
+    bool hasMoreComments = true;
+    while (hasMoreComments) {
+      final commentsSnap = await shortRef.collection('comments').limit(80).get();
+      if (commentsSnap.docs.isEmpty) {
+        hasMoreComments = false;
+        break;
       }
-      batch.delete(cDoc.reference);
+
+      final batch = _firestore.batch();
+      for (var cDoc in commentsSnap.docs) {
+        // Şərhin öz like-larını da silirik
+        final cLikesSnap = await cDoc.reference.collection('likes').limit(20).get();
+        for (var clDoc in cLikesSnap.docs) {
+          batch.delete(clDoc.reference);
+        }
+        batch.delete(cDoc.reference);
+      }
+      await batch.commit();
+      if (commentsSnap.docs.length < 80) {
+        hasMoreComments = false;
+      }
     }
 
-    // 2. Videonun öz likes alt-kolleksiyasını silirik
-    final likesSnap = await shortRef.collection('likes').limit(200).get();
-    for (var lDoc in likesSnap.docs) {
-      batch.delete(lDoc.reference);
+    // 2. Videonun öz likes alt-kolleksiyasını tam bitənə qədər silirik
+    bool hasMoreLikes = true;
+    while (hasMoreLikes) {
+      final likesSnap = await shortRef.collection('likes').limit(200).get();
+      if (likesSnap.docs.isEmpty) {
+        hasMoreLikes = false;
+        break;
+      }
+      final batch = _firestore.batch();
+      for (var lDoc in likesSnap.docs) {
+        batch.delete(lDoc.reference);
+      }
+      await batch.commit();
+      if (likesSnap.docs.length < 200) {
+        hasMoreLikes = false;
+      }
     }
 
     // 3. Əsas video sənədini silirik
-    batch.delete(shortRef);
-
-    await batch.commit();
+    await shortRef.delete();
   }
 }

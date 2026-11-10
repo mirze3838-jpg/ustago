@@ -30,8 +30,17 @@ service cloud.firestore {
         && request.resource.data.role in ['usta', 'worker', 'customer', 'seller']
         && request.resource.data.keys().hasAll(['fullName', 'role', 'createdAt']);
 
-      // Redaktə: İstifadəçi öz məlumatını redaktə edə bilər, amma ROLUNU dəyişib admin edə BİLMƏZ!
-      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin();
+      // Redaktə Təhlükəsizliyi:
+      // 1. İstifadəçi öz məlumatını redaktə edərkən ROLUNU dəyişə BİLMƏZ!
+      // 2. Sayğaclar (followersCount, followingCount) istifadəçi tərəfindən istədiyi rəqəmə dəyişdirilə bilməz, yalnız +-1 artırıla/azaldıla bilər!
+      allow update: if isAdmin() || (
+        isOwner(userId) &&
+        request.resource.data.role == resource.data.role &&
+        (!('followingCount' in request.resource.data) || !('followingCount' in resource.data) ||
+          request.resource.data.followingCount == resource.data.followingCount + 1 ||
+          request.resource.data.followingCount == resource.data.followingCount - 1 ||
+          request.resource.data.followingCount == resource.data.followingCount)
+      );
 
       // Hesabı yalnız admin və ya istifadəçi özü silə bilər
       allow delete: if isOwner(userId) || isAdmin();
@@ -53,15 +62,35 @@ service cloud.firestore {
     // SHORTS VƏ SOSİAL FUNKSİYALAR (Like, Rəylər, İzləmə, Saxlama)
     match /shorts/{shortId} {
       allow read: if true; // Hər kəs videoları izləyə bilər
-      allow create: if signedIn();
+      
+      // Video yaratmaq: YALNIZ öz userId-si ilə və lazımi sahələrlə
+      allow create: if signedIn() 
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.videoUrl is string
+        && request.resource.data.videoUrl.size() > 5;
       
       // Təhlükəsiz Redaktə Qaydası:
-      // 1. Video sahibi və ya Admin videonun məlumatlarını dəyişə bilər
-      // 2. Kənar istifadəçilər YALNIZ və YALNIZ 'likes', 'likedBy' və ya 'commentsCount' sahələrini yeniləyə bilər (videoUrl, title, userId dəyişdirilə BİLMƏZ!)
+      // 1. Video sahibi və ya Admin videonun əsas məlumatlarını dəyişə bilər
+      // 2. Kənar istifadəçilər yalnız 'likes' və ya 'likedBy' və ya 'commentsCount' sahələrini dəyişə bilər.
+      // DƏQİQ MƏHDUDİYYƏT:
+      // - 'likes' sayğacı yalnız +-1 dəyişdirilə bilər (100000 edilə BİLMƏZ!)
+      // - 'likedBy' massivinə yalnız cari istifadəçinin öz auth.uid-si əlavə və ya silinə bilər (saxta UID yazıla BİLMƏZ!)
+      // - 'commentsCount' yalnız +-1 dəyişdirilə bilər!
       allow update: if signedIn() && (
         resource.data.userId == request.auth.uid || 
         isAdmin() ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'likedBy', 'commentsCount'])
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'likedBy', 'commentsCount']) &&
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['likes']) ||
+            request.resource.data.likes == resource.data.likes + 1 ||
+            request.resource.data.likes == resource.data.likes - 1) &&
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['commentsCount']) ||
+            request.resource.data.commentsCount == resource.data.commentsCount + 1 ||
+            request.resource.data.commentsCount == resource.data.commentsCount - 1) &&
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['likedBy']) ||
+            request.resource.data.likedBy.toSet().difference(resource.data.likedBy.toSet()).hasOnly([request.auth.uid]) ||
+            resource.data.likedBy.toSet().difference(request.resource.data.likedBy.toSet()).hasOnly([request.auth.uid]))
+        )
       );
       
       // Yalnız video sahibi və ya Admin silə bilər
@@ -70,12 +99,19 @@ service cloud.firestore {
       // Şərhlər alt-kolleksiyası
       match /comments/{commentId} {
         allow read: if true;
+        // Yalnız öz userId-si ilə şərh yarada bilər
         allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
-        // Şərhin yalnız 'likes' sayğacı yenilənə bilər və ya şərh müəllifi redaktə edə bilər
+        
+        // Şərhin redaktəsi: Müəllif mətnini dəyişə bilər (userId dəyişdirilə bilməz),
+        // Kənar şəxslər isə yalnız 'likes' sayğacını +-1 dəyişə bilər!
         allow update: if signedIn() && (
-          resource.data.userId == request.auth.uid ||
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+          (resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId) ||
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']) &&
+            (request.resource.data.likes == resource.data.likes + 1 || request.resource.data.likes == resource.data.likes - 1)
+          )
         );
+        
         // Yalnız şərh sahibi, videonun sahibi və ya Admin silə bilər
         allow delete: if signedIn() && (
           resource.data.userId == request.auth.uid ||
