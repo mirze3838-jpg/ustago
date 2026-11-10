@@ -750,6 +750,9 @@ class _ShortsScreenState extends State<ShortsScreen> {
                 });
               }
 
+              final bool hasNavShortcut = Navigator.canPop(context) && widget.onNavigateTab == null;
+              final double bottomNavHeight = hasNavShortcut ? 52.0 : 0.0;
+
               return PageView.builder(
                 controller: _pageController,
                 scrollDirection: Axis.vertical,
@@ -764,6 +767,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                     isCurrent: isCurrent,
                     muted: _muted,
                     onToggleMute: _toggleMute,
+                    bottomInset: bottomNavHeight,
                   );
                 },
               );
@@ -896,6 +900,7 @@ class _ShortVideoItem extends StatefulWidget {
   final bool muted;
   final VoidCallback? onToggleMute;
   final VoidCallback? onRetry;
+  final double bottomInset;
 
   const _ShortVideoItem({
     super.key,
@@ -905,6 +910,7 @@ class _ShortVideoItem extends StatefulWidget {
     this.muted = false,
     this.onToggleMute,
     this.onRetry,
+    this.bottomInset = 0.0,
   });
 
   @override
@@ -1926,7 +1932,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
           // Sağ tərəfdəki TikTok tipli sosial düymələr
           Positioned(
             right: 10,
-            bottom: 72,
+            bottom: widget.bottomInset + 30,
             child: Builder(
               builder: (context) {
                 final currentUser = FirebaseAuth.instance.currentUser;
@@ -2060,11 +2066,12 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
             ),
           ),
 
-          // Aşağı sol tərəfdəki usta məlumatı, Açıqlama və Hashtaglar (Video irəliləmə xəttindən kifayət qədər yuxarıda)
+          // Aşağı sol tərəfdəki usta məlumatı, Açıqlama və Hashtaglar
+          // Menyunun və irəliləmə xəttinin kəskin şəkildə YUXARISINDA yerləşir (Toqquşma sıfırdır)
           Positioned(
             left: 16,
             right: 86,
-            bottom: 40,
+            bottom: widget.bottomInset + 30,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -2127,13 +2134,15 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
           ),
 
           // TikTok tipli Video Scrubber (İrəli/Geri çəkmə və Vaxt göstəricisi)
+          // Aşağı menyunun düz üstündə, amma hashtagların tam altında, ayrıca səliqəli zolaqda yerləşir
           if (isReady)
             Positioned(
               left: 0,
               right: 0,
-              bottom: 8,
+              bottom: widget.bottomInset,
               child: SafeArea(
                 top: false,
+                bottom: widget.bottomInset == 0,
                 child: _TikTokVideoScrubber(controller: c),
               ),
             ),
