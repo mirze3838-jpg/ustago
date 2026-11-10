@@ -1542,19 +1542,19 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
           if (!isReady)
             _buildCoverImage(widget.data),
 
-          // 1. VİDEO EKRANI - ANINDA VƏ SIFIR GECİKMƏ İLƏ (TikTok / Instagram kimi tam ekran)
+          // 1. VİDEO EKRANI - Orijinal proporsiyada (yaxınlaşdırma / kəsilmə olmadan, olduğu kimi)
           if (isReady)
-            FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: c.value.size.width > 0 ? c.value.size.width : 720,
-                height: c.value.size.height > 0 ? c.value.size.height : 1280,
+            Center(
+              child: AspectRatio(
+                aspectRatio: c.value.aspectRatio > 0
+                    ? c.value.aspectRatio
+                    : (9 / 16),
                 child: VideoPlayer(c),
               ),
             ),
 
-          // Video buferlənərkən zərif balaca fırlanan çarx
-          if (isReady && c.value.isBuffering)
+          // Video buferlənərkən zərif balaca fırlanan çarx (yalnız video ifa olunmursa göstərilir)
+          if (isReady && c.value.isBuffering && !c.value.isPlaying)
             const Center(
               child: SizedBox(
                 width: 36,
@@ -1739,33 +1739,6 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white, fontSize: 14),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: () => _makeCall(_authorPhone ?? widget.data['phone'] ?? ''),
-                      icon: const Icon(Icons.phone, size: 16),
-                      label: const Text('Zəng et'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00C853),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton.icon(
-                      onPressed: () => _openWhatsApp(_authorPhone ?? widget.data['phone'] ?? ''),
-                      icon: const Icon(Icons.chat, size: 16, color: Colors.green),
-                      label: const Text('WhatsApp', style: TextStyle(color: Colors.white)),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.green),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
