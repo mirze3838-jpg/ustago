@@ -1844,13 +1844,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: () {
-        Navigator.push(
+      onTap: () async {
+        final targetIndex = await Navigator.push<int>(
           context,
           MaterialPageRoute(
             builder: (_) => ShortsScreen(initialIndex: index),
           ),
         );
+        if (targetIndex != null && mounted) {
+          setState(() => _currentIndex = targetIndex);
+        }
       },
       child: SizedBox(
         width: 140,

@@ -16,7 +16,8 @@ import 'artisan_detail_screen.dart';
 
 class ShortsScreen extends StatefulWidget {
   final int initialIndex;
-  const ShortsScreen({super.key, this.initialIndex = 0});
+  final ValueChanged<int>? onNavigateTab;
+  const ShortsScreen({super.key, this.initialIndex = 0, this.onNavigateTab});
 
   @override
   State<ShortsScreen> createState() => _ShortsScreenState();
@@ -828,6 +829,60 @@ class _ShortsScreenState extends State<ShortsScreen> {
               ),
             ),
           ),
+
+          // Əgər ayrıca səhifə kimi açılıbsa (Navigator.push), ana menyu burada da göstərilir
+          if (Navigator.canPop(context) && widget.onNavigateTab == null)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.85),
+                  border: Border(top: BorderSide(color: Colors.white.withOpacity(0.12), width: 0.5)),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: SizedBox(
+                    height: 52,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildNavShortcut(Icons.home_outlined, 'Ana səhifə', () {
+                          Navigator.pop(context);
+                        }),
+                        _buildNavShortcut(Icons.play_circle_fill, 'Shorts', null, isActive: true),
+                        _buildNavShortcut(Icons.storefront_outlined, 'Alış-Satış', () {
+                          Navigator.pop(context, 2);
+                        }),
+                        _buildNavShortcut(Icons.chat_bubble_outline, 'Mesajlar', () {
+                          Navigator.pop(context, 3);
+                        }),
+                        _buildNavShortcut(Icons.person_outline, 'Profil', () {
+                          Navigator.pop(context, 4);
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavShortcut(IconData icon, String label, VoidCallback? onTap, {bool isActive = false}) {
+    final color = isActive ? Colors.white : Colors.white60;
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 22),
+          const SizedBox(height: 2),
+          Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
         ],
       ),
     );
@@ -1870,8 +1925,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
 
           // Sağ tərəfdəki TikTok tipli sosial düymələr
           Positioned(
-            right: 12,
-            bottom: 75,
+            right: 10,
+            bottom: 72,
             child: Builder(
               builder: (context) {
                 final currentUser = FirebaseAuth.instance.currentUser;
@@ -1888,6 +1943,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                 }
 
                 return Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     // 1. Profil avatarı və üstəgəl (+) Follow düyməsi
                     Stack(
@@ -1902,18 +1958,18 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                               border: Border.all(color: Colors.white, width: 2),
                             ),
                             child: CircleAvatar(
-                              radius: 23,
+                              radius: 22,
                               backgroundColor: Colors.grey.shade300,
                               backgroundImage: aAvatar,
                               child: aAvatar == null
-                                  ? const Icon(Icons.person, color: Color(0xFF1769D2), size: 26)
+                                  ? const Icon(Icons.person, color: Color(0xFF1769D2), size: 24)
                                   : null,
                             ),
                           ),
                         ),
                         if (!isOwner && !_isFollowing && authorUid.isNotEmpty && authorUid != 'guest')
                           Positioned(
-                            bottom: -8,
+                            bottom: -7,
                             child: GestureDetector(
                               onTap: _toggleFollow,
                               child: Container(
@@ -1925,22 +1981,22 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                                     BoxShadow(color: Colors.black38, blurRadius: 4),
                                   ],
                                 ),
-                                child: const Icon(Icons.add, color: Colors.white, size: 16),
+                                child: const Icon(Icons.add, color: Colors.white, size: 14),
                               ),
                             ),
                           ),
                       ],
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 12),
 
                     // 2. Bəyənmə (Like / Unlike)
                     _buildSideAction(
                       _isLiked ? Icons.favorite : Icons.favorite_border,
-                      _likeCount.toString(),
+                      _likeCount > 0 ? '$_likeCount' : '',
                       _isLiked ? Colors.red : Colors.white,
                       onTap: () => _toggleLike(),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
 
                     // 3. Rəylər (Comments)
                     StreamBuilder<QuerySnapshot>(
@@ -1953,48 +2009,48 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                         final cCount = snap.data?.docs.length ?? _commentsCount;
                         return _buildSideAction(
                           Icons.chat_bubble_rounded,
-                          cCount > 0 ? '$cCount' : 'Rəy',
+                          cCount > 0 ? '$cCount' : '',
                           Colors.white,
                           onTap: () => _showCommentsModal(widget.data['id']?.toString() ?? ''),
                         );
                       },
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
 
-                    // 4. Seçilmişlər (Save / Bookmark)
+                    // 4. Seçilmişlər (Save / Bookmark) - İkon əsaslı
                     _buildSideAction(
                       _isSaved ? Icons.bookmark : Icons.bookmark_border,
-                      _isSaved ? 'Yaddaşda' : 'Saxla',
+                      '',
                       _isSaved ? Colors.amber : Colors.white,
                       onTap: _toggleSave,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
 
-                    // 5. Paylaş (Share)
+                    // 5. Paylaş (Share) - İkon əsaslı
                     _buildSideAction(
                       Icons.share_rounded,
-                      'Paylaş',
+                      '',
                       Colors.white,
                       onTap: _shareVideo,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
 
                     // 6. Səs (Mute/Unmute)
                     _buildSideAction(
                       (widget.muted || _isMuted) ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                      (widget.muted || _isMuted) ? 'Səssiz' : 'Səs',
+                      '',
                       (widget.muted || _isMuted) ? Colors.amber : Colors.white,
                       onTap: () {
                         widget.onToggleMute?.call();
                         _toggleMute();
                       },
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
 
-                    // 7. Əlavə Menyu (Üç nöqtə - Şikayət et, Sil və s.)
+                    // 7. Əlavə Menyu (Üç nöqtə)
                     _buildSideAction(
                       Icons.more_horiz,
-                      'Digər',
+                      '',
                       Colors.white70,
                       onTap: _showMoreMenu,
                     ),
@@ -2004,13 +2060,14 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
             ),
           ),
 
-          // Aşağı sol tərəfdəki usta məlumatı, Açıqlama və Hashtaglar
+          // Aşağı sol tərəfdəki usta məlumatı, Açıqlama və Hashtaglar (Video irəliləmə xəttindən kifayət qədər yuxarıda)
           Positioned(
             left: 16,
             right: 86,
-            bottom: 25,
+            bottom: 40,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -2022,7 +2079,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                           '@${_authorName ?? widget.data['artisanName'] ?? 'UstaGo'}',
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 16,
+                            fontSize: 15,
                             fontWeight: FontWeight.bold,
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -2043,12 +2100,12 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 5),
                 Text(
                   widget.data['title'] ?? '',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: const TextStyle(color: Colors.white, fontSize: 13.5),
                 ),
                 const SizedBox(height: 4),
                 // Hashtaglar
@@ -2057,11 +2114,11 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                   children: [
                     Text(
                       '#${(_authorTrade ?? widget.data['trade'] ?? 'usta').toString().toLowerCase().replaceAll(' ', '')}',
-                      style: const TextStyle(color: Color(0xFF64B5F6), fontSize: 13, fontWeight: FontWeight.w600),
+                      style: const TextStyle(color: Color(0xFF64B5F6), fontSize: 12.5, fontWeight: FontWeight.w600),
                     ),
                     const Text(
                       '#ustago #təmir #xidmət',
-                      style: TextStyle(color: Color(0xFF64B5F6), fontSize: 13, fontWeight: FontWeight.w600),
+                      style: TextStyle(color: Color(0xFF64B5F6), fontSize: 12.5, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -2074,7 +2131,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
             Positioned(
               left: 0,
               right: 0,
-              bottom: 0,
+              bottom: 8,
               child: SafeArea(
                 top: false,
                 child: _TikTokVideoScrubber(controller: c),
@@ -2088,22 +2145,29 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
   Widget _buildSideAction(IconData icon, String label, Color color, {VoidCallback? onTap}) {
     return InkWell(
       onTap: onTap,
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.4),
-              shape: BoxShape.circle,
+      borderRadius: BorderRadius.circular(24),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.35),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 26),
             ),
-            child: Icon(icon, color: color, size: 28),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-          ),
-        ],
+            if (label.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
