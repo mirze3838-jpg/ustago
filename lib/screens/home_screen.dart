@@ -256,20 +256,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBody() {
-    switch (_currentIndex) {
-      case 0:
-        return _buildHomeContent();
-      case 1:
-        return const ShortsScreen();
-      case 2:
-        return const MarketScreen();
-      case 3:
-        return _buildMessagesTab();
-      case 4:
-        return _buildProfileTab();
-      default:
-        return _buildHomeContent();
-    }
+    return IndexedStack(
+      index: _currentIndex,
+      children: [
+        _buildHomeContent(),
+        ShortsScreen(isActive: _currentIndex == 1),
+        const MarketScreen(),
+        _buildMessagesTab(),
+        _buildProfileTab(),
+      ],
+    );
   }
 
   Widget _buildMessagesTab() {

@@ -27,6 +27,8 @@
         android:label="UstaGo"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:largeHeap="true"
+        android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="true">
         <activity
             android:name="com.ustago.app.MainActivity"

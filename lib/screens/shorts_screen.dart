@@ -15,7 +15,8 @@ import 'artisan_detail_screen.dart';
 
 class ShortsScreen extends StatefulWidget {
   final int initialIndex;
-  const ShortsScreen({super.key, this.initialIndex = 0});
+  final bool isActive;
+  const ShortsScreen({super.key, this.initialIndex = 0, this.isActive = true});
 
   @override
   State<ShortsScreen> createState() => _ShortsScreenState();
@@ -34,11 +35,25 @@ class _ShortsScreenState extends State<ShortsScreen> {
     _pageController = PageController(initialPage: widget.initialIndex);
   }
 
+  @override
+  void didUpdateWidget(covariant ShortsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive != widget.isActive) {
+      if (widget.isActive) {
+        _controllers[_currentIndex]?.play();
+      } else {
+        _controllers[_currentIndex]?.pause();
+      }
+    }
+  }
+
   void _preloadControllers(List<Map<String, dynamic>> items) {
     if (items.isEmpty) return;
 
+    // Cari, sonrakı 2 video və əvvəlki videonu RAM-da hazır saxlayırıq (TikTok axıcılığı)
     final needed = <int>{_currentIndex};
     if (_currentIndex + 1 < items.length) needed.add(_currentIndex + 1);
+    if (_currentIndex + 2 < items.length) needed.add(_currentIndex + 2);
     if (_currentIndex - 1 >= 0) needed.add(_currentIndex - 1);
 
     final toRemove = <int>[];
@@ -77,7 +92,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
         await controller.setVolume(1.0);
       }
 
-      if (index == _currentIndex) {
+      if (index == _currentIndex && widget.isActive) {
         await controller.play();
       } else {
         await controller.pause();
@@ -102,8 +117,18 @@ class _ShortsScreenState extends State<ShortsScreen> {
     final oldIndex = _currentIndex;
     _currentIndex = newIndex;
 
+    // 1. Köhnə videonu dayandırırıq və 0-cı saniyəyə (əvvələ) çəkirik
     _controllers[oldIndex]?.pause();
-    _controllers[newIndex]?.play();
+    _controllers[oldIndex]?.seekTo(Duration.zero);
+
+    // 2. Yeni videonu HƏR DƏFƏ BAŞDAN (0:00-dan) oxuduruq!
+    if (_controllers.containsKey(newIndex)) {
+      final c = _controllers[newIndex]!;
+      c.seekTo(Duration.zero);
+      if (widget.isActive) {
+        c.play();
+      }
+    }
 
     setState(() {});
     _preloadControllers(items);
@@ -282,17 +307,39 @@ class _ShortsScreenState extends State<ShortsScreen> {
                           icon: const Icon(Icons.video_file_outlined),
                           label: const Text('Qalereyadan Video Seç'),
                           onPressed: () async {
-                            final picker = ImagePicker();
-                            final video = await picker.pickVideo(
-                              source: ImageSource.gallery,
-                              maxDuration: const Duration(minutes: 2),
-                            );
-                            if (video != null) {
-                              final bytes = await video.readAsBytes();
-                              setModalState(() {
-                                pickedVideo = video;
-                                pickedVideoBytes = bytes;
-                              });
+                            try {
+                              // Qalereya açılanda RAM-ın dolmaması üçün bütün videoları dayandırırıq
+                              for (var c in _controllers.values) {
+                                c.pause();
+                              }
+
+                              final picker = ImagePicker();
+                              final video = await picker.pickVideo(
+                                source: ImageSource.gallery,
+                                maxDuration: const Duration(minutes: 5),
+                              );
+                              if (video != null) {
+                                final length = await video.length();
+                                if (length > 150 * 1024 * 1024) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Video həcmi 150MB-dan çox olmamalıdır!')),
+                                    );
+                                  }
+                                  return;
+                                }
+                                setModalState(() {
+                                  pickedVideo = video;
+                                  pickedVideoBytes = null; // Seçim zamanı RAM-ı doldurmuruq!
+                                });
+                              }
+                            } catch (e) {
+                              debugPrint('Video pick error: $e');
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Qalereyadan seçim zamanı xəta: $e')),
+                                );
+                              }
                             }
                           },
                         ),
@@ -497,15 +544,23 @@ class _ShortsScreenState extends State<ShortsScreen> {
                         String finalVideoUrl = link;
 
                         // Əgər telefonun qalereyasından video seçilibsə, pulsuz bulud bazasına yükləyirik
-                        if (pickedVideo != null && pickedVideoBytes != null) {
+                        if (pickedVideo != null) {
                           try {
                             setModalState(() {
-                              uploadStatus = 'Video bulud bazasına yüklənir...';
+                              uploadStatus = 'Video faylı oxunur...';
+                              uploadProgress = 0.05;
+                            });
+
+                            final bytes = pickedVideoBytes ?? await pickedVideo!.readAsBytes();
+                            pickedVideoBytes = bytes;
+
+                            setModalState(() {
+                              uploadStatus = 'Cloudflare R2-yə yüklənir...';
                               uploadProgress = 0.2;
                             });
 
                             final uploadedUrl = await VideoUploadService.uploadVideo(
-                              videoBytes: pickedVideoBytes!,
+                              videoBytes: bytes,
                               fileName: pickedVideo!.name,
                               onProgress: (p) {
                                 setModalState(() {
@@ -634,6 +689,12 @@ class _ShortsScreenState extends State<ShortsScreen> {
                 .orderBy('createdAt', descending: true)
                 .snapshots(),
             builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                return const Center(
+                  child: CircularProgressIndicator(color: Colors.white70),
+                );
+              }
+
               final docs = snapshot.data?.docs ?? [];
 
               final List<Map<String, dynamic>> items = [];
@@ -656,8 +717,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
                   });
                 }
               }
-              // Yalnız heç bir real video yüklənməyibsə nümunə videoları göstəririk
-              if (items.isEmpty) {
+              // Yalnız Firestore cavab veribsə və heç bir video yoxdursa nümunə videoları göstəririk
+              if (items.isEmpty && snapshot.connectionState != ConnectionState.waiting) {
                 items.addAll(_sampleShorts);
               }
 
@@ -1689,6 +1750,18 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
               ],
             ),
           ),
+
+          // TikTok tipli Video Scrubber (İrəli/Geri çəkmə və Vaxt göstəricisi)
+          if (isReady)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: SafeArea(
+                top: false,
+                child: _TikTokVideoScrubber(controller: c),
+              ),
+            ),
         ],
       ),
     );
@@ -1714,6 +1787,184 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// TikTok tipli Video İrəli/Geri Çəkmə (Scrubber) və Vaxt Göstəricisi
+class _TikTokVideoScrubber extends StatefulWidget {
+  final VideoPlayerController controller;
+  const _TikTokVideoScrubber({required this.controller});
+
+  @override
+  State<_TikTokVideoScrubber> createState() => _TikTokVideoScrubberState();
+}
+
+class _TikTokVideoScrubberState extends State<_TikTokVideoScrubber> {
+  bool _isDragging = false;
+  double _dragValue = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onUpdate);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TikTokVideoScrubber oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onUpdate);
+      widget.controller.addListener(_onUpdate);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onUpdate);
+    super.dispose();
+  }
+
+  void _onUpdate() {
+    if (!mounted || _isDragging) return;
+    setState(() {});
+  }
+
+  String _formatTime(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final duration = widget.controller.value.duration;
+    if (duration == Duration.zero) return const SizedBox.shrink();
+
+    final position = _isDragging
+        ? duration * _dragValue
+        : widget.controller.value.position;
+
+    final progress = duration.inMilliseconds > 0
+        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
+        : 0.0;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Drag edəndə mərkəzdə görünən böyük vaxt göstəricisi (TikTok kimi)
+        if (_isDragging)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            margin: const EdgeInsets.only(bottom: 6),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.8),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white24, width: 1),
+            ),
+            child: Text(
+              '${_formatTime(position)} / ${_formatTime(duration)}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+
+        // İrəli/Geri çəkmə zolağı (Interactive Slider)
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragStart: (details) {
+            setState(() {
+              _isDragging = true;
+            });
+            widget.controller.pause();
+          },
+          onHorizontalDragUpdate: (details) {
+            final box = context.findRenderObject() as RenderBox?;
+            if (box != null) {
+              final localX = details.localPosition.dx;
+              final width = box.size.width;
+              final newPercent = (localX / width).clamp(0.0, 1.0);
+              setState(() {
+                _dragValue = newPercent;
+              });
+              final target = duration * newPercent;
+              widget.controller.seekTo(target);
+            }
+          },
+          onHorizontalDragEnd: (details) {
+            final target = duration * _dragValue;
+            widget.controller.seekTo(target).then((_) {
+              if (mounted) {
+                widget.controller.play();
+                setState(() {
+                  _isDragging = false;
+                });
+              }
+            });
+          },
+          onTapDown: (details) {
+            final box = context.findRenderObject() as RenderBox?;
+            if (box != null) {
+              final localX = details.localPosition.dx;
+              final width = box.size.width;
+              final percent = (localX / width).clamp(0.0, 1.0);
+              final target = duration * percent;
+              widget.controller.seekTo(target);
+            }
+          },
+          child: Container(
+            height: _isDragging ? 20 : 10,
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            alignment: Alignment.bottomCenter,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.centerLeft,
+              children: [
+                // Arxa zolaq (boz)
+                Container(
+                  height: _isDragging ? 4.5 : 2.0,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.25),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                // Dolmuş zolaq (TikTok ağ/qırmızı)
+                FractionallySizedBox(
+                  widthFactor: progress,
+                  child: Container(
+                    height: _isDragging ? 4.5 : 2.0,
+                    decoration: BoxDecoration(
+                      color: _isDragging ? Colors.redAccent : Colors.white.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                // Drag zamanı barmaq altındakı indikator
+                if (_isDragging)
+                  Positioned(
+                    left: (MediaQuery.of(context).size.width * progress) - 5,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(color: Colors.black45, blurRadius: 4),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
