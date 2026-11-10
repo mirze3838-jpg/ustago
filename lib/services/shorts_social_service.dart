@@ -100,7 +100,7 @@ class ShortsSocialService {
     }
   }
 
-  /// Ustanı izlə / izləməni dayandır
+  /// Ustanı izlə / izləməni dayandır (Təhlükəsiz atomik batch: yalnız icazə verilən sub-kolleksiyalar və öz sənədi yenilənir)
   static Future<bool> toggleFollowArtisan(String artisanUid) async {
     final uid = currentUid;
     if (uid == null || artisanUid.isEmpty) {
@@ -112,7 +112,6 @@ class ShortsSocialService {
 
     final followerRef = _firestore.collection('users').doc(artisanUid).collection('followers').doc(uid);
     final followingRef = _firestore.collection('users').doc(uid).collection('following').doc(artisanUid);
-    final artisanUserRef = _firestore.collection('users').doc(artisanUid);
     final currentUserRef = _firestore.collection('users').doc(uid);
 
     final snap = await followerRef.get();
@@ -121,9 +120,9 @@ class ShortsSocialService {
       final batch = _firestore.batch();
       batch.delete(followerRef);
       batch.delete(followingRef);
-      batch.update(artisanUserRef, {'followersCount': FieldValue.increment(-1)});
+      // Yalnız öz sənədimizdəki followingCount sayğacını yeniləyirik
       batch.update(currentUserRef, {'followingCount': FieldValue.increment(-1)});
-      await batch.commit().catchError((_) {});
+      await batch.commit();
       return false;
     } else {
       // İzlə
@@ -136,9 +135,8 @@ class ShortsSocialService {
         'targetUserId': artisanUid,
         'createdAt': FieldValue.serverTimestamp(),
       });
-      batch.update(artisanUserRef, {'followersCount': FieldValue.increment(1)});
       batch.update(currentUserRef, {'followingCount': FieldValue.increment(1)});
-      await batch.commit().catchError((_) {});
+      await batch.commit();
       return true;
     }
   }
@@ -289,5 +287,48 @@ class ShortsSocialService {
       'status': 'pending',
       'createdAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  // ================= 7. VİDEO VƏ ALT-KOLLEKSİYALARIN TƏHLÜKƏSİZ SİLİNMƏSİ =================
+  /// Videonu və onun bütün alt-kolleksiyalarını (comments, likes) batch ilə tam təmizləyir
+  static Future<void> deleteShortVideoCompletely(String shortId) async {
+    final uid = currentUid;
+    if (uid == null || shortId.isEmpty) {
+      throw Exception('Videonu silmək üçün daxil olun');
+    }
+
+    final shortRef = _firestore.collection('shorts').doc(shortId);
+    final shortDoc = await shortRef.get();
+    if (!shortDoc.exists) return;
+
+    final shortData = shortDoc.data();
+    final isOwner = shortData?['userId'] == uid;
+    // Yalnız video sahibi və ya admin silə bilər
+    if (!isOwner && currentUser?.email != 'mirze3838@gmail.com') {
+      throw Exception('Yalnız öz videonuzu silə bilərsiniz');
+    }
+
+    // 1. Şərhləri və onların likes alt-kolleksiyasını toplayıb silirik (batch limit: 500)
+    final commentsSnap = await shortRef.collection('comments').limit(200).get();
+    final batch = _firestore.batch();
+
+    for (var cDoc in commentsSnap.docs) {
+      final cLikesSnap = await cDoc.reference.collection('likes').limit(50).get();
+      for (var clDoc in cLikesSnap.docs) {
+        batch.delete(clDoc.reference);
+      }
+      batch.delete(cDoc.reference);
+    }
+
+    // 2. Videonun öz likes alt-kolleksiyasını silirik
+    final likesSnap = await shortRef.collection('likes').limit(200).get();
+    for (var lDoc in likesSnap.docs) {
+      batch.delete(lDoc.reference);
+    }
+
+    // 3. Əsas video sənədini silirik
+    batch.delete(shortRef);
+
+    await batch.commit();
   }
 }

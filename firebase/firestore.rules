@@ -54,29 +54,43 @@ service cloud.firestore {
     match /shorts/{shortId} {
       allow read: if true; // Hər kəs videoları izləyə bilər
       allow create: if signedIn();
-      // Bəyənmə, rəy sayı və ya müəllifin öz videosunu redaktəsi
-      allow update: if signedIn();
+      
+      // Təhlükəsiz Redaktə Qaydası:
+      // 1. Video sahibi və ya Admin videonun məlumatlarını dəyişə bilər
+      // 2. Kənar istifadəçilər YALNIZ və YALNIZ 'likes', 'likedBy' və ya 'commentsCount' sahələrini yeniləyə bilər (videoUrl, title, userId dəyişdirilə BİLMƏZ!)
+      allow update: if signedIn() && (
+        resource.data.userId == request.auth.uid || 
+        isAdmin() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'likedBy', 'commentsCount'])
+      );
+      
+      // Yalnız video sahibi və ya Admin silə bilər
       allow delete: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
 
       // Şərhlər alt-kolleksiyası
       match /comments/{commentId} {
         allow read: if true;
-        allow create: if signedIn();
-        allow update: if signedIn();
+        allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+        // Şərhin yalnız 'likes' sayğacı yenilənə bilər və ya şərh müəllifi redaktə edə bilər
+        allow update: if signedIn() && (
+          resource.data.userId == request.auth.uid ||
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+        );
+        // Yalnız şərh sahibi, videonun sahibi və ya Admin silə bilər
         allow delete: if signedIn() && (
           resource.data.userId == request.auth.uid ||
           get(/databases/$(database)/documents/shorts/$(shortId)).data.userId == request.auth.uid ||
           isAdmin()
         );
 
-        // Şərh bəyənmələri
+        // Şərh bəyənmələri (Yalnız öz UID-si ilə)
         match /likes/{userId} {
           allow read: if true;
           allow write: if signedIn() && request.auth.uid == userId;
         }
       }
 
-      // Video bəyənmələri alt-kolleksiyası
+      // Video bəyənmələri alt-kolleksiyası (Yalnız öz UID-si ilə)
       match /likes/{userId} {
         allow read: if true;
         allow write: if signedIn() && request.auth.uid == userId;

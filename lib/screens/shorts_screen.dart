@@ -1672,7 +1672,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
 
     if (confirm == true) {
       try {
-        await FirebaseFirestore.instance.collection('shorts').doc(docId.toString()).delete();
+        await ShortsSocialService.deleteShortVideoCompletely(docId.toString());
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Video uğurla silindi!')),
