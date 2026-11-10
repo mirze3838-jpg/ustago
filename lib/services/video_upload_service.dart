@@ -129,6 +129,7 @@ class VideoUploadService {
         'x-amz-content-sha256': payloadHash,
         'Authorization': authHeader,
         'Content-Type': 'video/mp4',
+        'Cache-Control': 'public, max-age=31536000, immutable',
       },
       body: videoBytes,
     ).timeout(const Duration(minutes: 5));

@@ -432,16 +432,23 @@ class _ShortsScreenState extends State<ShortsScreen> {
                       ),
                       TextButton(
                         onPressed: () async {
-                          final picker = ImagePicker();
-                          final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
-                          if (img != null) {
-                            final rawBytes = await img.readAsBytes();
-                            // Firestore 1MB limit üçün şəkli sıxışdırırıq
-                            final compressed = await _compressCoverImage(rawBytes);
-                            setModalState(() {
-                              pickedCover = img;
-                              pickedCoverBytes = compressed;
-                            });
+                          try {
+                            for (var c in _controllers.values) {
+                              c.pause();
+                            }
+                            final picker = ImagePicker();
+                            final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
+                            if (img != null) {
+                              final rawBytes = await img.readAsBytes();
+                              // Firestore 1MB limit üçün şəkli sıxışdırırıq
+                              final compressed = await _compressCoverImage(rawBytes);
+                              setModalState(() {
+                                pickedCover = img;
+                                pickedCoverBytes = compressed;
+                              });
+                            }
+                          } catch (e) {
+                            debugPrint('Cover pick error: $e');
                           }
                         },
                         child: Text(pickedCoverBytes != null ? 'Dəyiş' : 'Seç'),
@@ -1910,8 +1917,9 @@ class _TikTokVideoScrubberState extends State<_TikTokVideoScrubber> {
             }
           },
           child: Container(
-            height: _isDragging ? 20 : 10,
-            padding: const EdgeInsets.symmetric(vertical: 2),
+            height: 48,
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            color: Colors.transparent, // Geniş sensor sahəsi
             alignment: Alignment.bottomCenter,
             child: Stack(
               clipBehavior: Clip.none,
@@ -1919,10 +1927,10 @@ class _TikTokVideoScrubberState extends State<_TikTokVideoScrubber> {
               children: [
                 // Arxa zolaq (boz)
                 Container(
-                  height: _isDragging ? 4.5 : 2.0,
+                  height: _isDragging ? 5.0 : 2.5,
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.25),
+                    color: Colors.white.withOpacity(0.3),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -1930,9 +1938,9 @@ class _TikTokVideoScrubberState extends State<_TikTokVideoScrubber> {
                 FractionallySizedBox(
                   widthFactor: progress,
                   child: Container(
-                    height: _isDragging ? 4.5 : 2.0,
+                    height: _isDragging ? 5.0 : 2.5,
                     decoration: BoxDecoration(
-                      color: _isDragging ? Colors.redAccent : Colors.white.withOpacity(0.9),
+                      color: _isDragging ? Colors.redAccent : Colors.white.withOpacity(0.95),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -1940,10 +1948,10 @@ class _TikTokVideoScrubberState extends State<_TikTokVideoScrubber> {
                 // Drag zamanı barmaq altındakı indikator
                 if (_isDragging)
                   Positioned(
-                    left: (MediaQuery.of(context).size.width * progress) - 5,
+                    left: (MediaQuery.of(context).size.width * progress) - 7,
                     child: Container(
-                      width: 10,
-                      height: 10,
+                      width: 14,
+                      height: 14,
                       decoration: const BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
