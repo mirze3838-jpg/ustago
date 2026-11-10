@@ -15,8 +15,7 @@ import 'artisan_detail_screen.dart';
 
 class ShortsScreen extends StatefulWidget {
   final int initialIndex;
-  final bool isActive;
-  const ShortsScreen({super.key, this.initialIndex = 0, this.isActive = true});
+  const ShortsScreen({super.key, this.initialIndex = 0});
 
   @override
   State<ShortsScreen> createState() => _ShortsScreenState();
@@ -26,7 +25,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
   late final PageController _pageController;
   int _currentIndex = 0;
   final Map<int, VideoPlayerController> _controllers = {};
-  final Set<int> _initializing = {};
+  final Map<int, Future<void>> _initializing = {};
+  bool _muted = false;
 
   @override
   void initState() {
@@ -35,103 +35,112 @@ class _ShortsScreenState extends State<ShortsScreen> {
     _pageController = PageController(initialPage: widget.initialIndex);
   }
 
-  @override
-  void didUpdateWidget(covariant ShortsScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.isActive != widget.isActive) {
-      if (widget.isActive) {
-        _controllers[_currentIndex]?.play();
-      } else {
-        _controllers[_currentIndex]?.pause();
-      }
-    }
-  }
+  Future<void> _prepareVideo(int index, List<Map<String, dynamic>> items) async {
+    if (index < 0 || index >= items.length) return;
 
-  void _preloadControllers(List<Map<String, dynamic>> items) {
-    if (items.isEmpty) return;
-
-    // Cari, sonrakı 2 video və əvvəlki videonu RAM-da hazır saxlayırıq (TikTok axıcılığı)
-    final needed = <int>{_currentIndex};
-    if (_currentIndex + 1 < items.length) needed.add(_currentIndex + 1);
-    if (_currentIndex + 2 < items.length) needed.add(_currentIndex + 2);
-    if (_currentIndex - 1 >= 0) needed.add(_currentIndex - 1);
-
-    final toRemove = <int>[];
-    _controllers.forEach((idx, c) {
-      if (!needed.contains(idx)) {
-        try {
-          c.pause();
-          c.dispose();
-        } catch (_) {}
-        toRemove.add(idx);
-      }
-    });
-    for (var idx in toRemove) {
-      _controllers.remove(idx);
+    if (_controllers.containsKey(index)) {
+      final existing = _initializing[index];
+      if (existing != null) await existing;
+      return;
     }
 
-    for (var idx in needed) {
-      final url = items[idx]['videoUrl']?.toString().trim() ?? '';
-      _initController(idx, url);
-    }
-  }
+    final url = items[index]['videoUrl']?.toString().trim() ?? '';
+    if (url.isEmpty) return;
 
-  Future<void> _initController(int index, String url) async {
-    if (url.trim().isEmpty) return;
-    if (_controllers.containsKey(index) || _initializing.contains(index)) return;
-    _initializing.add(index);
+    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    _controllers[index] = controller;
+
+    final future = () async {
+      await controller.initialize();
+      await controller.setLooping(true);
+      await controller.setVolume(_muted ? 0 : 1.0);
+    }();
+
+    _initializing[index] = future;
 
     try {
-      final uri = Uri.parse(url.trim());
-      final controller = VideoPlayerController.networkUrl(uri);
-      await controller.initialize();
-      controller.setLooping(true);
-      if (kIsWeb) {
-        await controller.setVolume(0);
-      } else {
-        await controller.setVolume(1.0);
-      }
-
-      if (index == _currentIndex && widget.isActive) {
-        await controller.play();
-      } else {
-        await controller.pause();
-        await controller.seekTo(Duration.zero);
-      }
-
+      await future;
       if (mounted) {
-        setState(() {
-          _controllers[index] = controller;
-        });
-      } else {
-        controller.dispose();
+        setState(() {});
       }
-    } catch (e) {
-      debugPrint('Video preload error at index $index: $e');
+    } catch (error) {
+      debugPrint('Video preload xətası (index $index): $error');
+      _controllers.remove(index);
+      try {
+        await controller.dispose();
+      } catch (_) {}
     } finally {
       _initializing.remove(index);
     }
   }
 
-  void _onPageChanged(int newIndex, List<Map<String, dynamic>> items) {
-    final oldIndex = _currentIndex;
-    _currentIndex = newIndex;
+  Future<void> _activateVideo(int index, List<Map<String, dynamic>> items) async {
+    if (index < 0 || index >= items.length) return;
 
-    // 1. Köhnə videonu dayandırırıq və 0-cı saniyəyə (əvvələ) çəkirik
-    _controllers[oldIndex]?.pause();
-    _controllers[oldIndex]?.seekTo(Duration.zero);
+    _currentIndex = index;
+    if (mounted) setState(() {});
 
-    // 2. Yeni videonu HƏR DƏFƏ BAŞDAN (0:00-dan) oxuduruq!
-    if (_controllers.containsKey(newIndex)) {
-      final c = _controllers[newIndex]!;
-      c.seekTo(Duration.zero);
-      if (widget.isActive) {
-        c.play();
+    // 1. Digər bütün videoları dayandırırıq və başa çəkirik
+    for (final entry in _controllers.entries) {
+      if (entry.key != index && entry.value.value.isInitialized) {
+        try {
+          await entry.value.pause();
+          await entry.value.seekTo(Duration.zero);
+        } catch (_) {}
       }
     }
 
-    setState(() {});
-    _preloadControllers(items);
+    // 2. Cari videonu hazırlayırıq
+    await _prepareVideo(index, items);
+
+    if (!mounted || _currentIndex != index) return;
+
+    final controller = _controllers[index];
+    if (controller != null && controller.value.isInitialized) {
+      try {
+        await controller.setVolume(_muted ? 0 : 1.0);
+        await controller.seekTo(Duration.zero);
+        await controller.play();
+      } catch (_) {}
+    }
+
+    // 3. Növbəti videonu arxada səssizcə hazırlayırıq (TikTok preloading)
+    if (index + 1 < items.length) {
+      _prepareVideo(index + 1, items);
+    }
+    if (index - 1 >= 0) {
+      _prepareVideo(index - 1, items);
+    }
+
+    // 4. Cari videodan 1 addımdan çox uzaqda olan köhnə videoları silirik (RAM qorunur)
+    final oldIndexes = _controllers.keys
+        .where((i) => (i - index).abs() > 1)
+        .toList();
+
+    for (final oldIndex in oldIndexes) {
+      final oldController = _controllers.remove(oldIndex);
+      if (oldController != null) {
+        try {
+          await oldController.dispose();
+        } catch (_) {}
+      }
+    }
+  }
+
+  void _onPageChanged(int index, List<Map<String, dynamic>> items) {
+    _activateVideo(index, items);
+  }
+
+  Future<void> _toggleMute() async {
+    _muted = !_muted;
+    for (final controller in _controllers.values) {
+      if (controller.value.isInitialized) {
+        try {
+          await controller.setVolume(_muted ? 0 : 1.0);
+        } catch (_) {}
+      }
+    }
+    if (mounted) setState(() {});
   }
 
   // Nümayiş üçün nümunə usta videoları
@@ -157,13 +166,14 @@ class _ShortsScreenState extends State<ShortsScreen> {
   @override
   void dispose() {
     _pageController.dispose();
-    for (var c in _controllers.values) {
+    for (final controller in _controllers.values) {
       try {
-        c.pause();
-        c.dispose();
+        controller.pause();
+        controller.dispose();
       } catch (_) {}
     }
     _controllers.clear();
+    _initializing.clear();
     super.dispose();
   }
 
@@ -722,12 +732,14 @@ class _ShortsScreenState extends State<ShortsScreen> {
                 items.addAll(_sampleShorts);
               }
 
-              // Cari və növbəti videoları arxa planda dərhal yükləyirik (TikTok kimi ani açılış)
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) {
-                  _preloadControllers(items);
-                }
-              });
+              // İlkin açılışda cari videonu dərhal aktivləşdiririk (TikTok axıcılığı)
+              if (items.isNotEmpty && _controllers.isEmpty && _initializing.isEmpty) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && _controllers.isEmpty && _initializing.isEmpty) {
+                    _activateVideo(_currentIndex, items);
+                  }
+                });
+              }
 
               return PageView.builder(
                 controller: _pageController,
@@ -741,7 +753,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
                     data: items[index],
                     controller: _controllers[index],
                     isCurrent: isCurrent,
-                    onRetry: () => _initController(index, items[index]['videoUrl']?.toString().trim() ?? ''),
+                    muted: _muted,
+                    onToggleMute: _toggleMute,
                   );
                 },
               );
@@ -817,6 +830,8 @@ class _ShortVideoItem extends StatefulWidget {
   final Map<String, dynamic> data;
   final VideoPlayerController? controller;
   final bool isCurrent;
+  final bool muted;
+  final VoidCallback? onToggleMute;
   final VoidCallback? onRetry;
 
   const _ShortVideoItem({
@@ -824,6 +839,8 @@ class _ShortVideoItem extends StatefulWidget {
     required this.data,
     this.controller,
     this.isCurrent = true,
+    this.muted = false,
+    this.onToggleMute,
     this.onRetry,
   });
 
@@ -1525,13 +1542,13 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
           if (!isReady)
             _buildCoverImage(widget.data),
 
-          // 1. VİDEO EKRANI - ANINDA VƏ SIFIR GECİKMƏ İLƏ (TikTok / Instagram kimi)
+          // 1. VİDEO EKRANI - ANINDA VƏ SIFIR GECİKMƏ İLƏ (TikTok / Instagram kimi tam ekran)
           if (isReady)
-            Center(
-              child: AspectRatio(
-                aspectRatio: c.value.aspectRatio > 0
-                    ? c.value.aspectRatio
-                    : (9 / 16),
+            FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: c.value.size.width > 0 ? c.value.size.width : 720,
+                height: c.value.size.height > 0 ? c.value.size.height : 1280,
                 child: VideoPlayer(c),
               ),
             ),
@@ -1622,10 +1639,13 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                     ),
                     const SizedBox(height: 18),
                     _buildSideAction(
-                      _isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                      _isMuted ? 'Səssiz' : 'Səsli',
-                      _isMuted ? Colors.amber : Colors.white,
-                      onTap: _toggleMute,
+                      (widget.muted || _isMuted) ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                      (widget.muted || _isMuted) ? 'Səssiz' : 'Səsli',
+                      (widget.muted || _isMuted) ? Colors.amber : Colors.white,
+                      onTap: () {
+                        widget.onToggleMute?.call();
+                        _toggleMute();
+                      },
                     ),
                     const SizedBox(height: 18),
                     _buildSideAction(
