@@ -3,13 +3,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:crypto/crypto.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 class VideoUploadService {
   /// Videonu buluda yükləyir və birbaşa MP4 linkini qaytarır.
-  /// 1. Firebase Storage (Daimi, silinmir, limitsiz yüksək sürət)
-  /// 2. Catbox.moe (Ehtiyat pulsuz daimi server)
-  /// 3. TmpFiles (Veb brauzer üçün alternativ)
+  /// 1. Cloudflare R2 (Ən sürətli qlobal CDN, sıfır gecikmə, limitsiz daimi saxlama)
+  /// 2. Firebase Storage (Ehtiyat server)
+  /// 3. Catbox.moe / TmpFiles (Alternativ serverlər)
   static Future<String> uploadVideo({
     required Uint8List videoBytes,
     String? fileName,
@@ -17,7 +18,18 @@ class VideoUploadService {
   }) async {
     final name = fileName ?? 'usta_video_${DateTime.now().millisecondsSinceEpoch}.mp4';
 
-    // 1. Birinci cəhd: Firebase Storage (Daimi saxlanma, heç vaxt silinmir)
+    // 1. Birinci cəhd: Cloudflare R2 (Dünyanın ən sürətli video buludu)
+    try {
+      final r2Url = await _uploadToCloudflareR2(videoBytes, name, onProgress);
+      if (r2Url.isNotEmpty) {
+        debugPrint('Video Cloudflare R2-yə uğurla yükləndi: $r2Url');
+        return r2Url;
+      }
+    } catch (e) {
+      debugPrint('Cloudflare R2 upload xətası ($e), ehtiyat serverlərə keçilir...');
+    }
+
+    // 2. İkinci cəhd: Firebase Storage
     try {
       final ref = FirebaseStorage.instance.ref().child('shorts_videos/$name');
       final uploadTask = ref.putData(
@@ -39,7 +51,7 @@ class VideoUploadService {
       debugPrint('Firebase Storage upload xətası ($e), ehtiyat serverlərə keçilir...');
     }
 
-    // 2. İkinci cəhd: Veb və ya Mobil fallback
+    // 3. Üçüncü cəhd: Veb və ya Mobil fallback
     if (kIsWeb) {
       try {
         return await _uploadToTmpfiles(videoBytes, name, onProgress);
@@ -54,6 +66,74 @@ class VideoUploadService {
         debugPrint('Mobile upload fallback to tmpfiles: $e');
         return await _uploadToTmpfiles(videoBytes, name, onProgress);
       }
+    }
+  }
+
+  /// Cloudflare R2-yə AWS SigV4 imzası ilə birbaşa yüksək sürətli yükləmə
+  static Future<String> _uploadToCloudflareR2(
+    Uint8List videoBytes,
+    String fileName,
+    void Function(double progress)? onProgress,
+  ) async {
+    const accountId = '6f5c125316ec775e48be6a5b27579c5a';
+    const accessKeyId = '1b833bb1dfe8a3744fe92a1ca55fb098';
+    const secretAccessKey = '50d7e5923b2698254cb0c89999461b127e3d4672b31efcdb44bdbb4f294f9715';
+    const bucket = 'ustago-videos';
+    const publicBaseUrl = 'https://pub-7889d6fa89354ee286e5eb34c3a51e97.r2.dev';
+
+    onProgress?.call(0.1);
+
+    final host = '$accountId.r2.cloudflarestorage.com';
+    const region = 'auto';
+    const service = 's3';
+
+    final now = DateTime.now().toUtc();
+    final amzDate = now.toIso8601String().replaceAll(RegExp(r'[:-]|\.\d{3}'), '');
+    final dateStamp = amzDate.substring(0, 8);
+
+    final payloadHash = sha256.convert(videoBytes).toString();
+    final canonicalUri = '/$bucket/$fileName';
+    final canonicalHeaders = 'host:$host\nx-amz-content-sha256:$payloadHash\nx-amz-date:$amzDate\n';
+    const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
+    final canonicalRequest = 'PUT\n$canonicalUri\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash';
+
+    final credentialScope = '$dateStamp/$region/$service/aws4_request';
+    final stringToSign = 'AWS4-HMAC-SHA256\n$amzDate\n$credentialScope\n${sha256.convert(utf8.encode(canonicalRequest))}';
+
+    List<int> getSignatureKey(String key, String dateStamp, String regionName, String serviceName) {
+      final kDate = Hmac(sha256, utf8.encode('AWS4$key')).convert(utf8.encode(dateStamp)).bytes;
+      final kRegion = Hmac(sha256, kDate).convert(utf8.encode(regionName)).bytes;
+      final kService = Hmac(sha256, kRegion).convert(utf8.encode(serviceName)).bytes;
+      return Hmac(sha256, kService).convert(utf8.encode('aws4_request')).bytes;
+    }
+
+    final signingKey = getSignatureKey(secretAccessKey, dateStamp, region, service);
+    final signature = Hmac(sha256, signingKey).convert(utf8.encode(stringToSign)).toString();
+
+    final authHeader = 'AWS4-HMAC-SHA256 Credential=$accessKeyId/$credentialScope, SignedHeaders=$signedHeaders, Signature=$signature';
+
+    onProgress?.call(0.3);
+
+    final url = Uri.parse('https://$host$canonicalUri');
+    final response = await http.put(
+      url,
+      headers: {
+        'Host': host,
+        'x-amz-date': amzDate,
+        'x-amz-content-sha256': payloadHash,
+        'Authorization': authHeader,
+        'Content-Type': 'video/mp4',
+      },
+      body: videoBytes,
+    ).timeout(const Duration(minutes: 5));
+
+    onProgress?.call(0.95);
+
+    if (response.statusCode == 200) {
+      onProgress?.call(1.0);
+      return '$publicBaseUrl/$fileName';
+    } else {
+      throw Exception('R2 upload failed with code ${response.statusCode}: ${response.body}');
     }
   }
 
