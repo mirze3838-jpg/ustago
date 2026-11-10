@@ -88,8 +88,14 @@ class VideoUploadService {
     const service = 's3';
 
     final now = DateTime.now().toUtc();
-    final amzDate = now.toIso8601String().replaceAll(RegExp(r'[:-]|\.\d{3}'), '');
-    final dateStamp = amzDate.substring(0, 8);
+    final year = now.year.toString().padLeft(4, '0');
+    final month = now.month.toString().padLeft(2, '0');
+    final day = now.day.toString().padLeft(2, '0');
+    final hour = now.hour.toString().padLeft(2, '0');
+    final minute = now.minute.toString().padLeft(2, '0');
+    final second = now.second.toString().padLeft(2, '0');
+    final dateStamp = '$year$month$day';
+    final amzDate = '${dateStamp}T$hour$minute${second}Z';
 
     final payloadHash = sha256.convert(videoBytes).toString();
     final canonicalUri = '/$bucket/$fileName';

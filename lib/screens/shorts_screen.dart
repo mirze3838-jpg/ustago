@@ -586,10 +586,12 @@ class _ShortsScreenState extends State<ShortsScreen> {
                 },
                 itemBuilder: (context, index) {
                   final bool isCurrent = index == _currentIndex;
+                  final bool isNext = index == _currentIndex + 1;
                   return _ShortVideoItem(
                     key: ValueKey(items[index]['id'] ?? index),
                     data: items[index],
                     isCurrent: isCurrent,
+                    isNext: isNext,
                   );
                 },
               );
@@ -664,10 +666,12 @@ class _ShortsScreenState extends State<ShortsScreen> {
 class _ShortVideoItem extends StatefulWidget {
   final Map<String, dynamic> data;
   final bool isCurrent;
+  final bool isNext;
   const _ShortVideoItem({
     super.key,
     required this.data,
     this.isCurrent = true,
+    this.isNext = false,
   });
 
   @override
@@ -700,7 +704,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     _authorPhone = widget.data['phone'];
     _checkIfLiked();
     _loadAuthorData();
-    if (widget.isCurrent) {
+    if (widget.isCurrent || widget.isNext) {
       _initVideo();
     }
   }
@@ -708,7 +712,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
   @override
   void didUpdateWidget(covariant _ShortVideoItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isCurrent != widget.isCurrent) {
+    if (oldWidget.isCurrent != widget.isCurrent || oldWidget.isNext != widget.isNext) {
       if (widget.isCurrent) {
         if (_controller == null && !_hasError) {
           _initVideo();
@@ -719,8 +723,15 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
             _isVideoVisible = true;
           });
         }
+      } else if (widget.isNext) {
+        // Növbəti video arxa fonda səssizcə qabaqcadan hazırlaşır (Preload)
+        if (_controller == null && !_hasError) {
+          _initVideo();
+        } else if (_controller != null && _isInitialized) {
+          _controller!.pause();
+        }
       } else {
-        // Ekranda olmayan videonu dərhal dayandırırıq və yaddaşını boşaldırıq (Heç vaxt atmır!)
+        // Cari və ya növbəti olmayan köhnə videolar dərhal yaddaşdan silinir (RAM təmiz qalır!)
         _controller?.pause();
         _controller?.dispose();
         _controller = null;
@@ -1246,7 +1257,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
         },
       );
 
-      if (!mounted || !widget.isCurrent) {
+      if (!mounted || (!widget.isCurrent && !widget.isNext)) {
         try {
           controller.dispose();
         } catch (_) {}
@@ -1283,7 +1294,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
         } catch (_) {}
       }
 
-      if (!mounted || !widget.isCurrent) {
+      if (!mounted || (!widget.isCurrent && !widget.isNext)) {
         try {
           controller.dispose();
         } catch (_) {}
