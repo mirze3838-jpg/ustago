@@ -580,16 +580,14 @@ class _ShortsScreenState extends State<ShortsScreen> {
                               } catch (_) {}
                             }
 
-                            final bytes = pickedVideoBytes ?? await pickedVideo!.readAsBytes();
-                            pickedVideoBytes = bytes;
-
+                            // STREAMING UPLOAD: readAsBytes() çağırılmır, birbaşa fayl yolu ötürülür!
                             setModalState(() {
                               uploadStatus = 'Cloudflare R2-yə yüklənir...';
-                              uploadProgress = 0.2;
+                              uploadProgress = 0.15;
                             });
 
                             final uploadedUrl = await VideoUploadService.uploadVideo(
-                              videoBytes: bytes,
+                              filePath: pickedVideo!.path,
                               fileName: pickedVideo!.name,
                               onProgress: (p) {
                                 setModalState(() {

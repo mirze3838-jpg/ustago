@@ -2447,10 +2447,21 @@ class _HomeScreenState extends State<HomeScreen> {
                               final picker = ImagePicker();
                               final video = await picker.pickVideo(source: ImageSource.gallery);
                               if (video != null) {
-                                final bytes = await video.readAsBytes();
+                                final length = await video.length();
+                                if (length > 150 * 1024 * 1024) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Video həcmi 150MB-dan çox olmamalıdır!'),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  }
+                                  return;
+                                }
                                 setModalState(() {
                                   pickedVideo = video;
-                                  pickedVideoBytes = bytes;
+                                  pickedVideoBytes = null; // STREAMING: RAM-a bütöv fayl yüklənmir!
                                 });
                               }
                             },
@@ -2630,15 +2641,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           if (isVideoPost) {
                             String finalVideoUrl = videoLinkController.text.trim();
 
-                            if (pickedVideo != null && pickedVideoBytes != null) {
+                            if (pickedVideo != null) {
                               try {
                                 setModalState(() {
                                   uploadStatusText = 'Bulud bazasına yüklənir...';
-                                  uploadProgress = 0.2;
+                                  uploadProgress = 0.15;
                                 });
 
                                 final uploadedUrl = await VideoUploadService.uploadVideo(
-                                  videoBytes: pickedVideoBytes!,
+                                  filePath: pickedVideo!.path,
+                                  videoBytes: pickedVideoBytes,
                                   fileName: pickedVideo!.name,
                                   onProgress: (p) {
                                     setModalState(() {
