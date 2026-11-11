@@ -86,9 +86,6 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
-      - name: Build Web App (for iOS Safari)
-        run: flutter build web --release --base-href "/ustago/" --no-tree-shake-icons
-
       - name: Build Android APK
         run: |
           flutter build apk --release --no-tree-shake-icons
@@ -111,6 +108,10 @@ jobs:
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Web App (for iOS Safari)
+        if: github.ref == 'refs/heads/main'
+        run: flutter build web --release --base-href "/ustago/" --no-tree-shake-icons
 
       - name: Deploy iOS Web App to GitHub Pages
         if: github.ref == 'refs/heads/main'
