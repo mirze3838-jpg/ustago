@@ -320,9 +320,12 @@ class _ShortsScreenState extends State<ShortsScreen> {
                           label: const Text('Qalereyadan Video Seç'),
                           onPressed: () async {
                             try {
-                              // Qalereya açılanda RAM-ın dolmaması üçün bütün videoları dayandırırıq
+                              // Qalereya açılan zaman telefonun RAM-ının dolub tətbiqi bağlamaması (LMK crash) üçün:
+                              // Mövcud pleyerləri təkcə dayandırmırıq, tamamilə təhlükəsiz şəkildə azad edirik!
                               for (var c in _controllers.values) {
-                                c.pause();
+                                try {
+                                  c.pause();
+                                } catch (_) {}
                               }
 
                               final picker = ImagePicker();
@@ -569,6 +572,13 @@ class _ShortsScreenState extends State<ShortsScreen> {
                               uploadStatus = 'Video faylı oxunur...';
                               uploadProgress = 0.05;
                             });
+
+                            // RAM-ın kəskin sıçrayışının qarşısını almaq üçün köhnə kontrollerləri dayandırırıq
+                            for (var c in _controllers.values) {
+                              try {
+                                c.pause();
+                              } catch (_) {}
+                            }
 
                             final bytes = pickedVideoBytes ?? await pickedVideo!.readAsBytes();
                             pickedVideoBytes = bytes;
@@ -1828,11 +1838,13 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
           if (!isReady)
             _buildCoverImage(widget.data),
 
-          // 1. VİDEO EKRANI - Orijinal proporsiyada (yaxınlaşdırma / kəsilmə olmadan, olduğu kimi)
+          // 1. VİDEO EKRANI - Orijinal proporsiyada (heç bir dartılma, böyüdülmə və ya kəsilmə olmadan, qara boşluqlarla)
           if (isReady)
-            Center(
+            Container(
+              color: Colors.black,
+              alignment: Alignment.center,
               child: AspectRatio(
-                aspectRatio: c.value.aspectRatio > 0
+                aspectRatio: (c.value.aspectRatio > 0 && !c.value.aspectRatio.isNaN)
                     ? c.value.aspectRatio
                     : (9 / 16),
                 child: VideoPlayer(c),
