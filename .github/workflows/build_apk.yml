@@ -88,7 +88,7 @@ jobs:
 
       - name: Build Android APK
         run: |
-          flutter build apk --release --no-tree-shake-icons
+          flutter build apk --release --no-tree-shake-icons --verbose
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/ustago.apk
 
       - name: Upload Android APK

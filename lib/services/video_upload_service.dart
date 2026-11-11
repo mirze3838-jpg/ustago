@@ -202,30 +202,17 @@ class VideoUploadService {
     request.contentLength = totalLength;
 
     int sentBytes = 0;
-    final fileStream = file.openRead();
-
-    final completer = Completer<http.StreamedResponse>();
-
-    fileStream.listen(
+    file.openRead().listen(
       (chunk) {
         sentBytes += chunk.length;
         request.sink.add(chunk);
         if (totalLength > 0) {
-          // 15% - 95% aralığı real upload tərəqqisidir
           final p = 0.15 + (sentBytes / totalLength) * 0.80;
           onProgress?.call(p.clamp(0.0, 0.95));
         }
       },
-      onDone: () async {
-        try {
-          await request.sink.close();
-        } catch (e) {
-          if (!completer.isCompleted) completer.completeError(e);
-        }
-      },
-      onError: (err) {
-        if (!completer.isCompleted) completer.completeError(err);
-      },
+      onDone: () => request.sink.close(),
+      onError: (err) => request.sink.addError(err),
       cancelOnError: true,
     );
 
