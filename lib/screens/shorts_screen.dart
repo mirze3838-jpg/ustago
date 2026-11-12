@@ -231,6 +231,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -322,7 +323,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                             try {
                               // Qalereya açılan zaman telefonun RAM-ının dolub tətbiqi bağlamaması (LMK crash) üçün:
                               // Mövcud pleyerləri təkcə dayandırmırıq, tamamilə təhlükəsiz şəkildə azad edirik!
-                              for (var c in _controllers.values) {
+                              for (var c in _controllers.values.toList()) {
                                 try {
                                   c.pause();
                                 } catch (_) {}
@@ -438,7 +439,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                       TextButton(
                         onPressed: () async {
                           try {
-                            for (var c in _controllers.values) {
+                            for (var c in _controllers.values.toList()) {
                               c.pause();
                             }
                             final picker = ImagePicker();
@@ -574,7 +575,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                             });
 
                             // RAM-ın kəskin sıçrayışının qarşısını almaq üçün köhnə kontrollerləri dayandırırıq
-                            for (var c in _controllers.values) {
+                            for (var c in _controllers.values.toList()) {
                               try {
                                 c.pause();
                               } catch (_) {}
@@ -590,17 +591,23 @@ class _ShortsScreenState extends State<ShortsScreen> {
                               filePath: pickedVideo!.path,
                               fileName: pickedVideo!.name,
                               onProgress: (p) {
-                                setModalState(() {
-                                  uploadProgress = p;
-                                  uploadStatus = '${(p * 100).toStringAsFixed(0)}%';
-                                });
+                                // ctx.mounted yoxlaması: əgər dialog bağlanıbsa setModalState çağırılmır
+                                // Bu olmasa dialog ctx-i ölmüş context-də setState çağırır → crash
+                                if (ctx.mounted) {
+                                  setModalState(() {
+                                    uploadProgress = p;
+                                    uploadStatus = '${(p * 100).toStringAsFixed(0)}%';
+                                  });
+                                }
                               },
                             );
 
                             finalVideoUrl = uploadedUrl;
                           } catch (e) {
                             debugPrint('Video upload error: $e');
-                            setModalState(() => isUploading = false);
+                            if (ctx.mounted) {
+                              setModalState(() => isUploading = false);
+                            }
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
