@@ -109,6 +109,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Upload Test APK to Pre-Release
+        if: github.ref == 'refs/heads/test-streaming-upload'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0-test
+          name: UstaGo TEST (Streaming Upload)
+          files: build/app/outputs/flutter-apk/ustago.apk
+          prerelease: true
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build Web App (for iOS Safari)
         if: github.ref == 'refs/heads/main'
         run: flutter build web --release --base-href "/ustago/" --no-tree-shake-icons
