@@ -4201,7 +4201,12 @@ class FullScreenVideoViewerState extends State<FullScreenVideoViewer> {
             if (_isInit && c != null)
               Center(
                 child: AspectRatio(
-                  aspectRatio: c.value.aspectRatio > 0 ? c.value.aspectRatio : 9 / 16,
+                  // rotationCorrection 90/270° olduqda aspectRatio swap edilir (portrait düzəlişi)
+                  aspectRatio: () {
+                    final raw = c.value.aspectRatio > 0 ? c.value.aspectRatio : 9.0 / 16.0;
+                    final rot = c.value.rotationCorrection;
+                    return (rot == 90 || rot == 270) ? 1.0 / raw : raw;
+                  }(),
                   child: IgnorePointer(
                     child: VideoPlayer(c),
                   ),

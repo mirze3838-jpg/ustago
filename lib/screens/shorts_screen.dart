@@ -1685,6 +1685,22 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     await c.setVolume(_isMuted ? 0 : 1.0);
   }
 
+  /// Video player-in qaytardığı aspectRatio dəyərini düzəldir.
+  /// video_player 2.9+ Android-də rotationCorrection (90/270°) olduqda
+  /// c.value.aspectRatio-nu avtomatik swap etmir — bunu burada düzəldirik.
+  double _correctAspectRatio(VideoPlayerController c) {
+    final raw = c.value.aspectRatio;
+    if (raw <= 0 || raw.isNaN || raw.isInfinite) return 9.0 / 16.0;
+
+    // rotationCorrection 90 və ya 270 dərəcədirsə video əslində fırlanmışdır —
+    // width/height swap olunmalıdır, buna görə nisbət tərsinə çevrilir.
+    final int rot = c.value.rotationCorrection;
+    if (rot == 90 || rot == 270) {
+      return 1.0 / raw;
+    }
+    return raw;
+  }
+
   void _togglePlay() {
     final c = widget.controller;
     if (c == null || !c.value.isInitialized) return;
@@ -1842,9 +1858,10 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
               color: Colors.black,
               alignment: Alignment.center,
               child: AspectRatio(
-                aspectRatio: (c.value.aspectRatio > 0 && !c.value.aspectRatio.isNaN)
-                    ? c.value.aspectRatio
-                    : (9 / 16),
+                // ORIENTATION DÜZƏLİŞİ: Android-də kamera çəkdikləri videoların
+                // rotation metadata-sı c.value.aspectRatio-ya düzgün əks etmir.
+                // c.value.size.height > width olarsa video portrait-dir → nisbəti düzəldirik.
+                aspectRatio: _correctAspectRatio(c),
                 child: VideoPlayer(c),
               ),
             ),
