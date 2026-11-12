@@ -29,6 +29,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
   final Map<int, VideoPlayerController> _controllers = {};
   final Map<int, Future<void>> _initializing = {};
   bool _muted = false;
+  List<Map<String, dynamic>> _latestItems = []; // Qalereya sonrası reaktivasiya üçün
 
   @override
   void initState() {
@@ -179,6 +180,33 @@ class _ShortsScreenState extends State<ShortsScreen> {
     super.dispose();
   }
 
+  /// Qalereya açılmadan əvvəl BÜTÜN controller-ları dispose edir.
+  /// Bu Android LMK (Low Memory Killer) crash-ını önləyir:
+  /// video decoder-lar + GPU teksturaları çoxlu RAM tutur,
+  /// Android bu yükü görüb Flutter prosesini kill edir.
+  Future<void> _disposeAllControllers() async {
+    final toDispose = _controllers.values.toList();
+    _controllers.clear();
+    _initializing.clear();
+    for (final c in toDispose) {
+      try {
+        await c.pause();
+        await c.dispose();
+      } catch (_) {}
+    }
+  }
+
+  /// Qalereya bağlandıqdan sonra cari videonu yenidən aktivləşdirir.
+  /// [items] parametri Firestore-dan gələn video siyahısıdır.
+  /// Bu metod yalnız `_items` dəyişəninə ehtiyac duyduğu üçün
+  /// stream-dən keçən sonuncu `items`-ı saxlayan `_latestItems` istifadə olunur.
+  void _reactivateAfterGallery() {
+    if (!mounted) return;
+    if (_latestItems.isNotEmpty) {
+      _activateVideo(_currentIndex, _latestItems);
+    }
+  }
+
   /// Şəkili Firestore 1MB limitinə uyğun sıxışdırır (maks ~700KB)
   Future<Uint8List> _compressCoverImage(Uint8List bytes) async {
     if (bytes.length <= 700000) return bytes;
@@ -321,36 +349,65 @@ class _ShortsScreenState extends State<ShortsScreen> {
                           label: const Text('Qalereyadan Video Seç'),
                           onPressed: () async {
                             try {
-                              // Qalereya açılan zaman telefonun RAM-ının dolub tətbiqi bağlamaması (LMK crash) üçün:
-                              // Mövcud pleyerləri təkcə dayandırmırıq, tamamilə təhlükəsiz şəkildə azad edirik!
-                              for (var c in _controllers.values.toList()) {
-                                try {
-                                  c.pause();
-                                } catch (_) {}
-                              }
+                              // KRİTİK: Qalereya açılmadan BÜTÜN video controller-ları dispose edirik.
+                              // Sadəcə pause etmək kifayət deyil — video decoder-lar + GPU teksturaları
+                              // RAM-da qalır (100-300MB). Android LMK bu yükü görüb Flutter prosesini
+                              // kill edir → istifadəçiyə "tətbiq bağlandı" kimi görünür.
+                              await _disposeAllControllers();
 
                               final picker = ImagePicker();
-                              final video = await picker.pickVideo(
-                                source: ImageSource.gallery,
-                                maxDuration: const Duration(minutes: 5),
-                              );
-                              if (video != null) {
-                                final length = await video.length();
-                                if (length > 150 * 1024 * 1024) {
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Video həcmi 150MB-dan çox olmamalıdır!')),
-                                    );
-                                  }
-                                  return;
+                              XFile? video;
+                              try {
+                                video = await picker.pickVideo(
+                                  source: ImageSource.gallery,
+                                  maxDuration: const Duration(minutes: 5),
+                                );
+                              } catch (e) {
+                                debugPrint('pickVideo xətası: $e');
+                                // Qalereya bağlandıqdan sonra cari videonu yenidən başladırıq
+                                _reactivateAfterGallery();
+                                if (ctx.mounted) {
+                                  setModalState(() {});
                                 }
+                                return;
+                              }
+
+                              // Qalereya bağlandı — cari videonu yenidən aktivləşdir
+                              _reactivateAfterGallery();
+
+                              if (video == null) {
+                                // İstifadəçi seçim etmədi — normal hal
+                                return;
+                              }
+
+                              // Fayl ölçüsünü yoxlayırıq (content:// URI üçün try-catch)
+                              int length = 0;
+                              try {
+                                length = await video.length();
+                              } catch (e) {
+                                debugPrint('video.length() xətası (content URI?): $e');
+                                // Ölçü oxuna bilmirsə, birbaşa qəbul edirik — upload zamanı yoxlanacaq
+                              }
+
+                              if (length > 150 * 1024 * 1024) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Video həcmi 150MB-dan çox olmamalıdır!')),
+                                  );
+                                }
+                                return;
+                              }
+
+                              // ctx.mounted yoxlaması — dialog bağlanıbsa setModalState çağırılmır
+                              if (ctx.mounted) {
                                 setModalState(() {
                                   pickedVideo = video;
-                                  pickedVideoBytes = null; // Seçim zamanı RAM-ı doldurmuruq!
+                                  pickedVideoBytes = null;
                                 });
                               }
                             } catch (e) {
                               debugPrint('Video pick error: $e');
+                              _reactivateAfterGallery();
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(content: Text('Qalereyadan seçim zamanı xəta: $e')),
@@ -439,8 +496,10 @@ class _ShortsScreenState extends State<ShortsScreen> {
                       TextButton(
                         onPressed: () async {
                           try {
+                            // Şəkil seçimi üçün controller-ları dispose etmək lazım deyil
+                            // (şəkil picker çox az RAM istifadə edir), sadəcə pause edirik
                             for (var c in _controllers.values.toList()) {
-                              c.pause();
+                              try { c.pause(); } catch (_) {}
                             }
                             final picker = ImagePicker();
                             final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
@@ -448,10 +507,12 @@ class _ShortsScreenState extends State<ShortsScreen> {
                               final rawBytes = await img.readAsBytes();
                               // Firestore 1MB limit üçün şəkli sıxışdırırıq
                               final compressed = await _compressCoverImage(rawBytes);
-                              setModalState(() {
-                                pickedCover = img;
-                                pickedCoverBytes = compressed;
-                              });
+                              if (ctx.mounted) {
+                                setModalState(() {
+                                  pickedCover = img;
+                                  pickedCoverBytes = compressed;
+                                });
+                              }
                             }
                           } catch (e) {
                             debugPrint('Cover pick error: $e');
@@ -757,6 +818,9 @@ class _ShortsScreenState extends State<ShortsScreen> {
               }
 
               // İlkin açılışda cari videonu dərhal aktivləşdiririk (TikTok axıcılığı)
+              if (items.isNotEmpty) {
+                _latestItems = items; // Qalereya sonrası reaktivasiya üçün saxlayırıq
+              }
               if (items.isNotEmpty && _controllers.isEmpty && _initializing.isEmpty) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (mounted && _controllers.isEmpty && _initializing.isEmpty) {

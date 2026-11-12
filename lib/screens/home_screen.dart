@@ -2256,6 +2256,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -2445,20 +2446,32 @@ class _HomeScreenState extends State<HomeScreen> {
                             label: const Text('Qalereyadan Video Seç'),
                             onPressed: () async {
                               final picker = ImagePicker();
-                              final video = await picker.pickVideo(source: ImageSource.gallery);
-                              if (video != null) {
-                                final length = await video.length();
-                                if (length > 150 * 1024 * 1024) {
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Video həcmi 150MB-dan çox olmamalıdır!'),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                  }
-                                  return;
+                              XFile? video;
+                              try {
+                                video = await picker.pickVideo(source: ImageSource.gallery);
+                              } catch (e) {
+                                debugPrint('pickVideo xətası: $e');
+                                return;
+                              }
+                              if (video == null) return;
+                              int length = 0;
+                              try {
+                                length = await video.length();
+                              } catch (e) {
+                                debugPrint('video.length() xətası: $e');
+                              }
+                              if (length > 150 * 1024 * 1024) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Video həcmi 150MB-dan çox olmamalıdır!'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
                                 }
+                                return;
+                              }
+                              if (ctx.mounted) {
                                 setModalState(() {
                                   pickedVideo = video;
                                   pickedVideoBytes = null; // STREAMING: RAM-a bütöv fayl yüklənmir!
