@@ -121,15 +121,20 @@ class VideoUploadService {
     throw Exception('Video faylı oxuna bilmədi və ya dəstəklənmir.');
   }
 
-  /// Fayl yolundan (Diskdən) axınla SHA256 heşinin hesablanması (RAM = 0 MB)
+  /// Fayl yolundan (Diskdən) axınla SHA256 heşinin hesablanması
   static Future<String> _calculateFileSha256(File file) async {
-    final output = AccumulatorSink<Digest>();
-    final input = sha256.startChunkedConversion(output);
+    // ByteConversionSink ilə chunked hashing - crypto paketinin bütün versiyalarında işləyir
+    Digest? result;
+    final sink = sha256.startChunkedConversion(
+      ChunkedConversionSink<Digest>.withCallback((digests) {
+        result = digests.last;
+      }),
+    );
     await for (final chunk in file.openRead()) {
-      input.add(chunk);
+      sink.add(chunk);
     }
-    input.close();
-    return output.events.single.toString();
+    sink.close();
+    return result!.toString();
   }
 
   /// Cloudflare R2-yə DISKDƏN STREAM ilə yükləmə (Bütün fayl RAM-a yüklənmir!)
