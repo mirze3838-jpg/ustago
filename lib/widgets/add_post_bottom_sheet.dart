@@ -31,6 +31,8 @@ class AddPostBottomSheet extends StatefulWidget {
   final String role;
   final List<Map<String, dynamic>> categories;
   final Future<Uint8List> Function(Uint8List) compressCoverImage;
+  final int initialTab; // 0: Yalnız Foto, 1: Yalnız Video / Shorts
+  final bool lockTab; // true olduqda tab keçidi gizlədilir, sırf seçilmiş bölməyə aid olur
 
   const AddPostBottomSheet({
     super.key,
@@ -39,6 +41,8 @@ class AddPostBottomSheet extends StatefulWidget {
     required this.role,
     required this.categories,
     required this.compressCoverImage,
+    this.initialTab = 0,
+    this.lockTab = false,
   });
 
   @override
@@ -47,7 +51,7 @@ class AddPostBottomSheet extends StatefulWidget {
 
 class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
   // 0: Foto Paylaş, 1: Video / Shorts
-  int _activeTab = 0;
+  late int _activeTab;
 
   // Foto Paylaşma sahələri
   final List<_PickedPhotoItem> _photos = [];
@@ -87,6 +91,7 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
   @override
   void initState() {
     super.initState();
+    _activeTab = widget.initialTab;
     if (widget.categories.isNotEmpty) {
       final firstCat = (widget.categories.first['title'] as String).replaceAll('\n', ' ');
       _photoCategory = firstCat;
@@ -608,86 +613,87 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
                 ),
               ),
 
-              // Tab Switcher (Foto Paylaş / Video / Shorts)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => setState(() => _activeTab = 0),
-                          borderRadius: BorderRadius.circular(10),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            decoration: BoxDecoration(
-                              color: _activeTab == 0 ? primaryBlue : Colors.transparent,
-                              borderRadius: BorderRadius.circular(10),
-                              boxShadow: _activeTab == 0
-                                  ? [BoxShadow(color: primaryBlue.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 2))]
-                                  : null,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.photo_library_rounded, color: _activeTab == 0 ? Colors.white : const Color(0xFF64748B), size: 18),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Foto Paylaş',
-                                  style: TextStyle(
-                                    color: _activeTab == 0 ? Colors.white : const Color(0xFF64748B),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
+              // Tab Switcher (Foto Paylaş / Video / Shorts) — lockTab false olduqda göstərilir
+              if (!widget.lockTab)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => setState(() => _activeTab = 0),
+                            borderRadius: BorderRadius.circular(10),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: _activeTab == 0 ? primaryBlue : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                                boxShadow: _activeTab == 0
+                                    ? [BoxShadow(color: primaryBlue.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 2))]
+                                    : null,
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.photo_library_rounded, color: _activeTab == 0 ? Colors.white : const Color(0xFF64748B), size: 18),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Foto Paylaş',
+                                    style: TextStyle(
+                                      color: _activeTab == 0 ? Colors.white : const Color(0xFF64748B),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => setState(() => _activeTab = 1),
-                          borderRadius: BorderRadius.circular(10),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            decoration: BoxDecoration(
-                              color: _activeTab == 1 ? primaryBlue : Colors.transparent,
-                              borderRadius: BorderRadius.circular(10),
-                              boxShadow: _activeTab == 1
-                                  ? [BoxShadow(color: primaryBlue.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 2))]
-                                  : null,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.play_arrow_rounded, color: _activeTab == 1 ? Colors.white : const Color(0xFF64748B), size: 20),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Video / Shorts',
-                                  style: TextStyle(
-                                    color: _activeTab == 1 ? Colors.white : const Color(0xFF64748B),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => setState(() => _activeTab = 1),
+                            borderRadius: BorderRadius.circular(10),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: _activeTab == 1 ? primaryBlue : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                                boxShadow: _activeTab == 1
+                                    ? [BoxShadow(color: primaryBlue.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 2))]
+                                    : null,
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.play_arrow_rounded, color: _activeTab == 1 ? Colors.white : const Color(0xFF64748B), size: 20),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Video / Shorts',
+                                    style: TextStyle(
+                                      color: _activeTab == 1 ? Colors.white : const Color(0xFF64748B),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
 
               const Divider(height: 16, thickness: 1, color: Color(0xFFF1F5F9)),
 

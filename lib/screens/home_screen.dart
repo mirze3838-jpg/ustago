@@ -2244,7 +2244,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // Yeni İş / Şəkil və ya Shorts Video Paylaşmaq dialoqu (Yeni dizayn və sistemə 1:1 uyğun)
-  Future<void> _showAddPostDialog(String uid, String authorName, String role) async {
+  Future<void> _showAddPostDialog(String uid, String authorName, String role, {int initialTab = 0, bool lockTab = false}) async {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -2256,6 +2256,8 @@ class _HomeScreenState extends State<HomeScreen> {
         role: role,
         categories: _categories,
         compressCoverImage: _compressCoverImage,
+        initialTab: initialTab,
+        lockTab: lockTab,
       ),
     );
   }
@@ -4192,10 +4194,16 @@ class _HomeScreenState extends State<HomeScreen> {
           .snapshots(),
       builder: (context, snapshot) {
         final docs = snapshot.data?.docs ?? [];
+        // Yalnız həqiqi FOTO paylaşımlarını seçirik (video olmayan və şəkil olan)
         final photoDocs = docs.where((d) {
           final data = d.data();
-          final hasImg = (data['imageBase64'] ?? data['thumbnailBase64'] ?? data['thumbnailUrl']) != null;
-          return hasImg || data['isVideo'] != true;
+          final bool isVid = data['isVideo'] == true ||
+              (data['videoUrl'] != null && data['videoUrl'].toString().trim().isNotEmpty);
+          if (isVid) return false;
+          final hasImg = (data['imageBase64'] != null && data['imageBase64'].toString().isNotEmpty) ||
+              (data['imagesBase64'] != null && (data['imagesBase64'] as List).isNotEmpty) ||
+              (data['thumbnailUrl'] != null && data['thumbnailUrl'].toString().isNotEmpty);
+          return hasImg;
         }).toList();
 
         if (photoDocs.isEmpty) {
@@ -4229,7 +4237,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   icon: const Icon(Icons.add_a_photo_rounded, color: Colors.white, size: 16),
                   label: const Text('İlk İşini Paylaş', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                  onPressed: () => _showAddPostDialog(uid, authorName, role),
+                  onPressed: () => _showAddPostDialog(uid, authorName, role, initialTab: 0, lockTab: true),
                 ),
               ],
             ),
@@ -4248,7 +4256,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
                   ),
                   InkWell(
-                    onTap: () => _showAddPostDialog(uid, authorName, role),
+                    onTap: () => _showAddPostDialog(uid, authorName, role, initialTab: 0, lockTab: true),
                     borderRadius: BorderRadius.circular(8),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -4281,7 +4289,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 itemBuilder: (context, index) {
                   final doc = photoDocs[index];
                   final data = doc.data();
-                  final base64Img = (data['imageBase64'] ?? data['thumbnailBase64']) as String?;
+                  String? base64Img = (data['imageBase64'] ?? data['thumbnailBase64']) as String?;
+                  if ((base64Img == null || base64Img.isEmpty) && data['imagesBase64'] is List && (data['imagesBase64'] as List).isNotEmpty) {
+                    base64Img = (data['imagesBase64'] as List).first.toString();
+                  }
 
                   return InkWell(
                     onTap: () => _showPostDetailModal(doc.id, data),
@@ -4290,7 +4301,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
+                          color: const Color(0xFFF1F5F9),
                           border: Border.all(color: const Color(0xFFE2E8F0)),
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -4363,7 +4374,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   icon: const Icon(Icons.video_call_rounded, color: Colors.white, size: 18),
                   label: const Text('İlk Videonu Paylaş', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                  onPressed: () => _showAddPostDialog(uid, authorName, role),
+                  onPressed: () => _showAddPostDialog(uid, authorName, role, initialTab: 1, lockTab: true),
                 ),
               ],
             ),
@@ -4382,7 +4393,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
                   ),
                   InkWell(
-                    onTap: () => _showAddPostDialog(uid, authorName, role),
+                    onTap: () => _showAddPostDialog(uid, authorName, role, initialTab: 1, lockTab: true),
                     borderRadius: BorderRadius.circular(8),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
