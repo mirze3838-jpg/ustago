@@ -2654,10 +2654,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               trade: (data['category'] ?? data['trade'] ?? 'Usta İşi').toString(),
                               artisanName: (data['authorName'] ?? '').toString(),
                             );
-                              child: const Center(
-                                child: Icon(Icons.videocam_rounded, color: Colors.white54, size: 32),
-                              ),
-                            );
                           },
                         ),
                         if (isVideo)
