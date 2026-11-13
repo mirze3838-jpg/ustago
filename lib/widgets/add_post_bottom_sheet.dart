@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
@@ -34,6 +35,7 @@ class AddPostBottomSheet extends StatefulWidget {
   final Future<Uint8List> Function(Uint8List) compressCoverImage;
   final int initialTab; // 0: Yalnız Foto, 1: Yalnız Video / Shorts
   final bool lockTab; // true olduqda tab keçidi gizlədilir, sırf seçilmiş bölməyə aid olur
+  final VoidCallback? onBeforeOpenGallery;
 
   const AddPostBottomSheet({
     super.key,
@@ -44,6 +46,7 @@ class AddPostBottomSheet extends StatefulWidget {
     required this.compressCoverImage,
     this.initialTab = 0,
     this.lockTab = false,
+    this.onBeforeOpenGallery,
   });
 
   @override
@@ -65,6 +68,8 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
   // Video / Shorts sahələri
   XFile? _pickedVideo;
   VideoPlayerController? _videoPlayerController;
+  bool _isVideoPreviewLoading = false;
+  final GlobalKey _videoPreviewRepaintKey = GlobalKey();
   Duration _videoDuration = Duration.zero;
   RangeValues _trimRange = const RangeValues(0, 1);
   double _totalVideoSeconds = 1.0;
@@ -262,20 +267,75 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
 
   // --- VİDEO FUNKSİYALARI ---
 
+  double _safeVideoAspectRatio(VideoPlayerController controller) {
+    final double raw = controller.value.aspectRatio;
+    if (raw <= 0 || raw.isNaN || raw.isInfinite) {
+      return 9 / 16;
+    }
+    final int rot = controller.value.rotationCorrection;
+    if ((rot == 90 || rot == 270) && raw > 1.0) {
+      return 1.0 / raw;
+    }
+    return raw;
+  }
+
+  Future<void> _autoCaptureVideoCover() async {
+    if (_pickedCoverBytes != null) return;
+    try {
+      await Future.delayed(const Duration(milliseconds: 160));
+      if (!mounted || _pickedCoverBytes != null) return;
+      final boundary = _videoPreviewRepaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) return;
+
+      final ui.Image image = await boundary.toImage(pixelRatio: 0.75);
+      final rgbaData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (rgbaData == null) {
+        image.dispose();
+        return;
+      }
+
+      final bytes = rgbaData.buffer.asUint8List();
+      int nonBlackPixels = 0;
+      final step = (bytes.length ~/ 400).clamp(4, 256) * 4;
+      for (int i = 0; i + 3 < bytes.length; i += step) {
+        if (bytes[i + 3] > 200 && (bytes[i] + bytes[i + 1] + bytes[i + 2]) > 24) {
+          nonBlackPixels++;
+          if (nonBlackPixels >= 6) break;
+        }
+      }
+      if (nonBlackPixels < 6) {
+        image.dispose();
+        return;
+      }
+
+      final pngData = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      if (pngData == null) return;
+
+      final compressed = await widget.compressCoverImage(pngData.buffer.asUint8List());
+      if (mounted && _pickedCoverBytes == null) {
+        setState(() {
+          _pickedCoverBytes = compressed;
+          _coverName = 'Video kadrından avtomatik';
+        });
+      }
+    } catch (_) {}
+  }
+
   Future<void> _pickVideo() async {
-    // KRİTİK: Qalereya açılmadan əvvəl video controller dispose edilir.
-    // Android LMK video decoder RAM-ını görüb Flutter prosesini kill edə bilər.
+    // KRİTİK: Qalereya açılmadan əvvəl arxadakı bütün video decoder-ları və RAM keşini azad edirik.
+    widget.onBeforeOpenGallery?.call();
     _disposeVideoController();
-    // GC-yə və sistemə tam nəfəs dərəcəsi veririk
-    await Future.delayed(const Duration(milliseconds: 350));
+    try {
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+    } catch (_) {}
+    await Future.delayed(const Duration(milliseconds: 220));
 
     final picker = ImagePicker();
     XFile? video;
     try {
-      video = await picker.pickVideo(
-        source: ImageSource.gallery,
-        maxDuration: const Duration(minutes: 5),
-      );
+      video = await picker.pickVideo(source: ImageSource.gallery);
     } catch (e) {
       debugPrint('pickVideo xətası: $e');
       return;
@@ -301,32 +361,67 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
     }
 
     _disposeVideoController();
+    if (mounted) {
+      setState(() {
+        _pickedVideo = video;
+        _isVideoPreviewLoading = true;
+        if (_coverName == 'Video kadrından avtomatik') {
+          _pickedCoverBytes = null;
+          _coverName = '';
+        }
+      });
+    }
 
     try {
       final VideoPlayerController controller;
       if (kIsWeb) {
-        controller = VideoPlayerController.networkUrl(Uri.parse(video.path));
+        controller = VideoPlayerController.networkUrl(
+          Uri.parse(video.path),
+          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+        );
       } else {
-        controller = VideoPlayerController.file(File(video.path));
+        controller = VideoPlayerController.file(
+          File(video.path),
+          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+        );
       }
 
-      await controller.initialize();
+      await controller.initialize().timeout(const Duration(seconds: 6));
+      if (!mounted) {
+        controller.dispose();
+        return;
+      }
+
       final dur = controller.value.duration;
       final totalSec = dur.inMilliseconds / 1000.0;
+
+      await controller.setVolume(0);
+      try {
+        await controller.play();
+        await Future.delayed(const Duration(milliseconds: 45));
+        await controller.pause();
+      } catch (_) {}
 
       setState(() {
         _pickedVideo = video;
         _videoPlayerController = controller;
+        _isVideoPreviewLoading = false;
         _videoDuration = dur;
         _totalVideoSeconds = totalSec > 0 ? totalSec : 1.0;
         _trimRange = RangeValues(0, _totalVideoSeconds);
       });
-      controller.setLooping(true);
+
+      // Əgər istifadəçi ayrıca cover seçməyibsə, videodan avtomatik başlıq şəkli çıxar
+      _autoCaptureVideoCover();
     } catch (e) {
       debugPrint('Video init xətası: $e');
-      setState(() {
-        _pickedVideo = video;
-      });
+      _disposeVideoController();
+      if (mounted) {
+        setState(() {
+          _pickedVideo = video;
+          _isVideoPreviewLoading = false;
+        });
+      }
     }
   }
 
@@ -444,6 +539,12 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
         );
         return;
       }
+
+      // Yükləmədən əvvəl cover hələ yoxdursa kadrdan çək, sonra RAM-ı azad etmək üçün controller-ı bağla
+      if (_pickedCoverBytes == null && _videoPlayerController != null && _videoPlayerController!.value.isInitialized) {
+        await _autoCaptureVideoCover();
+      }
+      _disposeVideoController();
 
       setState(() {
         _isUploading = true;
@@ -1216,13 +1317,35 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
                 if (_videoPlayerController != null && _videoPlayerController!.value.isInitialized)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: AspectRatio(
-                      aspectRatio: _videoPlayerController!.value.aspectRatio,
-                      child: VideoPlayer(_videoPlayerController!),
+                    child: RepaintBoundary(
+                      key: _videoPreviewRepaintKey,
+                      child: AspectRatio(
+                        aspectRatio: _safeVideoAspectRatio(_videoPlayerController!),
+                        child: VideoPlayer(_videoPlayerController!),
+                      ),
                     ),
                   )
+                else if (_isVideoPreviewLoading)
+                  const Center(child: CircularProgressIndicator(color: Colors.white))
                 else
-                  const Center(child: CircularProgressIndicator(color: Colors.white)),
+                  Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.video_file_rounded, color: Colors.white70, size: 44),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Text(
+                            _pickedVideo?.name ?? 'Video hazırdır',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white, fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
 
                 // Play / Pause düyməsi
                 if (_videoPlayerController != null)

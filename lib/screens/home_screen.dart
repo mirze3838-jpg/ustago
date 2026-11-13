@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
@@ -79,7 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _shortsStream = FirebaseFirestore.instance
         .collection('shorts')
         .orderBy('createdAt', descending: true)
-        .limit(30)
+        .limit(3)
         .snapshots();
     _ustaStream = FirebaseFirestore.instance
         .collection('users')
@@ -1137,7 +1138,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
 
-        // 3. Shorts Videolar Bölməsi
+        // 3. Shorts Videolar Bölməsi (Ekrana sığan 3 ən son video)
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
@@ -1146,40 +1147,53 @@ class _HomeScreenState extends State<HomeScreen> {
               iconColor: Colors.red,
               title: 'Shorts',
               actionTitle: 'Hamısını izlə',
-              onTap: () => setState(() => _currentIndex = 1),
+              onTap: () {
+                _ShortsVideoThumbnail.pauseAndReleaseAll();
+                setState(() => _currentIndex = 1);
+              },
             ),
           ),
         ),
         SliverToBoxAdapter(
           child: SizedBox(
-            height: 230,
+            height: 205,
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _shortsStream,
               builder: (context, snapshot) {
-                // Səhifə yenilənərkən parlaq və zərif işıqlı skelet yüklənməsi (heç vaxt qaranlıq qara qutu görünmür)
+                // Səhifə yenilənərkən 3 zərif işıqlı skelet kartı yan-yana
                 if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-                  return ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    scrollDirection: Axis.horizontal,
-                    itemCount: 4,
-                    separatorBuilder: (_, __) => const SizedBox(width: 12),
-                    itemBuilder: (context, index) {
-                      return Container(
-                        width: 140,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFEFF6FF), Color(0xFFDBEAFE)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    child: Row(
+                      children: List.generate(3, (index) {
+                        return Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              left: index == 0 ? 0 : 4,
+                              right: index == 2 ? 0 : 4,
+                            ),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFFEFF6FF), Color(0xFFDBEAFE)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: const Color(0xFFBFDBFE).withOpacity(0.5)),
+                              ),
+                              child: Center(
+                                child: Icon(
+                                  Icons.play_circle_outline,
+                                  color: const Color(0xFF1769D2).withOpacity(0.4),
+                                  size: 32,
+                                ),
+                              ),
+                            ),
                           ),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFBFDBFE).withOpacity(0.5)),
-                        ),
-                        child: Center(
-                          child: Icon(Icons.play_circle_outline, color: const Color(0xFF1769D2).withOpacity(0.4), size: 38),
-                        ),
-                      );
-                    },
+                        );
+                      }),
+                    ),
                   );
                 }
 
@@ -1209,14 +1223,25 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
-                return ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  scrollDirection: Axis.horizontal,
-                  itemCount: dynamicShorts.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 12),
-                  itemBuilder: (context, index) {
-                    return _buildDynamicShortsCard(dynamicShorts[index], index);
-                  },
+                final top3Shorts = dynamicShorts.take(3).toList();
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: List.generate(3, (index) {
+                      return Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            left: index == 0 ? 0 : 4,
+                            right: index == 2 ? 0 : 4,
+                          ),
+                          child: index < top3Shorts.length
+                              ? _buildDynamicShortsCard(top3Shorts[index], index)
+                              : const SizedBox.shrink(),
+                        ),
+                      );
+                    }),
+                  ),
                 );
               },
             ),
@@ -1968,6 +1993,9 @@ class _HomeScreenState extends State<HomeScreen> {
         coverWidget = _ShortsVideoThumbnail(
           key: ValueKey(item['id'] ?? videoUrl),
           videoUrl: videoUrl,
+          shortDocId: (item['id'] ?? '').toString(),
+          collectionName: 'shorts',
+          ownerId: (item['userId'] ?? '').toString(),
           fallback: fallbackVisual,
         );
       } else {
@@ -1976,8 +2004,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(14),
       onTap: () async {
+        _ShortsVideoThumbnail.pauseAndReleaseAll();
         final targetIndex = await Navigator.push<int>(
           context,
           MaterialPageRoute(
@@ -1997,34 +2026,35 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         );
+        _ShortsVideoThumbnail.resumeAll();
         if (targetIndex != null && mounted) {
           setState(() => _currentIndex = targetIndex);
         }
       },
       child: SizedBox(
-        width: 140,
+        width: double.infinity,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(14),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // 1. VİDEONUN REAL BAŞLIQ FOTOSU (Qaranlıq görünməsin deyə)
+                    // 1. VİDEONUN REAL BAŞLIQ FOTOSU
                     coverWidget,
 
-                    // 2. Yalnız aşağıda zərif qradiyent (şəkli qaraltmır)
+                    // 2. Yalnız aşağıda zərif qradiyent
                     Positioned(
                       left: 0,
                       right: 0,
                       bottom: 0,
-                      height: 72,
+                      height: 60,
                       child: Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            colors: [Colors.transparent, Colors.black.withOpacity(0.65)],
+                            colors: [Colors.transparent, Colors.black.withOpacity(0.72)],
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                           ),
@@ -2032,43 +2062,61 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
 
-                    // 3. Mərkəzdə Play ikonu (Mavi dairəsiz, təmiz ağ play)
+                    // 3. Ən son yüklənən üçün YENİ nişanı (index == 0)
+                    if (index == 0)
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'YENİ',
+                            style: TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+
+                    // 4. Mərkəzdə Play ikonu
                     Center(
                       child: Container(
-                        padding: const EdgeInsets.all(6),
+                        padding: const EdgeInsets.all(5),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withOpacity(0.32),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
                           Icons.play_arrow_rounded,
                           color: Colors.white,
-                          size: 34,
+                          size: 26,
                         ),
                       ),
                     ),
 
-                    // 5. Aşağıda Müəllif adı (Real-vaxtda istifadəçi bazasından oxunur və dərhal sinxronlaşır)
+                    // 5. Aşağıda Müəllif adı
                     Positioned(
-                      left: 8,
-                      right: 8,
-                      bottom: 8,
+                      left: 6,
+                      right: 6,
+                      bottom: 6,
                       child: _AuthorNameText(
                         userId: (item['userId'] ?? '').toString(),
                         defaultName: (item['author'] ?? 'Usta').toString(),
-                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                        style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 5),
             Text(
               item['title'] ?? 'Usta Videosu',
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
             ),
           ],
         ),
@@ -2282,7 +2330,14 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (idx) => setState(() => _currentIndex = idx),
+        onTap: (idx) {
+          if (idx == 1) {
+            _ShortsVideoThumbnail.pauseAndReleaseAll();
+          } else {
+            _ShortsVideoThumbnail.resumeAll();
+          }
+          setState(() => _currentIndex = idx);
+        },
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.white,
         selectedItemColor: const Color(0xFF1769D2),
@@ -2401,8 +2456,10 @@ class _HomeScreenState extends State<HomeScreen> {
         compressCoverImage: _compressCoverImage,
         initialTab: initialTab,
         lockTab: lockTab,
+        onBeforeOpenGallery: _ShortsVideoThumbnail.pauseAndReleaseAll,
       ),
     );
+    _ShortsVideoThumbnail.resumeAll();
   }
 
   // Paylaşılan işin böyük təsviri və silinməsi
@@ -2667,22 +2724,22 @@ class _HomeScreenState extends State<HomeScreen> {
                               return Image.network(thumbUrl, fit: BoxFit.cover);
                             }
                             final videoUrl = (data['videoUrl'] ?? '').toString();
-                            if (videoUrl.isNotEmpty) {
-                              return _ShortsVideoThumbnail(
-                                key: ValueKey('post_thumb_${doc.id}'),
-                                videoUrl: videoUrl,
-                                fallback: _buildShortsFallbackVisual(
-                                  title: (data['title'] ?? '').toString(),
-                                  trade: (data['category'] ?? data['trade'] ?? 'Usta İşi').toString(),
-                                  artisanName: (data['authorName'] ?? '').toString(),
-                                ),
-                              );
-                            }
-                            return _buildShortsFallbackVisual(
+                            final fallbackVisual = _buildShortsFallbackVisual(
                               title: (data['title'] ?? '').toString(),
                               trade: (data['category'] ?? data['trade'] ?? 'Usta İşi').toString(),
                               artisanName: (data['authorName'] ?? '').toString(),
                             );
+                            if (videoUrl.isNotEmpty && index < 6) {
+                              return _ShortsVideoThumbnail(
+                                key: ValueKey('post_thumb_${doc.id}'),
+                                videoUrl: videoUrl,
+                                shortDocId: doc.id,
+                                collectionName: 'posts',
+                                ownerId: (data['userId'] ?? '').toString(),
+                                fallback: fallbackVisual,
+                              );
+                            }
+                            return fallbackVisual;
                           },
                         ),
                         if (isVideo)
@@ -4659,9 +4716,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   final coverBase64 = data['thumbnailBase64']?.toString();
 
                   return InkWell(
-                    onTap: () {
+                    onTap: () async {
                       if (videoUrl.isNotEmpty) {
-                        Navigator.push(
+                        _ShortsVideoThumbnail.pauseAndReleaseAll();
+                        await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (_) => FullScreenVideoViewer(
@@ -4674,6 +4732,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                         );
+                        _ShortsVideoThumbnail.resumeAll();
                       }
                     },
                     borderRadius: BorderRadius.circular(12),
@@ -4706,10 +4765,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                               )
-                            else if (videoUrl.isNotEmpty)
+                            else if (videoUrl.isNotEmpty && index < 6)
                               _ShortsVideoThumbnail(
                                 key: ValueKey('short_thumb_${doc.id}'),
                                 videoUrl: videoUrl,
+                                shortDocId: doc.id,
+                                collectionName: 'shorts',
+                                ownerId: (data['userId'] ?? '').toString(),
                                 fallback: const SizedBox.shrink(),
                               ),
                             // Zərif şəffaf qat
@@ -4783,46 +4845,58 @@ class _CoverWaveClipper extends CustomClipper<Path> {
 /// Mobildə RAM və GPU Video Decoder limitini qoruyan Növbə sistemi
 class _ThumbnailQueue {
   static int _running = 0;
-  static const int _maxConcurrent = 2; // Sürətli açılış üçün 2 paralel axın
-  static final List<Completer<void>> _queue = [];
+  static const int _maxConcurrent = 3; // Eyni anda maksimum 3 kadr
+  static final List<Completer<bool>> _queue = [];
 
-  static Future<void> acquire() async {
+  static Future<bool> acquire() async {
     if (_running < _maxConcurrent) {
       _running++;
-      return;
+      return true;
     }
-    final completer = Completer<void>();
+    final completer = Completer<bool>();
     _queue.add(completer);
-    await completer.future;
+    return completer.future;
   }
 
   static void release() {
-    _running--;
-    if (_queue.isNotEmpty) {
-      _running++;
+    if (_running > 0) {
+      _running--;
+    }
+    while (_queue.isNotEmpty && _running < _maxConcurrent) {
       final next = _queue.removeAt(0);
-      next.complete();
+      if (!next.isCompleted) {
+        _running++;
+        next.complete(true);
+        return;
+      }
     }
   }
 
   static void clearQueue() {
+    // KRİTİK: Növbədə gözləyənləri false ilə ləğv edirik ki, eyni anda decoder açmasınlar!
     for (final c in _queue) {
-      if (!c.isCompleted) c.complete();
+      if (!c.isCompleted) c.complete(false);
     }
     _queue.clear();
     _running = 0;
   }
 }
 
-/// Videonun öz içindən kadr çıxararaq kartın üz qabığında göstərən vidcet
+/// Videonun öz içindən kadr çıxararaq kartın üz qabığında göstərən və keşləyən vidcet
 class _ShortsVideoThumbnail extends StatefulWidget {
   final String videoUrl;
   final Widget fallback;
+  final String? shortDocId;
+  final String collectionName;
+  final String? ownerId;
 
   static final Set<_ShortsVideoThumbnailState> _activeStates = {};
+  static final Map<String, Uint8List> _capturedFrameCache = {};
+  static bool _isSuspended = false;
 
   /// Qalereya açılarkən və ya video upload zamanı bütün aktiv decoder-ları dərhal azad edir
   static void pauseAndReleaseAll() {
+    _isSuspended = true;
     _ThumbnailQueue.clearQueue();
     for (final s in _activeStates.toList()) {
       try {
@@ -4832,17 +4906,33 @@ class _ShortsVideoThumbnail extends StatefulWidget {
         if (s.mounted) {
           s.setState(() {
             s._isInitialized = false;
+            s._frameRendered = false;
           });
         }
       } catch (_) {}
     }
     _activeStates.clear();
+    try {
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+    } catch (_) {}
+    // Qalereya və ya Shorts bağlandıqda ilişib qalmaması üçün təhlükəsizlik taymeri
+    Future.delayed(const Duration(seconds: 3), () {
+      _isSuspended = false;
+    });
+  }
+
+  static void resumeAll() {
+    _isSuspended = false;
   }
 
   const _ShortsVideoThumbnail({
     super.key,
     required this.videoUrl,
     required this.fallback,
+    this.shortDocId,
+    this.collectionName = 'shorts',
+    this.ownerId,
   });
 
   @override
@@ -4853,12 +4943,21 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
   VideoPlayerController? _controller;
   bool _isInitialized = false;
   bool _frameRendered = false;
+  bool _disposed = false;
+  Uint8List? _cachedBytes;
+  final GlobalKey _repaintKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     _ShortsVideoThumbnail._activeStates.add(this);
-    _initThumbnail();
+    final url = widget.videoUrl.trim();
+    final cached = _ShortsVideoThumbnail._capturedFrameCache[url];
+    if (cached != null) {
+      _cachedBytes = cached;
+    } else {
+      _initThumbnail();
+    }
   }
 
   @override
@@ -4869,13 +4968,20 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
       _controller = null;
       _isInitialized = false;
       _frameRendered = false;
-      _initThumbnail();
+      final url = widget.videoUrl.trim();
+      final cached = _ShortsVideoThumbnail._capturedFrameCache[url];
+      if (cached != null) {
+        _cachedBytes = cached;
+      } else {
+        _cachedBytes = null;
+        _initThumbnail();
+      }
     }
   }
 
   Future<void> _initThumbnail() async {
     String url = widget.videoUrl.trim();
-    if (url.isEmpty) return;
+    if (url.isEmpty || _ShortsVideoThumbnail._isSuspended) return;
 
     // Əgər tmpfiles köhnə formatdırsa, birbaşa MP4 stream linkini həll et:
     if (url.contains('tmpfiles.org')) {
@@ -4894,74 +5000,181 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
     }
 
     // Telefonun donmaması üçün növbəni gözləyirik
-    await _ThumbnailQueue.acquire();
+    final allowed = await _ThumbnailQueue.acquire();
+    if (!allowed) return;
+
+    bool released = false;
+    void safeRelease() {
+      if (!released) {
+        released = true;
+        _ThumbnailQueue.release();
+      }
+    }
 
     try {
-      if (!mounted) return;
+      if (!mounted || _disposed || _ShortsVideoThumbnail._isSuspended) {
+        safeRelease();
+        return;
+      }
 
-      final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+      final controller = VideoPlayerController.networkUrl(
+        Uri.parse(url),
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      );
       _controller = controller;
 
-      // Timeout: 4 saniyə (gecikmə olmasın)
+      // Timeout: 3.5 saniyə (gecikmə olmasın)
       await controller.initialize().timeout(
-        const Duration(seconds: 4),
+        const Duration(milliseconds: 3500),
         onTimeout: () {
           debugPrint('Thumbnail timeout: $url');
         },
       );
 
-      if (!mounted) {
+      if (!mounted || _disposed || _ShortsVideoThumbnail._isSuspended) {
         controller.dispose();
-        _controller = null;
+        if (_controller == controller) _controller = null;
+        safeRelease();
         return;
       }
 
       if (!controller.value.isInitialized) {
         controller.dispose();
-        _controller = null;
+        if (_controller == controller) _controller = null;
+        safeRelease();
         return;
       }
 
       await controller.setVolume(0);
 
-      // İlk kadrı sabitləyirik
-      final duration = controller.value.duration;
-      final seekTarget = duration > const Duration(milliseconds: 150)
-          ? const Duration(milliseconds: 150)
-          : Duration.zero;
-
-      if (seekTarget > Duration.zero) {
-        await controller.seekTo(seekTarget);
-      }
+      // Seek etmədən birbaşa 0ms açar kadrı göstəririk (2x sürətli)
       try {
         await controller.play();
-        await Future.delayed(const Duration(milliseconds: 50));
+        await Future.delayed(const Duration(milliseconds: 35));
         await controller.pause();
       } catch (_) {}
 
-      if (mounted) {
+      if (mounted && !_disposed) {
         setState(() {
           _isInitialized = true;
           _frameRendered = true;
         });
       }
+      safeRelease();
+
+      // Kadrı yaddaşa/bazaya şəkil kimi saxlayıb hardware decoder-ı dərhal azad edirik
+      _captureAndCacheFrame(url, controller);
     } catch (e) {
       debugPrint('Thumbnail extraction error: $e');
-    } finally {
-      // Növbədəki növbəti videoya icazə veririk
-      _ThumbnailQueue.release();
+      safeRelease();
     }
+  }
+
+  Future<void> _captureAndCacheFrame(String url, VideoPlayerController controller) async {
+    try {
+      await Future.delayed(const Duration(milliseconds: 140));
+      if (!mounted || _disposed || _controller != controller) return;
+
+      final boundary = _repaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) return;
+
+      final ui.Image image = await boundary.toImage(pixelRatio: 0.75);
+      final rgbaData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (rgbaData == null) {
+        image.dispose();
+        return;
+      }
+
+      // Kadrın tam qara və ya boş olmadığını yoxlayırıq
+      final bytes = rgbaData.buffer.asUint8List();
+      int nonBlackPixels = 0;
+      final step = (bytes.length ~/ 400).clamp(4, 256) * 4;
+      for (int i = 0; i + 3 < bytes.length; i += step) {
+        final r = bytes[i];
+        final g = bytes[i + 1];
+        final b = bytes[i + 2];
+        final a = bytes[i + 3];
+        if (a > 200 && (r + g + b) > 24) {
+          nonBlackPixels++;
+          if (nonBlackPixels >= 6) break;
+        }
+      }
+
+      if (nonBlackPixels < 6) {
+        image.dispose();
+        return;
+      }
+
+      final pngData = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      if (pngData == null) return;
+
+      final pngBytes = pngData.buffer.asUint8List();
+      if (pngBytes.lengthInBytes < 500) return;
+
+      if (_ShortsVideoThumbnail._capturedFrameCache.length > 60) {
+        _ShortsVideoThumbnail._capturedFrameCache.remove(
+          _ShortsVideoThumbnail._capturedFrameCache.keys.first,
+        );
+      }
+      _ShortsVideoThumbnail._capturedFrameCache[url] = pngBytes;
+
+      if (mounted && !_disposed) {
+        setState(() {
+          _cachedBytes = pngBytes;
+        });
+        // Şəkil hazırdır -> video decoder-ı dərhal azad edirik!
+        if (_controller == controller) {
+          _controller = null;
+          _isInitialized = false;
+          try {
+            await controller.dispose();
+          } catch (_) {}
+        }
+      }
+
+      // Sahibdirsə və ölçüsü Firestore limitinə uyğundursa qalıcı olaraq bazaya yazırıq
+      final curUid = FirebaseAuth.instance.currentUser?.uid;
+      if (curUid != null &&
+          widget.ownerId != null &&
+          widget.ownerId == curUid &&
+          widget.shortDocId != null &&
+          widget.shortDocId!.isNotEmpty &&
+          pngBytes.lengthInBytes <= 350000) {
+        try {
+          await FirebaseFirestore.instance
+              .collection(widget.collectionName)
+              .doc(widget.shortDocId)
+              .update({'thumbnailBase64': base64Encode(pngBytes)});
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _ShortsVideoThumbnail._activeStates.remove(this);
     _controller?.dispose();
+    _controller = null;
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_cachedBytes != null) {
+      return IgnorePointer(
+        child: Image.memory(
+          _cachedBytes!,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          width: double.infinity,
+          height: double.infinity,
+          errorBuilder: (_, __, ___) => widget.fallback,
+        ),
+      );
+    }
+
     final bool showVideo = _isInitialized && _frameRendered && _controller != null && _controller!.value.isInitialized;
     return IgnorePointer(
       child: Stack(
@@ -4973,14 +5186,17 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
           if (_controller != null && _controller!.value.isInitialized)
             AnimatedOpacity(
               opacity: showVideo ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 250),
+              duration: const Duration(milliseconds: 200),
               curve: Curves.easeIn,
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: _controller!.value.size.width > 0 ? _controller!.value.size.width : 1080,
-                  height: _controller!.value.size.height > 0 ? _controller!.value.size.height : 1920,
-                  child: VideoPlayer(_controller!),
+              child: RepaintBoundary(
+                key: _repaintKey,
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width: _controller!.value.size.width > 0 ? _controller!.value.size.width : 1080,
+                    height: _controller!.value.size.height > 0 ? _controller!.value.size.height : 1920,
+                    child: VideoPlayer(_controller!),
+                  ),
                 ),
               ),
             ),

@@ -76,7 +76,10 @@ class _ShortsScreenState extends State<ShortsScreen> {
     final url = items[index]['videoUrl']?.toString().trim() ?? '';
     if (url.isEmpty) return;
 
-    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    final controller = VideoPlayerController.networkUrl(
+      Uri.parse(url),
+      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+    );
     _controllers[index] = controller;
 
     final future = () async {
@@ -89,7 +92,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
 
     try {
       await future;
-      if (mounted) {
+      // Yalnız cari video hazırdırsa UI-ı yenilə; arxada preload bitəndə cari videonu yenidən build etmə
+      if (mounted && index == _currentIndex) {
         setState(() {});
       }
     } catch (error) {
@@ -107,52 +111,66 @@ class _ShortsScreenState extends State<ShortsScreen> {
     if (index < 0 || index >= items.length) return;
 
     _currentIndex = index;
-    if (mounted) setState(() {});
 
-    // 1. Digər bütün videoları dayandırırıq və başa çəkirik
+    // 1. Digər bütün videoları sinxron olaraq dərhal dayandırırıq (await gecikməsi olmadan!)
     for (final entry in _controllers.entries) {
       if (entry.key != index && entry.value.value.isInitialized) {
         try {
-          await entry.value.pause();
-          await entry.value.seekTo(Duration.zero);
+          if (entry.value.value.isPlaying) {
+            entry.value.pause();
+          }
         } catch (_) {}
       }
     }
 
-    // 2. Cari videonu hazırlayırıq
-    await _prepareVideo(index, items);
-
-    if (!mounted || _currentIndex != index) return;
-
-    final controller = _controllers[index];
-    if (controller != null && controller.value.isInitialized) {
-      try {
-        await controller.setVolume(_muted ? 0 : 1.0);
-        await controller.seekTo(Duration.zero);
-        await controller.play();
-      } catch (_) {}
+    // 2. Cari videodan 1 addımdan çox uzaqda olan köhnə controller-ları RAM-dan təmizləyirik
+    final oldIndexes = _controllers.keys
+        .where((i) => (i - index).abs() > 1)
+        .toList();
+    for (final oldIndex in oldIndexes) {
+      final oldController = _controllers.remove(oldIndex);
+      _initializing.remove(oldIndex);
+      if (oldController != null) {
+        try {
+          oldController.dispose();
+        } catch (_) {}
+      }
     }
 
-    // 3. Növbəti videonu arxada səssizcə hazırlayırıq (TikTok preloading)
+    // 3. Əgər hədəf video artıq preload olunubsa, dərhal oynat (seekTo(0) zərbəsi olmadan!)
+    final existingController = _controllers[index];
+    if (existingController != null && existingController.value.isInitialized) {
+      try {
+        existingController.setVolume(_muted ? 0 : 1.0);
+        final pos = existingController.value.position;
+        final dur = existingController.value.duration;
+        if (dur > Duration.zero && pos >= dur - const Duration(milliseconds: 300)) {
+          existingController.seekTo(Duration.zero);
+        }
+        existingController.play();
+      } catch (_) {}
+      if (mounted) setState(() {});
+    } else {
+      if (mounted) setState(() {});
+      await _prepareVideo(index, items);
+      if (!mounted || _currentIndex != index) return;
+
+      final controller = _controllers[index];
+      if (controller != null && controller.value.isInitialized) {
+        try {
+          await controller.setVolume(_muted ? 0 : 1.0);
+          await controller.play();
+        } catch (_) {}
+        if (mounted) setState(() {});
+      }
+    }
+
+    // 4. Növbəti və əvvəlki videonu arxada səssizcə hazırla (TikTok / Reels axıcılığı)
     if (index + 1 < items.length) {
       _prepareVideo(index + 1, items);
     }
     if (index - 1 >= 0) {
       _prepareVideo(index - 1, items);
-    }
-
-    // 4. Cari videodan 1 addımdan çox uzaqda olan köhnə videoları silirik (RAM qorunur)
-    final oldIndexes = _controllers.keys
-        .where((i) => (i - index).abs() > 1)
-        .toList();
-
-    for (final oldIndex in oldIndexes) {
-      final oldController = _controllers.remove(oldIndex);
-      if (oldController != null) {
-        try {
-          await oldController.dispose();
-        } catch (_) {}
-      }
     }
   }
 
@@ -385,13 +403,17 @@ class _ShortsScreenState extends State<ShortsScreen> {
                               // RAM-da qalır (100-300MB). Android LMK bu yükü görüb Flutter prosesini
                               // kill edir → istifadəçiyə "tətbiq bağlandı" kimi görünür.
                               await _disposeAllControllers();
+                              try {
+                                PaintingBinding.instance.imageCache.clear();
+                                PaintingBinding.instance.imageCache.clearLiveImages();
+                              } catch (_) {}
+                              await Future.delayed(const Duration(milliseconds: 180));
 
                               final picker = ImagePicker();
                               XFile? video;
                               try {
                                 video = await picker.pickVideo(
                                   source: ImageSource.gallery,
-                                  maxDuration: const Duration(minutes: 5),
                                 );
                               } catch (e) {
                                 debugPrint('pickVideo xətası: $e');
@@ -872,6 +894,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
               return PageView.builder(
                 controller: _pageController,
                 scrollDirection: Axis.vertical,
+                allowImplicitScrolling: true,
                 itemCount: items.length,
                 onPageChanged: (idx) => _onPageChanged(idx, items),
                 itemBuilder: (context, index) {
@@ -1040,6 +1063,7 @@ class _ShortVideoItem extends StatefulWidget {
 }
 
 class _ShortVideoItemState extends State<_ShortVideoItem> {
+  static final Map<String, Map<String, dynamic>> _authorProfileCache = {};
   bool _isPlaying = true;
   bool _isMuted = false;
 
@@ -1068,10 +1092,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     _checkSocialStates();
     _loadAuthorData();
     _attachListener(widget.controller);
-    if (widget.isCurrent && widget.controller != null && widget.controller!.value.isInitialized) {
-      widget.controller!.play();
-      _isPlaying = true;
-    }
+    _isPlaying = widget.controller?.value.isPlaying ?? widget.isCurrent;
   }
 
   void _checkSocialStates() async {
@@ -1109,14 +1130,10 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       _detachListener(oldWidget.controller);
       _attachListener(widget.controller);
     }
-    if (widget.isCurrent && widget.controller != null && widget.controller!.value.isInitialized) {
-      if (!widget.controller!.value.isPlaying) {
-        widget.controller!.play();
-      }
-    } else if (!widget.isCurrent && widget.controller != null) {
-      if (widget.controller!.value.isPlaying) {
-        widget.controller!.pause();
-      }
+    if (!oldWidget.isCurrent && widget.isCurrent) {
+      _isPlaying = true;
+    } else if (!widget.isCurrent && widget.controller != null && widget.controller!.value.isInitialized) {
+      _isPlaying = widget.controller!.value.isPlaying;
     }
   }
 
@@ -1150,12 +1167,39 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       if (mounted) setState(() => _authorPhotoBase64 = photo.toString());
     }
     final uid = widget.data['userId']?.toString() ?? '';
-    if (uid.isNotEmpty && uid != 'guest') {
-      try {
-        final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-        if (doc.exists && mounted) {
-          final data = doc.data();
-          if (data != null) {
+    if (uid.isEmpty || uid == 'guest') return;
+
+    final cached = _authorProfileCache[uid];
+    if (cached != null) {
+      if (mounted) {
+        setState(() {
+          if ((cached['photoBase64'] ?? '').toString().isNotEmpty) {
+            _authorPhotoBase64 = cached['photoBase64'];
+          }
+          if ((cached['photoUrl'] ?? '').toString().isNotEmpty) {
+            _authorPhotoUrl = cached['photoUrl'];
+          }
+          final fn = cached['fullName']?.toString().trim();
+          if (fn != null && fn.isNotEmpty) _authorName = fn;
+          final cat = cached['category']?.toString().trim();
+          if (cat != null && cat.isNotEmpty) _authorTrade = cat;
+          final ph = cached['phone']?.toString().trim();
+          if (ph != null && ph.isNotEmpty) _authorPhone = ph;
+        });
+      }
+      return;
+    }
+
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      if (doc.exists) {
+        final data = doc.data();
+        if (data != null) {
+          if (_authorProfileCache.length > 100) {
+            _authorProfileCache.remove(_authorProfileCache.keys.first);
+          }
+          _authorProfileCache[uid] = data;
+          if (mounted) {
             setState(() {
               if (data['photoBase64'] != null && data['photoBase64'].toString().isNotEmpty) {
                 _authorPhotoBase64 = data['photoBase64'];
@@ -1178,8 +1222,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
             });
           }
         }
-      } catch (_) {}
-    }
+      }
+    } catch (_) {}
   }
 
   Future<void> _openArtisanProfile() async {
