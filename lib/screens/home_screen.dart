@@ -1161,22 +1161,27 @@ class _HomeScreenState extends State<HomeScreen> {
                   .limit(30)
                   .snapshots(),
               builder: (context, snapshot) {
-                // Səhifə yenilənərkən heç bir köhnə stok şəkil sıçrayışı olmasın - səliqəli müasir skelet yüklənməsi
+                // Səhifə yenilənərkən parlaq və zərif işıqlı skelet yüklənməsi (heç vaxt qaranlıq qara qutu görünmür)
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return ListView.separated(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     scrollDirection: Axis.horizontal,
-                    itemCount: 3,
+                    itemCount: 4,
                     separatorBuilder: (_, __) => const SizedBox(width: 12),
                     itemBuilder: (context, index) {
                       return Container(
                         width: 140,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFEFF6FF), Color(0xFFDBEAFE)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
                           borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFBFDBFE).withOpacity(0.5)),
                         ),
                         child: Center(
-                          child: Icon(Icons.play_circle_outline, color: Colors.white.withOpacity(0.2), size: 36),
+                          child: Icon(Icons.play_circle_outline, color: const Color(0xFF1769D2).withOpacity(0.4), size: 38),
                         ),
                       );
                     },
@@ -4822,6 +4827,7 @@ class _ShortsVideoThumbnail extends StatefulWidget {
 class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
   VideoPlayerController? _controller;
   bool _isInitialized = false;
+  bool _frameRendered = false;
 
   @override
   void initState() {
@@ -4837,6 +4843,7 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
       _controller?.dispose();
       _controller = null;
       _isInitialized = false;
+      _frameRendered = false;
       _initThumbnail();
     }
   }
@@ -4903,13 +4910,14 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
       }
       try {
         await controller.play();
-        await Future.delayed(const Duration(milliseconds: 30));
+        await Future.delayed(const Duration(milliseconds: 50));
         await controller.pause();
       } catch (_) {}
 
       if (mounted) {
         setState(() {
           _isInitialized = true;
+          _frameRendered = true;
         });
       }
     } catch (e) {
@@ -4929,26 +4937,29 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
 
   @override
   Widget build(BuildContext context) {
-    final bool ready = _isInitialized && _controller != null && _controller!.value.isInitialized;
+    final bool showVideo = _isInitialized && _frameRendered && _controller != null && _controller!.value.isInitialized;
     return IgnorePointer(
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        child: ready
-            ? SizedBox.expand(
-                key: const ValueKey('video_ready'),
-                child: FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width: _controller!.value.size.width > 0 ? _controller!.value.size.width : 1080,
-                    height: _controller!.value.size.height > 0 ? _controller!.value.size.height : 1920,
-                    child: VideoPlayer(_controller!),
-                  ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 1. Zəmin: Həmişə parlaq fallback qalır (heç vaxt qara sıçrayış olmur)
+          widget.fallback,
+          // 2. Kadr tam hazır olduqda yumşaq AnimatedOpacity ilə açılır
+          if (_controller != null && _controller!.value.isInitialized)
+            AnimatedOpacity(
+              opacity: showVideo ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeIn,
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _controller!.value.size.width > 0 ? _controller!.value.size.width : 1080,
+                  height: _controller!.value.size.height > 0 ? _controller!.value.size.height : 1920,
+                  child: VideoPlayer(_controller!),
                 ),
-              )
-            : SizedBox.expand(
-                key: const ValueKey('video_fallback'),
-                child: widget.fallback,
               ),
+            ),
+        ],
       ),
     );
   }

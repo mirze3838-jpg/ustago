@@ -709,10 +709,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                             } catch (_) {}
                           }
 
-                          String coverBase64 = pickedCoverBytes != null ? base64Encode(pickedCoverBytes!) : '';
-                          if (coverBase64.isEmpty && uPhoto != null && uPhoto.isNotEmpty) {
-                            coverBase64 = uPhoto;
-                          }
+                          final String coverBase64 = pickedCoverBytes != null ? base64Encode(pickedCoverBytes!) : '';
 
                           // 1. Shorts kolleksiyasına yazırıq
                           await FirebaseFirestore.instance.collection('shorts').add({

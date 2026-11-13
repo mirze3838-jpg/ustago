@@ -466,7 +466,7 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
           },
         );
 
-        String coverBase64 = _pickedCoverBytes != null ? base64Encode(_pickedCoverBytes!) : '';
+        final String coverBase64 = _pickedCoverBytes != null ? base64Encode(_pickedCoverBytes!) : '';
 
         String? uPhoto;
         String currentAuthorName = widget.authorName;
@@ -482,11 +482,6 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
             if (ph != null && ph.isNotEmpty) currentPhone = ph;
           }
         } catch (_) {}
-
-        if (coverBase64.isEmpty && uPhoto != null && uPhoto.isNotEmpty) {
-          // İstifadəçi xüsusi örtük seçməyibsə, ən azından ustanın profil şəkli dərhal görünsün (qaranlıq kadr qalmır)
-          coverBase64 = uPhoto;
-        }
 
         final postData = {
           'userId': widget.uid,
