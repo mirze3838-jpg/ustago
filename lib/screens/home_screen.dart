@@ -1158,6 +1158,7 @@ class _HomeScreenState extends State<HomeScreen> {
               stream: FirebaseFirestore.instance
                   .collection('shorts')
                   .orderBy('createdAt', descending: true)
+                  .limit(30)
                   .snapshots(),
               builder: (context, snapshot) {
                 // Səhifə yenilənərkən heç bir köhnə stok şəkil sıçrayışı olmasın - səliqəli müasir skelet yüklənməsi
@@ -2373,6 +2374,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Yeni İş / Şəkil və ya Shorts Video Paylaşmaq dialoqu (Yeni dizayn və sistemə 1:1 uyğun)
   Future<void> _showAddPostDialog(String uid, String authorName, String role, {int initialTab = 0, bool lockTab = false}) async {
+    // Qalereya və video seçimi üçün MediaCodec və RAM-ı dərhal tam boşaldırıq
+    _ShortsVideoThumbnail.pauseAndReleaseAll();
+
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -4651,31 +4655,34 @@ class _HomeScreenState extends State<HomeScreen> {
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: const Color(0xFFE2E8F0)),
                         ),
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
+                            // 1. Əsas zəmin: həmişə parlaq kateqoriya gradienti (heç vaxt qara görünmür)
+                            _buildShortsFallbackVisual(
+                              title: (data['title'] ?? 'Shorts').toString(),
+                              trade: (data['trade'] ?? 'Usta İşi').toString(),
+                              artisanName: (data['artisanName'] ?? '').toString(),
+                            ),
+                            // 2. Əgər şəkil/kover varsa üzərinə qoyulur
                             if (coverBase64 != null && coverBase64.isNotEmpty)
                               Image.memory(base64Decode(coverBase64), fit: BoxFit.cover)
+                            else if (data['thumbnailUrl'] != null && (data['thumbnailUrl'] as String).isNotEmpty && !(data['thumbnailUrl'] as String).contains('unsplash.com'))
+                              Image.network(
+                                data['thumbnailUrl'] as String,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                              )
                             else if (videoUrl.isNotEmpty)
                               _ShortsVideoThumbnail(
                                 key: ValueKey('short_thumb_${doc.id}'),
                                 videoUrl: videoUrl,
-                                fallback: _buildShortsFallbackVisual(
-                                  title: (data['title'] ?? 'Shorts').toString(),
-                                  trade: (data['trade'] ?? 'Usta İşi').toString(),
-                                  artisanName: (data['artisanName'] ?? '').toString(),
-                                ),
-                              )
-                            else
-                              _buildShortsFallbackVisual(
-                                title: (data['title'] ?? 'Shorts').toString(),
-                                trade: (data['trade'] ?? 'Usta İşi').toString(),
-                                artisanName: (data['artisanName'] ?? '').toString(),
+                                fallback: const SizedBox.shrink(),
                               ),
+                            // Zərif şəffaf qat
                             Container(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
@@ -4683,7 +4690,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   end: Alignment.bottomCenter,
                                   colors: [
                                     Colors.transparent,
-                                    Colors.black.withOpacity(0.7),
+                                    Colors.black.withOpacity(0.35),
                                   ],
                                 ),
                               ),
@@ -4746,7 +4753,7 @@ class _CoverWaveClipper extends CustomClipper<Path> {
 /// Mobildə RAM və GPU Video Decoder limitini qoruyan Növbə sistemi
 class _ThumbnailQueue {
   static int _running = 0;
-  static const int _maxConcurrent = 1; // Eyni anda yalnız 1 video üçün kadr çıxarılır
+  static const int _maxConcurrent = 2; // Sürətli açılış üçün 2 paralel axın
   static final List<Completer<void>> _queue = [];
 
   static Future<void> acquire() async {
@@ -4767,12 +4774,40 @@ class _ThumbnailQueue {
       next.complete();
     }
   }
+
+  static void clearQueue() {
+    for (final c in _queue) {
+      if (!c.isCompleted) c.complete();
+    }
+    _queue.clear();
+    _running = 0;
+  }
 }
 
 /// Videonun öz içindən kadr çıxararaq kartın üz qabığında göstərən vidcet
 class _ShortsVideoThumbnail extends StatefulWidget {
   final String videoUrl;
   final Widget fallback;
+
+  static final Set<_ShortsVideoThumbnailState> _activeStates = {};
+
+  /// Qalereya açılarkən və ya video upload zamanı bütün aktiv decoder-ları dərhal azad edir
+  static void pauseAndReleaseAll() {
+    _ThumbnailQueue.clearQueue();
+    for (final s in _activeStates.toList()) {
+      try {
+        s._controller?.pause();
+        s._controller?.dispose();
+        s._controller = null;
+        if (s.mounted) {
+          s.setState(() {
+            s._isInitialized = false;
+          });
+        }
+      } catch (_) {}
+    }
+    _activeStates.clear();
+  }
 
   const _ShortsVideoThumbnail({
     super.key,
@@ -4791,6 +4826,7 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
   @override
   void initState() {
     super.initState();
+    _ShortsVideoThumbnail._activeStates.add(this);
     _initThumbnail();
   }
 
@@ -4834,9 +4870,9 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
       final controller = VideoPlayerController.networkUrl(Uri.parse(url));
       _controller = controller;
 
-      // Timeout: 6 saniyə (donub ilişib qalmasın)
+      // Timeout: 4 saniyə (gecikmə olmasın)
       await controller.initialize().timeout(
-        const Duration(seconds: 6),
+        const Duration(seconds: 4),
         onTimeout: () {
           debugPrint('Thumbnail timeout: $url');
         },
@@ -4858,8 +4894,8 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
 
       // İlk kadrı sabitləyirik
       final duration = controller.value.duration;
-      final seekTarget = duration > const Duration(milliseconds: 200)
-          ? const Duration(milliseconds: 200)
+      final seekTarget = duration > const Duration(milliseconds: 150)
+          ? const Duration(milliseconds: 150)
           : Duration.zero;
 
       if (seekTarget > Duration.zero) {
@@ -4867,7 +4903,7 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
       }
       try {
         await controller.play();
-        await Future.delayed(const Duration(milliseconds: 40));
+        await Future.delayed(const Duration(milliseconds: 30));
         await controller.pause();
       } catch (_) {}
 
@@ -4886,6 +4922,7 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
 
   @override
   void dispose() {
+    _ShortsVideoThumbnail._activeStates.remove(this);
     _controller?.dispose();
     super.dispose();
   }

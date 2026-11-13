@@ -709,7 +709,10 @@ class _ShortsScreenState extends State<ShortsScreen> {
                             } catch (_) {}
                           }
 
-                          final String coverBase64 = pickedCoverBytes != null ? base64Encode(pickedCoverBytes!) : '';
+                          String coverBase64 = pickedCoverBytes != null ? base64Encode(pickedCoverBytes!) : '';
+                          if (coverBase64.isEmpty && uPhoto != null && uPhoto.isNotEmpty) {
+                            coverBase64 = uPhoto;
+                          }
 
                           // 1. Shorts kolleksiyasına yazırıq
                           await FirebaseFirestore.instance.collection('shorts').add({
@@ -789,10 +792,12 @@ class _ShortsScreenState extends State<ShortsScreen> {
                 ? FirebaseFirestore.instance
                     .collection('shorts')
                     .where('userId', isEqualTo: widget.targetUserId)
+                    .limit(50)
                     .snapshots()
                 : FirebaseFirestore.instance
                     .collection('shorts')
                     .orderBy('createdAt', descending: true)
+                    .limit(50)
                     .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {

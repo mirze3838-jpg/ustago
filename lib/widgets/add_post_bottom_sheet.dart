@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
@@ -262,10 +263,19 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
   // --- VİDEO FUNKSİYALARI ---
 
   Future<void> _pickVideo() async {
+    // KRİTİK: Qalereya açılmadan əvvəl video controller dispose edilir.
+    // Android LMK video decoder RAM-ını görüb Flutter prosesini kill edə bilər.
+    _disposeVideoController();
+    // GC-yə və sistemə tam nəfəs dərəcəsi veririk
+    await Future.delayed(const Duration(milliseconds: 350));
+
     final picker = ImagePicker();
     XFile? video;
     try {
-      video = await picker.pickVideo(source: ImageSource.gallery);
+      video = await picker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(minutes: 5),
+      );
     } catch (e) {
       debugPrint('pickVideo xətası: $e');
       return;
@@ -292,8 +302,14 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
 
     _disposeVideoController();
 
-    final controller = VideoPlayerController.file(File(video.path));
     try {
+      final VideoPlayerController controller;
+      if (kIsWeb) {
+        controller = VideoPlayerController.networkUrl(Uri.parse(video.path));
+      } else {
+        controller = VideoPlayerController.file(File(video.path));
+      }
+
       await controller.initialize();
       final dur = controller.value.duration;
       final totalSec = dur.inMilliseconds / 1000.0;
@@ -450,7 +466,7 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
           },
         );
 
-        final String coverBase64 = _pickedCoverBytes != null ? base64Encode(_pickedCoverBytes!) : '';
+        String coverBase64 = _pickedCoverBytes != null ? base64Encode(_pickedCoverBytes!) : '';
 
         String? uPhoto;
         String currentAuthorName = widget.authorName;
@@ -466,6 +482,11 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
             if (ph != null && ph.isNotEmpty) currentPhone = ph;
           }
         } catch (_) {}
+
+        if (coverBase64.isEmpty && uPhoto != null && uPhoto.isNotEmpty) {
+          // İstifadəçi xüsusi örtük seçməyibsə, ən azından ustanın profil şəkli dərhal görünsün (qaranlıq kadr qalmır)
+          coverBase64 = uPhoto;
+        }
 
         final postData = {
           'userId': widget.uid,

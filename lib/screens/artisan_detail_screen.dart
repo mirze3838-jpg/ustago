@@ -39,6 +39,28 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
     }
   }
 
+  Widget _buildVideoGradientFallback(Map<String, dynamic> data) {
+    final tr = (data['trade'] ?? '').toString().toLowerCase();
+    List<Color> gColors = const [Color(0xFF2563EB), Color(0xFF1D4ED8)];
+    if (tr.contains('santexnik') || tr.contains('su')) {
+      gColors = const [Color(0xFF0284C7), Color(0xFF0369A1)];
+    } else if (tr.contains('elektrik') || tr.contains('işıq')) {
+      gColors = const [Color(0xFFD97706), Color(0xFFB45309)];
+    } else if (tr.contains('tikinti') || tr.contains('hörgü')) {
+      gColors = const [Color(0xFFEA580C), Color(0xFFC2410C)];
+    } else if (tr.contains('mebel')) {
+      gColors = const [Color(0xFF92400E), Color(0xFF78350F)];
+    }
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: gColors, begin: Alignment.topLeft, end: Alignment.bottomRight),
+      ),
+      child: const Center(
+        child: Icon(Icons.play_circle_filled, color: Colors.white, size: 40),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _videoController?.dispose();
@@ -1083,11 +1105,28 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                               child: Builder(
                                 builder: (_) {
                                   final data = latestDoc.data();
-                                  final coverBase64 = data['thumbnailBase64']?.toString();
+                                  // thumbnailBase64, imageBase64, imagesBase64 — hamısını yoxla
+                                  String? coverBase64 = data['thumbnailBase64']?.toString();
+                                  if (coverBase64 == null || coverBase64.isEmpty) {
+                                    coverBase64 = data['imageBase64']?.toString();
+                                  }
+                                  if ((coverBase64 == null || coverBase64.isEmpty) &&
+                                      data['imagesBase64'] is List &&
+                                      (data['imagesBase64'] as List).isNotEmpty) {
+                                    coverBase64 = (data['imagesBase64'] as List).first.toString();
+                                  }
                                   if (coverBase64 != null && coverBase64.isNotEmpty) {
                                     try {
                                       return Image.memory(base64Decode(coverBase64), fit: BoxFit.cover);
                                     } catch (_) {}
+                                  }
+                                  final thumbUrl = data['thumbnailUrl']?.toString();
+                                  if (thumbUrl != null && thumbUrl.isNotEmpty && !thumbUrl.contains('unsplash.com')) {
+                                    return Image.network(
+                                      thumbUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => _buildVideoGradientFallback(data),
+                                    );
                                   }
                                   final tr = (data['trade'] ?? '').toString().toLowerCase();
                                   List<Color> gColors = const [Color(0xFF2563EB), Color(0xFF1D4ED8)];
