@@ -14,6 +14,7 @@ import 'package:video_player/video_player.dart';
 import '../services/auth_service.dart';
 import '../services/video_upload_service.dart';
 import '../services/category_city_service.dart';
+import '../services/shorts_social_service.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
 import 'admin_screen.dart';
@@ -38,10 +39,31 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _currentUserRole;
   final TextEditingController _searchController = TextEditingController();
   int _adminSecretTap = 0;
-  int _unreadNotifications = 3;
+  int _unreadNotifications = 0;
   int _ustaProfileGalleryTab = 0; // 0: Portfolio, 1: Shorts
   bool _isUstaBioExpanded = false;
   late final ShortsScreen _shortsTab;
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _shortsStream;
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _ustaStream;
+
+  // Base64 görüntüləri təkrar decode etməmək üçün yaddaş keşi
+  static final Map<String, Uint8List> _b64Cache = {};
+
+  static Uint8List? _decodeB64(String? b64) {
+    if (b64 == null || b64.isEmpty) return null;
+    final cached = _b64Cache[b64];
+    if (cached != null) return cached;
+    try {
+      final bytes = base64Decode(b64);
+      if (_b64Cache.length > 150) {
+        _b64Cache.remove(_b64Cache.keys.first);
+      }
+      _b64Cache[b64] = bytes;
+      return bytes;
+    } catch (_) {
+      return null;
+    }
+  }
 
   // Kateqoriyalar və Şəhərlər (Admin tərəfindən artırıla bilər, Firestore ilə canlı sinxronlaşır)
   List<Map<String, dynamic>> _categories = List.from(CategoryCityService.defaultCategories);
@@ -53,6 +75,16 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _currentIndex = widget.initialTabIndex;
+    _unreadNotifications = _authService.currentUser != null ? 3 : 0;
+    _shortsStream = FirebaseFirestore.instance
+        .collection('shorts')
+        .orderBy('createdAt', descending: true)
+        .limit(30)
+        .snapshots();
+    _ustaStream = FirebaseFirestore.instance
+        .collection('users')
+        .where('role', isEqualTo: 'usta')
+        .snapshots();
     _loadUserRole();
     _initCategoryAndCityStreams();
     _shortsTab = ShortsScreen(
@@ -106,32 +138,20 @@ class _HomeScreenState extends State<HomeScreen> {
           if (uData?['notificationsRead'] == true) {
             hasRead = true;
           }
-          final String? fullName = uData?['fullName'];
-          final String? phone = uData?['phone'];
-          final String? category = uData?['category'];
-          final String? photoBase64 = uData?['photoBase64'];
-          // İstifadəçinin mövcud shorts və postlarını cari adı ilə arxa planda dərhal sinxronlaşdırırıq
-          if (fullName != null && fullName.isNotEmpty) {
-            _syncUserDataAcrossCollections(
-              user.uid,
-              newName: fullName,
-              newPhone: phone,
-              newTrade: category,
-              newPhotoBase64: photoBase64,
-            );
-          }
         }
       } catch (_) {}
     }
     if (mounted) {
       setState(() {
         _currentUserRole = role;
-        if (hasRead) _unreadNotifications = 0;
+        if (user == null || hasRead) {
+          _unreadNotifications = 0;
+        }
       });
     }
   }
 
-  /// İstifadəçinin adı, nömrəsi, fotosu və ya ixtisası dəyişdikdə bütün Shorts və Post bazasını sinxronlaşdırır
+  /// İstifadəçinin adı, nömrəsi, fotosu və ya ixtisası dəyişdikdə bütün Shorts və Post bazasını sinxronlaşdırır (WriteBatch ilə)
   Future<void> _syncUserDataAcrossCollections(
     String uid, {
     String? newName,
@@ -140,16 +160,28 @@ class _HomeScreenState extends State<HomeScreen> {
     String? newPhotoBase64,
   }) async {
     if (uid.isEmpty || uid == 'guest') return;
+    if (newName != null && newName.trim().isNotEmpty) {
+      _AuthorNameText._nameCache[uid] = newName.trim();
+    }
     try {
-      // 1. Shorts kolleksiyasında istifadəçinin videolarını tap və yenilə
-      final shortsSnap = await FirebaseFirestore.instance
-          .collection('shorts')
-          .where('userId', isEqualTo: uid)
-          .get();
+      final db = FirebaseFirestore.instance;
+      WriteBatch batch = db.batch();
+      int opCount = 0;
 
+      Future<void> addToBatch(DocumentReference ref, Map<String, dynamic> updates) async {
+        batch.set(ref, updates, SetOptions(merge: true));
+        opCount++;
+        if (opCount >= 400) {
+          await batch.commit();
+          batch = db.batch();
+          opCount = 0;
+        }
+      }
+
+      // 1. Shorts kolleksiyasında istifadəçinin videolarını tap və yenilə
+      final shortsSnap = await db.collection('shorts').where('userId', isEqualTo: uid).get();
       for (final doc in shortsSnap.docs) {
         final Map<String, dynamic> updates = {};
-
         if (newName != null && newName.trim().isNotEmpty) {
           updates['artisanName'] = newName.trim();
         }
@@ -162,21 +194,15 @@ class _HomeScreenState extends State<HomeScreen> {
         if (newPhotoBase64 != null) {
           updates['authorPhotoBase64'] = newPhotoBase64;
         }
-
         if (updates.isNotEmpty) {
-          await doc.reference.set(updates, SetOptions(merge: true));
+          await addToBatch(doc.reference, updates);
         }
       }
 
       // 2. Posts (portfolio) kolleksiyasında istifadəçinin postlarını tap və yenilə
-      final postsSnap = await FirebaseFirestore.instance
-          .collection('posts')
-          .where('userId', isEqualTo: uid)
-          .get();
-
+      final postsSnap = await db.collection('posts').where('userId', isEqualTo: uid).get();
       for (final doc in postsSnap.docs) {
         final Map<String, dynamic> updates = {};
-
         if (newName != null && newName.trim().isNotEmpty) {
           updates['authorName'] = newName.trim();
           updates['artisanName'] = newName.trim();
@@ -187,64 +213,30 @@ class _HomeScreenState extends State<HomeScreen> {
         if (newTrade != null && newTrade.trim().isNotEmpty) {
           updates['category'] = newTrade.trim();
         }
-
         if (updates.isNotEmpty) {
-          await doc.reference.set(updates, SetOptions(merge: true));
+          await addToBatch(doc.reference, updates);
         }
+      }
+
+      if (opCount > 0) {
+        await batch.commit();
       }
     } catch (e) {
       debugPrint('Sync user data across collections error: $e');
     }
   }
 
-  // Nümunə Shorts videoları
-  final List<Map<String, String>> _shortsList = [
-    {
-      'title': 'Kafel-metlax ustasının işi 🔥',
-      'views': '128K',
-      'image': 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=80',
-    },
-    {
-      'title': 'Santexnik məsləhəti 💡',
-      'views': '95K',
-      'image': 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=400&q=80',
-    },
-    {
-      'title': 'Elektrik işləri necə edilir? ⚡',
-      'views': '72K',
-      'image': 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=400&q=80',
-    },
-    {
-      'title': 'Kondisioner quraşdırılması ❄️',
-      'views': '64K',
-      'image': 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=400&q=80',
-    },
-  ];
-
-  // Populyar Ustalar
-  final List<Map<String, String>> _popularArtisans = [
-    {
-      'name': 'Rəşad Usta',
-      'rating': '4.9',
-      'reviews': '524',
-      'phone': '+994 50 123 45 67',
-      'image': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-    },
-    {
-      'name': 'Tural Usta',
-      'rating': '4.8',
-      'reviews': '412',
-      'phone': '+994 55 987 65 43',
-      'image': 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
-    },
-    {
-      'name': 'Elvin Usta',
-      'rating': '4.9',
-      'reviews': '376',
-      'phone': '+994 70 555 44 33',
-      'image': 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=200&q=80',
-    },
-  ];
+  // Firestore client-side tarix sıralaması (ən yenisi yuxarıda)
+  int _compareCreatedAtDesc(
+    QueryDocumentSnapshot<Map<String, dynamic>> a,
+    QueryDocumentSnapshot<Map<String, dynamic>> b,
+  ) {
+    final ta = a.data()['createdAt'];
+    final tb = b.data()['createdAt'];
+    final ma = ta is Timestamp ? ta.millisecondsSinceEpoch : 0;
+    final mb = tb is Timestamp ? tb.millisecondsSinceEpoch : 0;
+    return mb.compareTo(ma);
+  }
 
   /// Şəkili Firestore 1MB limitinə uyğun sıxışdırır (maks ~700KB)
   Future<Uint8List> _compressCoverImage(Uint8List bytes) async {
@@ -847,10 +839,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collection('users')
-                    .where('role', isEqualTo: 'usta')
-                    .snapshots(),
+                stream: _ustaStream,
                 builder: (context, uSnap) {
                   final q = _searchController.text.trim().toLowerCase();
                   final docs = uSnap.data?.docs ?? [];
@@ -867,6 +856,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     m['uid'] = d.id;
                     return m;
                   }).toList();
+
+                  // Seçilmiş şəhəri axtarış nəticələrində üst sırada göstər
+                  final sc = _selectedCity.toLowerCase();
+                  matchingUstas.sort((a, b) {
+                    final aCityMatch = (a['city'] ?? '').toString().toLowerCase().contains(sc);
+                    final bCityMatch = (b['city'] ?? '').toString().toLowerCase().contains(sc);
+                    if (aCityMatch != bCityMatch) return aCityMatch ? -1 : 1;
+                    final double aRat = (a['rating'] is num) ? (a['rating'] as num).toDouble() : 0.0;
+                    final double bRat = (b['rating'] is num) ? (b['rating'] as num).toDouble() : 0.0;
+                    return bRat.compareTo(aRat);
+                  });
 
                   final matchingCats = _categories.where((c) {
                     final title = (c['title'] as String).toLowerCase();
@@ -949,10 +949,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             final uPhoto = u['photoBase64'] as String?;
 
                             ImageProvider? avatarImg;
-                            if (uPhoto != null && uPhoto.isNotEmpty) {
-                              try {
-                                avatarImg = MemoryImage(base64Decode(uPhoto));
-                              } catch (_) {}
+                            final uBytes = _decodeB64(uPhoto);
+                            if (uBytes != null) {
+                              avatarImg = MemoryImage(uBytes);
                             }
 
                             return InkWell(
@@ -1155,14 +1154,10 @@ class _HomeScreenState extends State<HomeScreen> {
           child: SizedBox(
             height: 230,
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('shorts')
-                  .orderBy('createdAt', descending: true)
-                  .limit(30)
-                  .snapshots(),
+              stream: _shortsStream,
               builder: (context, snapshot) {
                 // Səhifə yenilənərkən parlaq və zərif işıqlı skelet yüklənməsi (heç vaxt qaranlıq qara qutu görünmür)
-                if (snapshot.connectionState == ConnectionState.waiting) {
+                if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                   return ListView.separated(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     scrollDirection: Axis.horizontal,
@@ -1256,35 +1251,48 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         SliverToBoxAdapter(
           child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('users')
-                .where('role', isEqualTo: 'usta')
-                .snapshots(),
+            stream: _ustaStream,
             builder: (context, snapshot) {
-              final docs = snapshot.data?.docs ?? [];
-              List<Map<String, dynamic>> list = [];
-              if (docs.isNotEmpty) {
-                list = docs.map((d) {
-                  final m = Map<String, dynamic>.from(d.data());
-                  m['id'] = d.id;
-                  m['uid'] = d.id;
-                  return m;
-                }).toList();
-
-                // Seçilmiş şəhərə uyğun olan ustalar ön sıralarda çıxır
-                list.sort((a, b) {
-                  final aCity = (a['city'] ?? '').toString().toLowerCase();
-                  final bCity = (b['city'] ?? '').toString().toLowerCase();
-                  final sc = _selectedCity.toLowerCase();
-                  final aMatches = aCity.contains(sc);
-                  final bMatches = bCity.contains(sc);
-                  if (aMatches && !bMatches) return -1;
-                  if (!aMatches && bMatches) return 1;
-                  return 0;
-                });
-              } else {
-                list = _popularArtisans.map((a) => Map<String, dynamic>.from(a)).toList();
+              if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                return const SizedBox(
+                  height: 155,
+                  child: Center(child: CircularProgressIndicator()),
+                );
               }
+
+              final docs = snapshot.data?.docs ?? [];
+              if (docs.isEmpty) {
+                return const SizedBox(
+                  height: 100,
+                  child: Center(
+                    child: Text(
+                      'Hələlik qeydiyyatdan keçmiş usta yoxdur',
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+                  ),
+                );
+              }
+
+              final List<Map<String, dynamic>> list = docs.map((d) {
+                final m = Map<String, dynamic>.from(d.data());
+                m['id'] = d.id;
+                m['uid'] = d.id;
+                return m;
+              }).toList();
+
+              // Seçilmiş şəhərə uyğun olan ustalar, sonra təsdiqlənmiş və yüksək reytinqlilər ön sıralarda çıxır
+              final sc = _selectedCity.toLowerCase();
+              list.sort((a, b) {
+                final aMatches = (a['city'] ?? '').toString().toLowerCase().contains(sc);
+                final bMatches = (b['city'] ?? '').toString().toLowerCase().contains(sc);
+                if (aMatches != bMatches) return aMatches ? -1 : 1;
+                final bool aVer = a['isVerified'] == true;
+                final bool bVer = b['isVerified'] == true;
+                if (aVer != bVer) return aVer ? -1 : 1;
+                final double aRat = (a['rating'] is num) ? (a['rating'] as num).toDouble() : 0.0;
+                final double bRat = (b['rating'] is num) ? (b['rating'] as num).toDouble() : 0.0;
+                return bRat.compareTo(aRat);
+              });
 
               return SizedBox(
                 height: 155,
@@ -1312,6 +1320,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Bildirişlər pəncərəsi
   void _showNotificationsSheet() {
+    int unreadBeforeOpen = _unreadNotifications;
     if (_unreadNotifications > 0) {
       setState(() {
         _unreadNotifications = 0;
@@ -1369,7 +1378,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         'Bildirişlər',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
                       ),
-                      if (_unreadNotifications > 0) ...[
+                      if (unreadBeforeOpen > 0) ...[
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -1378,18 +1387,18 @@ class _HomeScreenState extends State<HomeScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
-                            '$_unreadNotifications yeni',
+                            '$unreadBeforeOpen yeni',
                             style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
                     ],
                   ),
-                  if (_unreadNotifications > 0)
+                  if (unreadBeforeOpen > 0)
                     TextButton(
                       onPressed: () {
                         setState(() => _unreadNotifications = 0);
-                        setSheetState(() {});
+                        setSheetState(() => unreadBeforeOpen = 0);
                       },
                       child: const Text('Hamısını oxu', style: TextStyle(color: Color(0xFF1769D2), fontSize: 13, fontWeight: FontWeight.bold)),
                     ),
@@ -1407,7 +1416,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       title: 'UstaGo-ya Xoş Gəlmisiniz! 🎉',
                       body: 'Azərbaycanın peşəkar usta və xidmət platformasındasınız. Rahatlıqla usta tapın və ya sifariş qəbul edin.',
                       time: 'İndi',
-                      isUnread: _unreadNotifications >= 1,
+                      isUnread: unreadBeforeOpen >= 1,
                     ),
                     _buildNotificationItem(
                       icon: Icons.verified_user,
@@ -1416,7 +1425,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       title: 'Profil Təhlükəsizliyi 🛡️',
                       body: 'Hesabınız uğurla aktivləşdirilib. Profilinizdə gördüyünüz işlərin foto və videolarını paylaşa bilərsiniz.',
                       time: '2 saat əvvəl',
-                      isUnread: _unreadNotifications >= 2,
+                      isUnread: unreadBeforeOpen >= 2,
                     ),
                     _buildNotificationItem(
                       icon: Icons.tips_and_updates,
@@ -1425,7 +1434,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       title: 'Yeni İmkan: Usta Haqqında Məlumat 💡',
                       body: 'Artıq profilinizdə "Usta Haqqında" məlumatınızı istədiyiniz vaxt redaktə edib yeniləyə bilərsiniz!',
                       time: 'Dünən',
-                      isUnread: _unreadNotifications >= 3,
+                      isUnread: unreadBeforeOpen >= 3,
                     ),
                     _buildNotificationItem(
                       icon: Icons.video_collection,
@@ -1919,7 +1928,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final String? thumbnailBase64 = item['thumbnailBase64'];
     final String? thumbnailUrl = item['thumbnailUrl'];
     final String trade = (item['trade'] ?? 'Tikinti').toString();
-    final String artisanName = (item['artisanName'] ?? 'Usta').toString();
+    final String artisanName = (item['author'] ?? item['artisanName'] ?? 'Usta').toString();
     final String title = (item['title'] ?? '').toString();
 
     // Video kadrı çıxarılana qədər parlaq və işıqlı fallback
@@ -1930,18 +1939,16 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     Widget coverWidget;
-    if (thumbnailBase64 != null && thumbnailBase64.isNotEmpty) {
-      try {
-        coverWidget = Image.memory(
-          base64Decode(thumbnailBase64),
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: double.infinity,
-          errorBuilder: (_, __, ___) => fallbackVisual,
-        );
-      } catch (_) {
-        coverWidget = fallbackVisual;
-      }
+    final Uint8List? thumbBytes = _decodeB64(thumbnailBase64);
+    if (thumbBytes != null) {
+      coverWidget = Image.memory(
+        thumbBytes,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (_, __, ___) => fallbackVisual,
+      );
     } else if (thumbnailUrl != null && thumbnailUrl.isNotEmpty && !thumbnailUrl.contains('unsplash.com')) {
       coverWidget = Image.network(
         thumbnailUrl,
@@ -1974,14 +1981,14 @@ class _HomeScreenState extends State<HomeScreen> {
         final targetIndex = await Navigator.push<int>(
           context,
           MaterialPageRoute(
-            builder: (_) => ShortsScreen(
+            builder: (routeCtx) => ShortsScreen(
               initialIndex: index,
               onNavigateTab: (idx) {
-                Navigator.pop(context, idx);
+                Navigator.pop(routeCtx, idx);
               },
               onOpenArtisanProfile: (artisanData) async {
                 await Navigator.push(
-                  context,
+                  routeCtx,
                   MaterialPageRoute(
                     builder: (_) => ArtisanDetailScreen(artisanData: artisanData),
                   ),
@@ -2154,14 +2161,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final String city = (artisan['city'] ?? 'Bakı').toString();
     final String? photoBase64 = artisan['photoBase64'] as String?;
     final String? image = artisan['image'] as String?;
-    final String rating = (artisan['rating'] ?? '4.9').toString();
-    final String reviews = (artisan['reviews'] ?? artisan['reviewsCount'] ?? '10').toString();
+    final String rating = (artisan['rating'] != null) ? artisan['rating'].toString() : 'Yeni';
+    final String reviews = (artisan['reviewCount'] ?? artisan['reviews'] ?? artisan['reviewsCount'] ?? '0').toString();
 
     ImageProvider? avatarImg;
-    if (photoBase64 != null && photoBase64.isNotEmpty) {
-      try {
-        avatarImg = MemoryImage(base64Decode(photoBase64));
-      } catch (_) {}
+    final photoBytes = _decodeB64(photoBase64);
+    if (photoBytes != null) {
+      avatarImg = MemoryImage(photoBytes);
     } else if (image != null && image.isNotEmpty) {
       avatarImg = NetworkImage(image);
     }
@@ -2344,7 +2350,7 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: const InputDecoration(
                 labelText: 'Admin Şifrəsi',
                 prefixIcon: Icon(Icons.lock),
-                hintText: 'Şifrə: ustago2026',
+                hintText: 'Admin şifrəsini daxil edin',
               ),
             ),
           ],
@@ -2439,8 +2445,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     minScale: 0.8,
                     maxScale: 4.0,
                     child: Image.memory(
-                      base64Decode(imgBase64),
+                      _decodeB64(imgBase64) ?? base64Decode(imgBase64),
                       fit: BoxFit.contain,
+                      gaplessPlayback: true,
                       width: double.infinity,
                       height: double.infinity,
                     ),
@@ -2482,7 +2489,18 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               );
                               if (confirm == true) {
-                                await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
+                                try {
+                                  await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
+                                  if (videoUrl.isNotEmpty) {
+                                    final shQ = await FirebaseFirestore.instance
+                                        .collection('shorts')
+                                        .where('videoUrl', isEqualTo: videoUrl)
+                                        .get();
+                                    for (final d in shQ.docs) {
+                                      await ShortsSocialService.deleteShortVideoCompletely(d.id);
+                                    }
+                                  }
+                                } catch (_) {}
                                 if (mounted) {
                                   Navigator.pop(ctx);
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -2578,7 +2596,8 @@ class _HomeScreenState extends State<HomeScreen> {
               .where('userId', isEqualTo: uid)
               .snapshots(),
           builder: (context, snapshot) {
-            final docs = snapshot.data?.docs ?? [];
+            final docs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(snapshot.data?.docs ?? [])
+              ..sort(_compareCreatedAtDesc);
             if (docs.isEmpty) {
               return Container(
                 width: double.infinity,
@@ -2639,8 +2658,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         Builder(
                           builder: (context) {
-                            if (base64Img != null && base64Img.isNotEmpty) {
-                              return Image.memory(base64Decode(base64Img), fit: BoxFit.cover);
+                            final bBytes = _decodeB64(base64Img);
+                            if (bBytes != null) {
+                              return Image.memory(bBytes, fit: BoxFit.cover, gaplessPlayback: true);
                             }
                             final thumbUrl = data['thumbnailUrl']?.toString();
                             if (thumbUrl != null && thumbUrl.isNotEmpty && !thumbUrl.contains('unsplash.com')) {
@@ -3125,10 +3145,9 @@ class _HomeScreenState extends State<HomeScreen> {
         final String userRole = userData?['role'] ?? _currentUserRole ?? 'customer';
 
         ImageProvider? avatarImage;
-        if (photoBase64 != null && photoBase64.isNotEmpty) {
-          try {
-            avatarImage = MemoryImage(base64Decode(photoBase64));
-          } catch (_) {}
+        final uBytes = _decodeB64(photoBase64);
+        if (uBytes != null) {
+          avatarImage = MemoryImage(uBytes);
         } else if (photoUrl != null && photoUrl.isNotEmpty) {
           avatarImage = NetworkImage(photoUrl);
         }
@@ -3433,10 +3452,10 @@ class _HomeScreenState extends State<HomeScreen> {
     String displayName,
     String userRole,
   ) {
-    final String phone = (userData?['phone'] ?? user.phoneNumber ?? '+994 50 123 45 67').toString();
+    final String phone = (userData?['phone'] ?? user.phoneNumber ?? '').toString().trim();
     final String category = (userData?['category'] ?? userData?['trade'] ?? 'Tikinti və Təmir').toString();
-    final String rating = (userData?['rating'] != null) ? userData!['rating'].toString() : '4.9';
-    final String reviewCount = (userData?['reviewCount'] != null) ? userData!['reviewCount'].toString() : '324';
+    final String rating = (userData?['rating'] != null) ? userData!['rating'].toString() : 'Yeni';
+    final String reviewCount = (userData?['reviewCount'] != null) ? userData!['reviewCount'].toString() : '0';
     final bool isWorking = userData?['isWorking'] == true;
     final String bio = (userData?['bio'] != null && (userData!['bio'] as String).trim().isNotEmpty)
         ? userData!['bio'] as String
@@ -3468,10 +3487,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         Builder(
                           builder: (context) {
-                            if (coverBase64 != null && coverBase64.isNotEmpty) {
-                              try {
-                                return Image.memory(base64Decode(coverBase64), fit: BoxFit.cover);
-                              } catch (_) {}
+                            final cBytes = _decodeB64(coverBase64);
+                            if (cBytes != null) {
+                              return Image.memory(cBytes, fit: BoxFit.cover, gaplessPlayback: true);
                             }
                             if (coverUrl != null && coverUrl.isNotEmpty) {
                               return Image.network(coverUrl, fit: BoxFit.cover);
@@ -3758,7 +3776,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              phone.isNotEmpty ? phone : '+994 50 123 45 67',
+                              phone.isNotEmpty ? phone : 'Nömrə qeyd olunmayıb',
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -4146,18 +4164,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFEF4444),
-                          shape: BoxShape.circle,
+                      if (_unreadNotifications > 0) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFEF4444),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            '$_unreadNotifications',
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
                         ),
-                        child: Text(
-                          '$_unreadNotifications',
-                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
+                        const SizedBox(width: 6),
+                      ],
                       const Icon(Icons.chevron_right_rounded, color: Color(0xFF1769D2), size: 24),
                     ],
                   ),
@@ -4308,7 +4328,8 @@ class _HomeScreenState extends State<HomeScreen> {
           .where('userId', isEqualTo: uid)
           .snapshots(),
       builder: (context, snapshot) {
-        final docs = snapshot.data?.docs ?? [];
+        final docs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(snapshot.data?.docs ?? [])
+          ..sort(_compareCreatedAtDesc);
         // Yalnız həqiqi FOTO paylaşımlarını seçirik (video olmayan və şəkil olan)
         final photoDocs = docs.where((d) {
           final data = d.data();
@@ -4461,33 +4482,32 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         child: Builder(
                           builder: (context) {
-                            if (base64Img != null && base64Img.isNotEmpty) {
-                              try {
-                                return Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    Image.memory(base64Decode(base64Img), fit: BoxFit.cover),
-                                    // Üzərindən yüngül kölgə
-                                    Positioned(
-                                      bottom: 0, left: 0, right: 0,
-                                      child: Container(
-                                        height: 32,
-                                        decoration: BoxDecoration(
-                                          borderRadius: const BorderRadius.only(
-                                            bottomLeft: Radius.circular(12),
-                                            bottomRight: Radius.circular(12),
-                                          ),
-                                          gradient: LinearGradient(
-                                            begin: Alignment.topCenter,
-                                            end: Alignment.bottomCenter,
-                                            colors: [Colors.transparent, Colors.black.withOpacity(0.35)],
-                                          ),
+                            final pBytes = _decodeB64(base64Img);
+                            if (pBytes != null) {
+                              return Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Image.memory(pBytes, fit: BoxFit.cover, gaplessPlayback: true),
+                                  // Üzərindən yüngül kölgə
+                                  Positioned(
+                                    bottom: 0, left: 0, right: 0,
+                                    child: Container(
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        borderRadius: const BorderRadius.only(
+                                          bottomLeft: Radius.circular(12),
+                                          bottomRight: Radius.circular(12),
+                                        ),
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [Colors.transparent, Colors.black.withOpacity(0.35)],
                                         ),
                                       ),
                                     ),
-                                  ],
-                                );
-                              } catch (_) {}
+                                  ),
+                                ],
+                              );
                             }
                             final thumbUrl = data['thumbnailUrl']?.toString();
                             if (thumbUrl != null && thumbUrl.isNotEmpty && !thumbUrl.contains('unsplash.com')) {
@@ -4549,7 +4569,8 @@ class _HomeScreenState extends State<HomeScreen> {
           .where('userId', isEqualTo: uid)
           .snapshots(),
       builder: (context, snapshot) {
-        final docs = snapshot.data?.docs ?? [];
+        final docs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(snapshot.data?.docs ?? [])
+          ..sort(_compareCreatedAtDesc);
 
         if (docs.isEmpty) {
           return Container(
@@ -4673,8 +4694,12 @@ class _HomeScreenState extends State<HomeScreen> {
                               artisanName: (data['artisanName'] ?? '').toString(),
                             ),
                             // 2. Əgər şəkil/kover varsa üzərinə qoyulur
-                            if (coverBase64 != null && coverBase64.isNotEmpty)
-                              Image.memory(base64Decode(coverBase64), fit: BoxFit.cover)
+                            if (_HomeScreenState._decodeB64(coverBase64) != null)
+                              Image.memory(
+                                _HomeScreenState._decodeB64(coverBase64)!,
+                                fit: BoxFit.cover,
+                                gaplessPlayback: true,
+                              )
                             else if (data['thumbnailUrl'] != null && (data['thumbnailUrl'] as String).isNotEmpty && !(data['thumbnailUrl'] as String).contains('unsplash.com'))
                               Image.network(
                                 data['thumbnailUrl'] as String,
@@ -5134,7 +5159,7 @@ class FullScreenVideoViewerState extends State<FullScreenVideoViewer> {
             .where('videoUrl', isEqualTo: widget.videoUrl)
             .get();
         for (final d in shQ.docs) {
-          await d.reference.delete();
+          await ShortsSocialService.deleteShortVideoCompletely(d.id);
         }
       } catch (_) {}
       if (mounted) {
@@ -5171,11 +5196,12 @@ class FullScreenVideoViewerState extends State<FullScreenVideoViewer> {
           fit: StackFit.expand,
           children: [
             // 0. Arxa fonda üz qabığı
-            if (widget.coverBase64 != null && widget.coverBase64!.isNotEmpty)
+            if (_HomeScreenState._decodeB64(widget.coverBase64) != null)
               Center(
                 child: Image.memory(
-                  base64Decode(widget.coverBase64!),
+                  _HomeScreenState._decodeB64(widget.coverBase64)!,
                   fit: BoxFit.contain,
+                  gaplessPlayback: true,
                   width: double.infinity,
                   height: double.infinity,
                 ),
@@ -5493,12 +5519,14 @@ class FullScreenVideoViewerState extends State<FullScreenVideoViewer> {
   }
 }
 
-/// Shorts kartlarında müəllifin adını birbaşa 'users' sənədindən canlı dinləyən vidcet
-/// Beləliklə profil adı dəyişən kimi ana səhifədə də dərhal (0.01s) canlı yenilənir
+/// Shorts kartlarında müəllifin adını 'users' kolleksiyasından yaddaş keşi ilə oxuyan vidcet
 class _AuthorNameText extends StatelessWidget {
   final String userId;
   final String defaultName;
   final TextStyle? style;
+
+  static final Map<String, String> _nameCache = {};
+  static final Map<String, Future<String>> _inFlight = {};
 
   const _AuthorNameText({
     super.key,
@@ -5506,6 +5534,22 @@ class _AuthorNameText extends StatelessWidget {
     required this.defaultName,
     this.style,
   });
+
+  Future<String> _fetchName() {
+    return _inFlight.putIfAbsent(userId, () async {
+      try {
+        final snap = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+        final liveName = snap.data()?['fullName']?.toString().trim();
+        final resolved = (liveName != null && liveName.isNotEmpty) ? liveName : defaultName;
+        _nameCache[userId] = resolved;
+        return resolved;
+      } catch (_) {
+        return defaultName;
+      } finally {
+        _inFlight.remove(userId);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -5518,11 +5562,21 @@ class _AuthorNameText extends StatelessWidget {
       );
     }
 
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance.collection('users').doc(userId).snapshots(),
+    final cached = _nameCache[userId];
+    if (cached != null) {
+      return Text(
+        cached,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: style,
+      );
+    }
+
+    return FutureBuilder<String>(
+      future: _fetchName(),
+      initialData: defaultName,
       builder: (context, snapshot) {
-        final liveName = snapshot.data?.data()?['fullName']?.toString().trim();
-        final name = (liveName != null && liveName.isNotEmpty) ? liveName : defaultName;
+        final name = (snapshot.data != null && snapshot.data!.isNotEmpty) ? snapshot.data! : defaultName;
         return Text(
           name,
           maxLines: 1,

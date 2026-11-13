@@ -32,11 +32,16 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
   late String _activeCityFilter;
   List<String> _cities = List.from(CategoryCityService.defaultCities);
   StreamSubscription<List<String>>? _citySub;
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _artisansStream;
 
   @override
   void initState() {
     super.initState();
     _activeCityFilter = widget.selectedCity;
+    _artisansStream = FirebaseFirestore.instance
+        .collection('users')
+        .where('role', isEqualTo: 'usta')
+        .snapshots();
     _citySub = CategoryCityService.getCitiesStream().listen((cities) {
       if (mounted) setState(() => _cities = cities);
     });
@@ -58,7 +63,7 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
     if (t.contains('bütün') || t.contains('hamı')) return true;
 
     if (ustaCategory == null || ustaCategory.trim().isEmpty) {
-      return t.contains('tikinti');
+      return t.contains('bütün') || t.contains('digər');
     }
 
     final u = ustaCategory.trim().toLowerCase().replaceAll('\n', ' ');
@@ -68,7 +73,7 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
       'tikinti': ['tikinti', 'hörgü', 'suvaq', 'bünövrə', 'dam'],
       'santexnik': ['santexnik', 'boru', 'kran', 'su təchizatı'],
       'elektrik': ['elektrik', 'şit', 'naqil', 'işıqlandırma'],
-      'təmir': ['təmir', 'quraşdırma', 'usta'],
+      'təmir': ['təmir', 'quraşdırma'],
       'avtomobil': ['avtomobil', 'avto', 'motor', 'dəmirçi'],
       'mebel': ['mebel', 'quraşdırılması', 'yığılması'],
       'kondisioner': ['kondisioner', 'soyuducu', 'freon', 'kombi'],
@@ -260,12 +265,9 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
 
           // 2. USTALAR SİYAHISI (Canlı Firestore datası)
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('users')
-                .where('role', isEqualTo: 'usta')
-                .snapshots(),
+            stream: _artisansStream,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
+              if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                 return const SliverFillRemaining(
                   child: Center(child: CircularProgressIndicator()),
                 );
@@ -295,9 +297,25 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
                   final data = doc.data();
                   final name = (data['fullName'] ?? '').toString().toLowerCase();
                   final phone = (data['phone'] ?? '').toString().toLowerCase();
-                  return name.contains(_searchQuery) || phone.contains(_searchQuery);
+                  final cat = (data['category'] ?? '').toString().toLowerCase();
+                  return name.contains(_searchQuery) || phone.contains(_searchQuery) || cat.contains(_searchQuery);
                 }).toList();
               }
+
+              // Sıralama: Sərbəst olanlar (isWorking != true), sonra təsdiqli və yüksək reytinqlilər
+              matchingArtisans.sort((a, b) {
+                final da = a.data();
+                final db = b.data();
+                final bool aFree = da['isWorking'] != true;
+                final bool bFree = db['isWorking'] != true;
+                if (aFree != bFree) return aFree ? -1 : 1;
+                final bool aVer = da['isVerified'] == true;
+                final bool bVer = db['isVerified'] == true;
+                if (aVer != bVer) return aVer ? -1 : 1;
+                final double aRat = (da['rating'] is num) ? (da['rating'] as num).toDouble() : 0.0;
+                final double bRat = (db['rating'] is num) ? (db['rating'] as num).toDouble() : 0.0;
+                return bRat.compareTo(aRat);
+              });
 
               if (matchingArtisans.isEmpty) {
                 return SliverFillRemaining(

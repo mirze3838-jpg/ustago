@@ -304,6 +304,8 @@ class ShortsSocialService {
 
     final shortData = shortDoc.data();
     final isOwner = shortData?['userId'] == uid;
+    final String? videoUrl = shortData?['videoUrl']?.toString();
+    final String? ownerUid = shortData?['userId']?.toString();
     // Yalnız video sahibi və ya admin silə bilər
     if (!isOwner && currentUser?.email != 'mirze3838@gmail.com') {
       throw Exception('Yalnız öz videonuzu silə bilərsiniz');
@@ -353,5 +355,28 @@ class ShortsSocialService {
 
     // 3. Əsas video sənədini silirik
     await shortRef.delete();
+
+    // 4. Profil portfelindəki (posts) uyğun video sənədini də sinxron olaraq silirik
+    if (videoUrl != null && videoUrl.isNotEmpty && ownerUid != null && ownerUid.isNotEmpty) {
+      try {
+        final postsSnap = await _firestore
+            .collection('posts')
+            .where('userId', isEqualTo: ownerUid)
+            .get();
+        final postBatch = _firestore.batch();
+        bool hasMatches = false;
+        for (var pDoc in postsSnap.docs) {
+          if (pDoc.data()['videoUrl']?.toString() == videoUrl) {
+            postBatch.delete(pDoc.reference);
+            hasMatches = true;
+          }
+        }
+        if (hasMatches) {
+          await postBatch.commit();
+        }
+      } catch (e) {
+        debugPrint('Matching post delete warning: $e');
+      }
+    }
   }
 }

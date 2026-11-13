@@ -195,6 +195,27 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                     'comment': comment,
                     'createdAt': FieldValue.serverTimestamp(),
                   });
+
+                  // Ustanın real ortalama reytinqini və rəy sayını users kolleksiyasında yeniləyirik
+                  try {
+                    final revSnap = await FirebaseFirestore.instance
+                        .collection('reviews')
+                        .where('artisanId', isEqualTo: artisanUid)
+                        .get();
+                    if (revSnap.docs.isNotEmpty) {
+                      double sum = 0;
+                      for (var r in revSnap.docs) {
+                        final val = r.data()['rating'];
+                        if (val is num) sum += val.toDouble();
+                      }
+                      final double avg = sum / revSnap.docs.length;
+                      await FirebaseFirestore.instance.collection('users').doc(artisanUid).update({
+                        'rating': double.parse(avg.toStringAsFixed(1)),
+                        'reviewCount': revSnap.docs.length,
+                      });
+                    }
+                  } catch (_) {}
+
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
@@ -843,7 +864,14 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
               .where('userId', isEqualTo: uId)
               .snapshots(),
           builder: (context, snapshot) {
-            final allDocs = snapshot.data?.docs ?? [];
+            final allDocs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(snapshot.data?.docs ?? []);
+            allDocs.sort((a, b) {
+              final ta = a.data()['createdAt'];
+              final tb = b.data()['createdAt'];
+              final ma = ta is Timestamp ? ta.millisecondsSinceEpoch : 0;
+              final mb = tb is Timestamp ? tb.millisecondsSinceEpoch : 0;
+              return mb.compareTo(ma);
+            });
             final photoDocs = allDocs.where((d) {
               final data = d.data();
               final bool isVid = data['isVideo'] == true ||
@@ -1023,7 +1051,14 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
               .where('userId', isEqualTo: uId)
               .snapshots(),
           builder: (context, snapshot) {
-            final videoDocs = snapshot.data?.docs ?? [];
+            final videoDocs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(snapshot.data?.docs ?? []);
+            videoDocs.sort((a, b) {
+              final ta = a.data()['createdAt'];
+              final tb = b.data()['createdAt'];
+              final ma = ta is Timestamp ? ta.millisecondsSinceEpoch : 0;
+              final mb = tb is Timestamp ? tb.millisecondsSinceEpoch : 0;
+              return mb.compareTo(ma);
+            });
             final int count = videoDocs.length;
             final latestDoc = videoDocs.isNotEmpty ? videoDocs.first : null;
 
@@ -1323,7 +1358,14 @@ class _ArtisanAllPhotosScreen extends StatelessWidget {
             .where('userId', isEqualTo: userId)
             .snapshots(),
         builder: (context, snapshot) {
-          final docs = snapshot.data?.docs ?? [];
+          final docs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(snapshot.data?.docs ?? []);
+          docs.sort((a, b) {
+            final ta = a.data()['createdAt'];
+            final tb = b.data()['createdAt'];
+            final ma = ta is Timestamp ? ta.millisecondsSinceEpoch : 0;
+            final mb = tb is Timestamp ? tb.millisecondsSinceEpoch : 0;
+            return mb.compareTo(ma);
+          });
           final photoDocs = docs.where((d) {
             final data = d.data();
             final bool isVid = data['isVideo'] == true ||

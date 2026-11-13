@@ -16,6 +16,7 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
   final AuthService _authService = AuthService();
   String _selectedCategory = 'Hamısı';
   final TextEditingController _searchController = TextEditingController();
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _marketStream;
 
   final List<String> _categories = [
     'Hamısı',
@@ -96,6 +97,44 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _marketStream = FirebaseFirestore.instance
+        .collection('market_stores')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
+  Future<void> _deleteListing(String docId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Elanı sil'),
+        content: const Text('Bu elanı silmək istədiyinizdən əminsiniz?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Xeyr')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sil', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      try {
+        await FirebaseFirestore.instance.collection('market_stores').doc(docId).delete();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Elan silindi.'), backgroundColor: Colors.green),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Silmə xətası: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
   }
 
   @override
@@ -114,7 +153,8 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
   }
 
   Future<void> _openWhatsApp(String phone) async {
-    final cleanPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
+    var cleanPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
+    if (cleanPhone.startsWith('0')) cleanPhone = '994${cleanPhone.substring(1)}';
     final uri = Uri.parse('https://wa.me/$cleanPhone');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -150,10 +190,12 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
     }
 
     final storeNameController = TextEditingController();
+    final priceController = TextEditingController();
     final phoneController = TextEditingController();
     final addressController = TextEditingController();
     final descController = TextEditingController();
     String selectedCat = _categories[1];
+    String listingType = 'store'; // 'store' və ya 'product'
 
     showModalBottomSheet(
       context: context,
@@ -177,9 +219,9 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Mağaza / Elan Əlavə Et',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    Text(
+                      listingType == 'store' ? 'Yeni Mağaza Əlavə Et' : 'Məhsul / Elan Yerləşdir',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     IconButton(
                       icon: const Icon(Icons.close),
@@ -187,19 +229,59 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Satıcı kimi mağazanızı qeydiyyatdan keçirin və minlərlə ustaya çatın!',
-                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Center(child: Text('Mağaza')),
+                        selected: listingType == 'store',
+                        selectedColor: const Color(0xFF1769D2),
+                        labelStyle: TextStyle(
+                          color: listingType == 'store' ? Colors.white : Colors.black87,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        onSelected: (v) {
+                          if (v) setModalState(() => listingType = 'store');
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Center(child: Text('Məhsul / Elan')),
+                        selected: listingType == 'product',
+                        selectedColor: const Color(0xFF1769D2),
+                        labelStyle: TextStyle(
+                          color: listingType == 'product' ? Colors.white : Colors.black87,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        onSelected: (v) {
+                          if (v) setModalState(() => listingType = 'product');
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 TextField(
                   controller: storeNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Mağazanın və ya Elanın Adı *',
-                    prefixIcon: Icon(Icons.store),
+                  decoration: InputDecoration(
+                    labelText: listingType == 'store' ? 'Mağazanın Adı *' : 'Məhsulun Adı *',
+                    prefixIcon: Icon(listingType == 'store' ? Icons.store : Icons.shopping_bag_outlined),
                   ),
                 ),
+                if (listingType == 'product') ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: priceController,
+                    decoration: const InputDecoration(
+                      labelText: 'Qiymət (AZN) *',
+                      hintText: 'Məs: 45 AZN',
+                      prefixIcon: Icon(Icons.sell_outlined),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   value: selectedCat,
@@ -237,9 +319,9 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                 TextField(
                   controller: descController,
                   maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Təsvir və Satılan Mallar *',
-                    hintText: 'Satdığınız məhsullar, çatdırılma və qiymətlər haqqında qısa məlumat yazın...',
+                  decoration: InputDecoration(
+                    labelText: listingType == 'store' ? 'Təsvir və Satılan Mallar *' : 'Məhsul haqqında məlumat *',
+                    hintText: 'Məhsullar, çatdırılma və şərtlər haqqında qısa məlumat yazın...',
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -254,7 +336,8 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                     onPressed: () async {
                       if (storeNameController.text.trim().isEmpty ||
                           phoneController.text.trim().isEmpty ||
-                          descController.text.trim().isEmpty) {
+                          descController.text.trim().isEmpty ||
+                          (listingType == 'product' && priceController.text.trim().isEmpty)) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Zəhmət olmasa vacib xanaları doldurun!')),
                         );
@@ -264,11 +347,14 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                       try {
                         await FirebaseFirestore.instance.collection('market_stores').add({
                           'title': storeNameController.text.trim(),
+                          'listingType': listingType,
+                          'price': listingType == 'product' ? priceController.text.trim() : '',
                           'category': selectedCat,
                           'phone': phoneController.text.trim(),
                           'address': addressController.text.trim(),
                           'description': descController.text.trim(),
                           'userId': user.uid,
+                          'ownerId': user.uid,
                           'userEmail': user.email,
                           'rating': 5.0,
                           'isPromoted': false,
@@ -278,8 +364,12 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                         if (mounted) {
                           Navigator.pop(ctx);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Təbriklər! Mağazanız uğurla əlavə edildi.'),
+                            SnackBar(
+                              content: Text(
+                                listingType == 'store'
+                                    ? 'Təbriklər! Mağazanız uğurla əlavə edildi.'
+                                    : 'Təbriklər! Elanınız uğurla dərc edildi.',
+                              ),
                               backgroundColor: Colors.green,
                             ),
                           );
@@ -390,7 +480,40 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
             ),
           ),
 
-          // 2. Kateqoriya Seçimi (Horizontal Scroll)
+          // 2. Axtarış Qutusu
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  icon: const Icon(Icons.search, color: Color(0xFF64748B), size: 20),
+                  hintText: 'Mağaza, məhsul və ya ünvan axtar...',
+                  hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18, color: Colors.grey),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {});
+                          },
+                        )
+                      : null,
+                ),
+              ),
+            ),
+          ),
+
+          // 3. Kateqoriya Seçimi (Horizontal Scroll)
           SizedBox(
             height: 38,
             child: ListView.separated(
@@ -440,16 +563,16 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
   // 1-ci Tab: Mağazalar və Satıcılar Siyahısı
   Widget _buildStoresList() {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('market_stores')
-          .orderBy('createdAt', descending: true)
-          .snapshots(),
+      stream: _marketStream,
       builder: (context, snapshot) {
         List<Map<String, dynamic>> allStores = List.from(_sampleStores);
 
         if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-          final firestoreStores = snapshot.data!.docs.map((d) {
-            final data = d.data();
+          final firestoreStores = snapshot.data!.docs.where((d) {
+            final lType = d.data()['listingType']?.toString() ?? 'store';
+            return lType == 'store';
+          }).map((d) {
+            final data = Map<String, dynamic>.from(d.data());
             data['id'] = d.id;
             data['icon'] = Icons.store_mall_directory_rounded;
             data['color'] = const Color(0xFF1769D2);
@@ -458,14 +581,21 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
           allStores = [...firestoreStores, ..._sampleStores];
         }
 
-        // Kateqoriya üzrə filtrasiya
-        final filtered = _selectedCategory == 'Hamısı'
-            ? allStores
-            : allStores.where((s) => s['category'] == _selectedCategory).toList();
+        // Kateqoriya və axtarış üzrə filtrasiya
+        final q = _searchController.text.trim().toLowerCase();
+        final filtered = allStores.where((s) {
+          final catOk = _selectedCategory == 'Hamısı' || s['category'] == _selectedCategory;
+          if (!catOk) return false;
+          if (q.isEmpty) return true;
+          final title = (s['title'] ?? '').toString().toLowerCase();
+          final desc = (s['description'] ?? '').toString().toLowerCase();
+          final addr = (s['address'] ?? '').toString().toLowerCase();
+          return title.contains(q) || desc.contains(q) || addr.contains(q);
+        }).toList();
 
         if (filtered.isEmpty) {
           return const Center(
-            child: Text('Bu kateqoriyada hələlik mağaza yoxdur.', style: TextStyle(color: Colors.grey)),
+            child: Text('Axtarışa və ya kateqoriyaya uyğun mağaza yoxdur.', style: TextStyle(color: Colors.grey)),
           );
         }
 
@@ -483,6 +613,13 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
 
   Widget _buildStoreCard(Map<String, dynamic> store) {
     final isPromoted = store['isPromoted'] == true;
+    final String? docId = store['id']?.toString();
+    final currentUser = _authService.currentUser;
+    final bool canDelete = docId != null &&
+        currentUser != null &&
+        (store['ownerId'] == currentUser.uid ||
+            store['userId'] == currentUser.uid ||
+            currentUser.email == 'mirze3838@gmail.com');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -546,6 +683,14 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                                 'VIP Reklam',
                                 style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold),
                               ),
+                            ),
+                          if (canDelete)
+                            IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                              tooltip: 'Elanı sil',
+                              onPressed: () => _deleteListing(docId),
                             ),
                         ],
                       ),
@@ -623,7 +768,7 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
     );
   }
 
-  // 2-ci Tab: Məhsullar və Fərdi Elanlar
+  // 2-ci Tab: Məhsullar və Fərdi Elanlar (Canlı Firestore + Nümunə Məhsullar)
   Widget _buildProductsList() {
     final sampleProducts = [
       {
@@ -660,41 +805,93 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
       },
     ];
 
-    final filtered = _selectedCategory == 'Hamısı'
-        ? sampleProducts
-        : sampleProducts.where((p) => p['category'] == _selectedCategory).toList();
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _marketStream,
+      builder: (context, snapshot) {
+        final List<Map<String, dynamic>> firestoreProducts = [];
+        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+          for (var d in snapshot.data!.docs) {
+            final data = d.data();
+            if (data['listingType']?.toString() == 'product') {
+              firestoreProducts.add({
+                'id': d.id,
+                'ownerId': data['ownerId'] ?? data['userId'],
+                'title': data['title'] ?? '',
+                'price': (data['price']?.toString().isNotEmpty == true) ? data['price'].toString() : 'Razılaşma',
+                'store': data['address']?.toString().isNotEmpty == true ? data['address'].toString() : 'Elan',
+                'phone': data['phone'] ?? '',
+                'category': data['category'] ?? 'Tikinti Materialları',
+                'description': data['description'] ?? '',
+                'icon': Icons.shopping_bag_rounded,
+              });
+            }
+          }
+        }
 
-    return ListView.builder(
-      padding: const EdgeInsets.only(left: 12, right: 12, bottom: 80, top: 4),
-      itemCount: filtered.length,
-      itemBuilder: (context, index) {
-        final prod = filtered[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 10),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: const Color(0xFF1769D2).withOpacity(0.1),
-              child: Icon(prod['icon'] as IconData? ?? Icons.inventory_2, color: const Color(0xFF1769D2)),
-            ),
-            title: Text(prod['title'] as String, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            subtitle: Text('${prod['store']} • ${prod['category']}'),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  prod['price'] as String,
-                  style: const TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold, fontSize: 14),
+        final allProducts = [...firestoreProducts, ...sampleProducts];
+        final q = _searchController.text.trim().toLowerCase();
+        final filtered = allProducts.where((p) {
+          final catOk = _selectedCategory == 'Hamısı' || p['category'] == _selectedCategory;
+          if (!catOk) return false;
+          if (q.isEmpty) return true;
+          final title = (p['title'] ?? '').toString().toLowerCase();
+          final store = (p['store'] ?? '').toString().toLowerCase();
+          final desc = (p['description'] ?? '').toString().toLowerCase();
+          return title.contains(q) || store.contains(q) || desc.contains(q);
+        }).toList();
+
+        if (filtered.isEmpty) {
+          return const Center(
+            child: Text('Axtarışa və ya kateqoriyaya uyğun məhsul yoxdur.', style: TextStyle(color: Colors.grey)),
+          );
+        }
+
+        final currentUser = _authService.currentUser;
+
+        return ListView.builder(
+          padding: const EdgeInsets.only(left: 12, right: 12, bottom: 80, top: 4),
+          itemCount: filtered.length,
+          itemBuilder: (context, index) {
+            final prod = filtered[index];
+            final String? docId = prod['id']?.toString();
+            final bool canDelete = docId != null &&
+                currentUser != null &&
+                (prod['ownerId'] == currentUser.uid || currentUser.email == 'mirze3838@gmail.com');
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF1769D2).withOpacity(0.1),
+                  child: Icon(prod['icon'] as IconData? ?? Icons.inventory_2, color: const Color(0xFF1769D2)),
                 ),
-                const SizedBox(width: 4),
-                IconButton(
-                  icon: const Icon(Icons.phone, color: Color(0xFF2E7D32), size: 20),
-                  tooltip: 'Zəng et',
-                  onPressed: () => _makeCall(prod['phone'] as String),
+                title: Text(prod['title'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: Text('${prod['store']} • ${prod['category']}'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      prod['price'].toString(),
+                      style: const TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.phone, color: Color(0xFF2E7D32), size: 20),
+                      tooltip: 'Zəng et',
+                      onPressed: () => _makeCall(prod['phone'].toString()),
+                    ),
+                    if (canDelete)
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                        tooltip: 'Elanı sil',
+                        onPressed: () => _deleteListing(docId),
+                      ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );

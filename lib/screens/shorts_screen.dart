@@ -31,12 +31,37 @@ class _ShortsScreenState extends State<ShortsScreen> {
   final Map<int, Future<void>> _initializing = {};
   bool _muted = false;
   List<Map<String, dynamic>> _latestItems = []; // Qalereya sonrası reaktivasiya üçün
+  late Stream<QuerySnapshot<Map<String, dynamic>>> _shortsStream;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
     _pageController = PageController(initialPage: widget.initialIndex);
+    _shortsStream = _createShortsStream();
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _createShortsStream() {
+    if (widget.targetUserId != null && widget.targetUserId!.isNotEmpty) {
+      return FirebaseFirestore.instance
+          .collection('shorts')
+          .where('userId', isEqualTo: widget.targetUserId)
+          .limit(50)
+          .snapshots();
+    }
+    return FirebaseFirestore.instance
+        .collection('shorts')
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .snapshots();
+  }
+
+  @override
+  void didUpdateWidget(covariant ShortsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.targetUserId != widget.targetUserId) {
+      _shortsStream = _createShortsStream();
+    }
   }
 
   Future<void> _prepareVideo(int index, List<Map<String, dynamic>> items) async {
@@ -785,17 +810,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
       body: Stack(
         children: [
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: (widget.targetUserId != null && widget.targetUserId!.isNotEmpty)
-                ? FirebaseFirestore.instance
-                    .collection('shorts')
-                    .where('userId', isEqualTo: widget.targetUserId)
-                    .limit(50)
-                    .snapshots()
-                : FirebaseFirestore.instance
-                    .collection('shorts')
-                    .orderBy('createdAt', descending: true)
-                    .limit(50)
-                    .snapshots(),
+            stream: _shortsStream,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                 return const Center(
@@ -803,7 +818,16 @@ class _ShortsScreenState extends State<ShortsScreen> {
                 );
               }
 
-              final docs = snapshot.data?.docs ?? [];
+              final docs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(snapshot.data?.docs ?? []);
+              if (widget.targetUserId != null && widget.targetUserId!.isNotEmpty) {
+                docs.sort((a, b) {
+                  final ta = a.data()['createdAt'];
+                  final tb = b.data()['createdAt'];
+                  final ma = ta is Timestamp ? ta.millisecondsSinceEpoch : 0;
+                  final mb = tb is Timestamp ? tb.millisecondsSinceEpoch : 0;
+                  return mb.compareTo(ma);
+                });
+              }
 
               final List<Map<String, dynamic>> items = [];
               if (docs.isNotEmpty) {
