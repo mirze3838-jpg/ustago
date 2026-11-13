@@ -88,7 +88,17 @@ jobs:
 
       - name: Build Web App (Fast Deploy to GitHub Pages)
         if: github.ref == 'refs/heads/main'
-        run: flutter build web --release --base-href "/ustago/" --no-tree-shake-icons
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter build web --release --base-href "/ustago/" --no-tree-shake-icons -v 2>&1 | tee web_build.log
+
+      - name: Upload Web Build Log on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build-log
+          path: web_build.log
 
       - name: Deploy Web App to GitHub Pages
         if: github.ref == 'refs/heads/main'
