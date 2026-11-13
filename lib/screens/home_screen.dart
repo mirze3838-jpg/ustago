@@ -24,7 +24,8 @@ import 'category_artisans_screen.dart';
 import '../widgets/add_post_bottom_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final int initialTabIndex;
+  const HomeScreen({super.key, this.initialTabIndex = 0});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -32,7 +33,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final AuthService _authService = AuthService();
-  int _currentIndex = 0;
+  late int _currentIndex;
   String _selectedCity = 'Bakı';
   String? _currentUserRole;
   final TextEditingController _searchController = TextEditingController();
@@ -50,6 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _currentIndex = widget.initialTabIndex;
     _loadUserRole();
     _initCategoryAndCityStreams();
   }

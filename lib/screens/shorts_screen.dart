@@ -13,11 +13,13 @@ import '../services/video_upload_service.dart';
 import '../services/category_city_service.dart';
 import '../services/shorts_social_service.dart';
 import 'artisan_detail_screen.dart';
+import 'home_screen.dart';
 
 class ShortsScreen extends StatefulWidget {
   final int initialIndex;
   final ValueChanged<int>? onNavigateTab;
-  const ShortsScreen({super.key, this.initialIndex = 0, this.onNavigateTab});
+  final String? targetUserId;
+  const ShortsScreen({super.key, this.initialIndex = 0, this.onNavigateTab, this.targetUserId});
 
   @override
   State<ShortsScreen> createState() => _ShortsScreenState();
@@ -779,10 +781,15 @@ class _ShortsScreenState extends State<ShortsScreen> {
       body: Stack(
         children: [
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('shorts')
-                .orderBy('createdAt', descending: true)
-                .snapshots(),
+            stream: (widget.targetUserId != null && widget.targetUserId!.isNotEmpty)
+                ? FirebaseFirestore.instance
+                    .collection('shorts')
+                    .where('userId', isEqualTo: widget.targetUserId)
+                    .snapshots()
+                : FirebaseFirestore.instance
+                    .collection('shorts')
+                    .orderBy('createdAt', descending: true)
+                    .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                 return const Center(
@@ -812,8 +819,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
                   });
                 }
               }
-              // Yalnız Firestore cavab veribsə və heç bir video yoxdursa nümunə videoları göstəririk
-              if (items.isEmpty && snapshot.connectionState != ConnectionState.waiting) {
+              // Yalnız ümumi lentdə nümunə videoları göstəririk (fərdi usta profilində sample göstərilmir)
+              if (items.isEmpty && snapshot.connectionState != ConnectionState.waiting && widget.targetUserId == null) {
                 items.addAll(_sampleShorts);
               }
 
@@ -1141,6 +1148,43 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
 
   Future<void> _openArtisanProfile() async {
     final uid = widget.data['userId']?.toString() ?? '';
+    final curUser = FirebaseAuth.instance.currentUser;
+
+    // Əgər videonun sahibi hal-hazırda daxil olmuş istifadəçinin özüdürsə,
+    // başqa istifadəçi kimi yox, birbaşa tətbiqin əsas Öz Profilinə yönləndiririk!
+    if (curUser != null && uid.isNotEmpty && curUser.uid == uid) {
+      if (mounted) {
+        final wasPlaying = widget.controller?.value.isPlaying ?? false;
+        if (wasPlaying) {
+          widget.controller?.pause();
+          setState(() => _isPlaying = false);
+        }
+
+        // Əgər tab idarəedicisi varsa tabı 4 (Profil) edirik, yoxsa HomeScreen(initialTabIndex: 4) açırıq
+        if (widget.onNavigateTab != null) {
+          widget.onNavigateTab!(4);
+          return;
+        }
+
+        if (Navigator.canPop(context)) {
+          // Əgər HomeScreen üzərində açılmışıqsa, pop edib tabı 4 edirik
+          Navigator.pop(context, 4);
+          return;
+        }
+
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreen(initialTabIndex: 4)),
+        );
+
+        if (mounted && widget.isCurrent && widget.controller != null && widget.controller!.value.isInitialized) {
+          widget.controller?.play();
+          setState(() => _isPlaying = true);
+        }
+        return;
+      }
+    }
+
     final curName = _authorName ?? widget.data['artisanName'] ?? 'Usta';
     final curTrade = _authorTrade ?? widget.data['trade'] ?? 'Usta';
     final curPhone = _authorPhone ?? widget.data['phone'] ?? '';

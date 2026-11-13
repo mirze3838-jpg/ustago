@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 import 'home_screen.dart';
+import 'shorts_screen.dart';
 
 class ArtisanDetailScreen extends StatefulWidget {
   final Map<String, dynamic> artisanData;
@@ -539,123 +540,10 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
           ),
           const SizedBox(height: 20),
 
-          // 3. Ustanın Gördüyü İşlər və Portfeli (Firestore-dan bu ustanın paylaşımları)
+          // 3. Ustanın Şəkillər və Videolar Bölməsi (Ayrı-Ayrı, Yalnız ən son 1 ədəd kart, klikləndikdə tam bölmə açılır)
           if (userId != null) ...[
-            Row(
-              children: const [
-                Icon(Icons.photo_library_rounded, color: Color(0xFF1769D2), size: 20),
-                SizedBox(width: 8),
-                Text('Ustanın Gördüyü İşlər & Portfeli', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('posts')
-                  .where('userId', isEqualTo: userId.toString())
-                  .snapshots(),
-              builder: (context, snapshot) {
-                final docs = snapshot.data?.docs ?? [];
-                if (docs.isEmpty) {
-                  return Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'Usta hələ ki əlavə iş şəkli yükləməyib.',
-                        style: TextStyle(color: Colors.grey, fontSize: 13),
-                      ),
-                    ),
-                  );
-                }
-
-                return GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                    childAspectRatio: 0.9,
-                  ),
-                  itemCount: docs.length,
-                  itemBuilder: (context, index) {
-                    final post = docs[index].data();
-                    final img = post['imageBase64'] as String?;
-                    final isVid = post['isVideo'] == true;
-                    final title = post['title'] ?? 'Görülən iş';
-
-                    return InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () {
-                        final videoUrl = (post['videoUrl'] ?? '').toString().trim();
-                        if (isVid && videoUrl.isNotEmpty) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => FullScreenVideoViewer(
-                                videoUrl: videoUrl,
-                                title: title,
-                                category: post['category'] ?? 'Usta İşi',
-                                postId: docs[index].id,
-                                coverBase64: img,
-                                isOwner: false,
-                              ),
-                            ),
-                          );
-                        } else if (img != null && img.isNotEmpty) {
-                          _showFullScreenImage(context, img, title);
-                        }
-                      },
-                      child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                              child: (img != null && img.isNotEmpty)
-                                  ? Image.memory(base64Decode(img), width: double.infinity, fit: BoxFit.cover)
-                                  : Container(
-                                      color: Colors.black87,
-                                      child: Center(
-                                        child: Icon(
-                                          isVid ? Icons.play_circle_fill : Icons.image,
-                                          color: isVid ? Colors.red : Colors.white70,
-                                          size: 36,
-                                        ),
-                                      ),
-                                    ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Text(
-                              title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ],
+            _buildSeparateMediaSection(userId.toString(), name, category),
+          ],
 
         const SizedBox(height: 20),
 
@@ -917,6 +805,518 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Şəkillər və Videolar bölməsini tam ayıran, hərəsindən yalnız ən son 1 ədədini göstərən
+  /// və üzərinə basıldıqda bütün müvafiq siyahını açan metod
+  Widget _buildSeparateMediaSection(String uId, String artisanName, String trade) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. ŞƏKİLLƏR BÖLMƏSİ (Portfolio) — Yalnız son 1 şəkil
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('posts')
+              .where('userId', isEqualTo: uId)
+              .snapshots(),
+          builder: (context, snapshot) {
+            final allDocs = snapshot.data?.docs ?? [];
+            final photoDocs = allDocs.where((d) {
+              final data = d.data();
+              final bool isVid = data['isVideo'] == true ||
+                  (data['videoUrl'] != null && data['videoUrl'].toString().trim().isNotEmpty);
+              if (isVid) return false;
+              final hasImg = (data['imageBase64'] != null && data['imageBase64'].toString().isNotEmpty) ||
+                  (data['imagesBase64'] != null && (data['imagesBase64'] as List).isNotEmpty) ||
+                  (data['thumbnailUrl'] != null && data['thumbnailUrl'].toString().isNotEmpty);
+              return hasImg;
+            }).toList();
+
+            final int count = photoDocs.length;
+            final latestDoc = photoDocs.isNotEmpty ? photoDocs.first : null;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 6, offset: const Offset(0, 2)),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.photo_library_rounded, color: Color(0xFF1769D2), size: 18),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Şəkillər (Portfolio)',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                          ),
+                        ],
+                      ),
+                      if (count > 0)
+                        InkWell(
+                          onTap: () => _openAllPhotosScreen(context, uId, artisanName),
+                          child: Row(
+                            children: [
+                              Text(
+                                'Hamısı ($count)',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
+                              ),
+                              const Icon(Icons.chevron_right, size: 18, color: Color(0xFF1769D2)),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (latestDoc == null)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Center(
+                        child: Text(
+                          'Hələlik iş şəkli yüklənməyib',
+                          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                        ),
+                      ),
+                    )
+                  else
+                    InkWell(
+                      onTap: () => _openAllPhotosScreen(context, uId, artisanName),
+                      borderRadius: BorderRadius.circular(12),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Stack(
+                          children: [
+                            AspectRatio(
+                              aspectRatio: 16 / 9,
+                              child: Builder(
+                                builder: (_) {
+                                  final data = latestDoc.data();
+                                  String? base64Img = (data['imageBase64'] ?? data['thumbnailBase64']) as String?;
+                                  if ((base64Img == null || base64Img.isEmpty) &&
+                                      data['imagesBase64'] is List &&
+                                      (data['imagesBase64'] as List).isNotEmpty) {
+                                    base64Img = (data['imagesBase64'] as List).first.toString();
+                                  }
+                                  if (base64Img != null && base64Img.isNotEmpty) {
+                                    try {
+                                      return Image.memory(base64Decode(base64Img), fit: BoxFit.cover);
+                                    } catch (_) {}
+                                  }
+                                  final thumbUrl = data['thumbnailUrl']?.toString();
+                                  if (thumbUrl != null && thumbUrl.isNotEmpty && !thumbUrl.contains('unsplash.com')) {
+                                    return Image.network(thumbUrl, fit: BoxFit.cover);
+                                  }
+                                  return Container(
+                                    color: const Color(0xFFF1F5F9),
+                                    child: const Center(
+                                      child: Icon(Icons.image_outlined, size: 36, color: Color(0xFF94A3B8)),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            Positioned(
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        latestDoc.data()['title'] ?? 'Son Görülən İş',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF1769D2),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: const [
+                                          Icon(Icons.collections_rounded, color: Colors.white, size: 12),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'Şəkilləri Aç',
+                                            style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+
+        // 2. VİDEOLAR BÖLMƏSİ (Shorts) — Yalnız son 1 video
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('shorts')
+              .where('userId', isEqualTo: uId)
+              .snapshots(),
+          builder: (context, snapshot) {
+            final videoDocs = snapshot.data?.docs ?? [];
+            final int count = videoDocs.length;
+            final latestDoc = videoDocs.isNotEmpty ? videoDocs.first : null;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 20),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 6, offset: const Offset(0, 2)),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF2F2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.video_library_rounded, color: Color(0xFFDC2626), size: 18),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Videolar (Shorts)',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                          ),
+                        ],
+                      ),
+                      if (count > 0)
+                        InkWell(
+                          onTap: () => _openAllVideosScreen(context, uId, artisanName),
+                          child: Row(
+                            children: [
+                              Text(
+                                'Hamısı ($count)',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
+                              ),
+                              const Icon(Icons.chevron_right, size: 18, color: Color(0xFFDC2626)),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (latestDoc == null)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Center(
+                        child: Text(
+                          'Hələlik video yüklənməyib',
+                          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                        ),
+                      ),
+                    )
+                  else
+                    InkWell(
+                      onTap: () => _openAllVideosScreen(context, uId, artisanName),
+                      borderRadius: BorderRadius.circular(12),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Stack(
+                          children: [
+                            AspectRatio(
+                              aspectRatio: 16 / 9,
+                              child: Builder(
+                                builder: (_) {
+                                  final data = latestDoc.data();
+                                  final coverBase64 = data['thumbnailBase64']?.toString();
+                                  if (coverBase64 != null && coverBase64.isNotEmpty) {
+                                    try {
+                                      return Image.memory(base64Decode(coverBase64), fit: BoxFit.cover);
+                                    } catch (_) {}
+                                  }
+                                  return Container(
+                                    color: const Color(0xFF0F172A),
+                                    child: const Center(
+                                      child: Icon(Icons.play_circle_fill_rounded, color: Colors.white54, size: 48),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            Positioned.fill(
+                              child: Center(
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.55),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 36),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        latestDoc.data()['title'] ?? 'Son Video',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFDC2626),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: const [
+                                          Icon(Icons.play_circle_outline, color: Colors.white, size: 12),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'Videoları Aç',
+                                            style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  /// Ustanın Bütün Şəkillər Bölməsini (Portfolio Siyahısını) açan xüsusi səhifə
+  void _openAllPhotosScreen(BuildContext context, String uId, String artisanName) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _ArtisanAllPhotosScreen(userId: uId, artisanName: artisanName),
+      ),
+    );
+  }
+
+  /// Ustanın Bütün Videolar Bölməsini (Shorts lentini) açan xüsusi səhifə
+  void _openAllVideosScreen(BuildContext context, String uId, String artisanName) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ShortsScreen(targetUserId: uId),
+      ),
+    );
+  }
+}
+
+/// Ustanın bütün fotoşəkillərini göstərən təmiz qalereya səhifəsi
+class _ArtisanAllPhotosScreen extends StatelessWidget {
+  final String userId;
+  final String artisanName;
+
+  const _ArtisanAllPhotosScreen({required this.userId, required this.artisanName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('$artisanName - Şəkillər', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF0F172A),
+        elevation: 0.5,
+      ),
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('posts')
+            .where('userId', isEqualTo: userId)
+            .snapshots(),
+        builder: (context, snapshot) {
+          final docs = snapshot.data?.docs ?? [];
+          final photoDocs = docs.where((d) {
+            final data = d.data();
+            final bool isVid = data['isVideo'] == true ||
+                (data['videoUrl'] != null && data['videoUrl'].toString().trim().isNotEmpty);
+            if (isVid) return false;
+            final hasImg = (data['imageBase64'] != null && data['imageBase64'].toString().isNotEmpty) ||
+                (data['imagesBase64'] != null && (data['imagesBase64'] as List).isNotEmpty) ||
+                (data['thumbnailUrl'] != null && data['thumbnailUrl'].toString().isNotEmpty);
+            return hasImg;
+          }).toList();
+
+          if (photoDocs.isEmpty) {
+            return const Center(
+              child: Text('Heç bir şəkil tapılmadı', style: TextStyle(color: Color(0xFF94A3B8))),
+            );
+          }
+
+          return GridView.builder(
+            padding: const EdgeInsets.all(12),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              childAspectRatio: 1.0,
+            ),
+            itemCount: photoDocs.length,
+            itemBuilder: (context, index) {
+              final doc = photoDocs[index];
+              final data = doc.data();
+              String? base64Img = (data['imageBase64'] ?? data['thumbnailBase64']) as String?;
+              if ((base64Img == null || base64Img.isEmpty) &&
+                  data['imagesBase64'] is List &&
+                  (data['imagesBase64'] as List).isNotEmpty) {
+                base64Img = (data['imagesBase64'] as List).first.toString();
+              }
+
+              return InkWell(
+                onTap: () {
+                  if (base64Img != null && base64Img.isNotEmpty) {
+                    showDialog(
+                      context: context,
+                      useSafeArea: false,
+                      builder: (ctx) => Scaffold(
+                        backgroundColor: Colors.black,
+                        body: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Center(
+                              child: InteractiveViewer(
+                                minScale: 0.8,
+                                maxScale: 4.0,
+                                child: Image.memory(base64Decode(base64Img!), fit: BoxFit.contain),
+                              ),
+                            ),
+                            SafeArea(
+                              child: Align(
+                                alignment: Alignment.topLeft,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8),
+                                  child: CircleAvatar(
+                                    backgroundColor: Colors.black54,
+                                    child: IconButton(
+                                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                                      onPressed: () => Navigator.pop(ctx),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    color: const Color(0xFFF1F5F9),
+                    child: Builder(
+                      builder: (_) {
+                        if (base64Img != null && base64Img.isNotEmpty) {
+                          try {
+                            return Image.memory(base64Decode(base64Img), fit: BoxFit.cover);
+                          } catch (_) {}
+                        }
+                        final thumbUrl = data['thumbnailUrl']?.toString();
+                        if (thumbUrl != null && thumbUrl.isNotEmpty && !thumbUrl.contains('unsplash.com')) {
+                          return Image.network(thumbUrl, fit: BoxFit.cover);
+                        }
+                        return const Center(
+                          child: Icon(Icons.image_outlined, color: Color(0xFF94A3B8)),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
