@@ -13,7 +13,7 @@ import '../services/video_upload_service.dart';
 import '../services/category_city_service.dart';
 import '../services/shorts_social_service.dart';
 import 'artisan_detail_screen.dart';
-import 'home_screen.dart';
+
 
 class ShortsScreen extends StatefulWidget {
   final int initialIndex;
@@ -1166,21 +1166,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
           return;
         }
 
-        if (Navigator.canPop(context)) {
-          // Əgər HomeScreen üzərində açılmışıqsa, pop edib tabı 4 edirik
-          Navigator.pop(context, 4);
-          return;
-        }
-
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const HomeScreen(initialTabIndex: 4)),
-        );
-
-        if (mounted && widget.isCurrent && widget.controller != null && widget.controller!.value.isInitialized) {
-          widget.controller?.play();
-          setState(() => _isPlaying = true);
-        }
+        // Pop back to HomeScreen (which handles tab switch via returned value or popUntil)
+        Navigator.popUntil(context, (route) => route.isFirst);
         return;
       }
     }
