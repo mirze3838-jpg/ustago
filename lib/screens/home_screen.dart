@@ -267,7 +267,17 @@ class _HomeScreenState extends State<HomeScreen> {
       case 0:
         return _buildHomeContent();
       case 1:
-        return const ShortsScreen();
+        return ShortsScreen(
+          onNavigateTab: (idx) => setState(() => _currentIndex = idx),
+          onOpenArtisanProfile: (artisanData) async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ArtisanDetailScreen(artisanData: artisanData),
+              ),
+            );
+          },
+        );
       case 2:
         return const MarketScreen();
       case 3:

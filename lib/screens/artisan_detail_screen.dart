@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
-import 'home_screen.dart';
 import 'shorts_screen.dart';
 
 class ArtisanDetailScreen extends StatefulWidget {

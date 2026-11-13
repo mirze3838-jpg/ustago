@@ -12,14 +12,13 @@ import 'package:http/http.dart' as http;
 import '../services/video_upload_service.dart';
 import '../services/category_city_service.dart';
 import '../services/shorts_social_service.dart';
-import 'artisan_detail_screen.dart';
-
 
 class ShortsScreen extends StatefulWidget {
   final int initialIndex;
   final ValueChanged<int>? onNavigateTab;
   final String? targetUserId;
-  const ShortsScreen({super.key, this.initialIndex = 0, this.onNavigateTab, this.targetUserId});
+  final Future<void> Function(Map<String, dynamic> artisanData)? onOpenArtisanProfile;
+  const ShortsScreen({super.key, this.initialIndex = 0, this.onNavigateTab, this.targetUserId, this.onOpenArtisanProfile});
 
   @override
   State<ShortsScreen> createState() => _ShortsScreenState();
@@ -854,6 +853,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
                     muted: _muted,
                     onToggleMute: _toggleMute,
                     bottomInset: bottomNavHeight,
+                    onNavigateTab: widget.onNavigateTab,
+                    onOpenArtisanProfile: widget.onOpenArtisanProfile,
                   );
                 },
               );
@@ -987,6 +988,8 @@ class _ShortVideoItem extends StatefulWidget {
   final VoidCallback? onToggleMute;
   final VoidCallback? onRetry;
   final double bottomInset;
+  final ValueChanged<int>? onNavigateTab;
+  final Future<void> Function(Map<String, dynamic> artisanData)? onOpenArtisanProfile;
 
   const _ShortVideoItem({
     super.key,
@@ -997,6 +1000,8 @@ class _ShortVideoItem extends StatefulWidget {
     this.onToggleMute,
     this.onRetry,
     this.bottomInset = 0.0,
+    this.onNavigateTab,
+    this.onOpenArtisanProfile,
   });
 
   @override
@@ -1207,12 +1212,9 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
         setState(() => _isPlaying = false);
       }
 
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ArtisanDetailScreen(artisanData: artisanMap),
-        ),
-      );
+      if (widget.onOpenArtisanProfile != null) {
+        await widget.onOpenArtisanProfile!(artisanMap);
+      }
 
       // Profil səhifəsindən geri qayıdanda videonu yenidən davam etdiririk
       if (mounted && widget.isCurrent && widget.controller != null && widget.controller!.value.isInitialized) {
