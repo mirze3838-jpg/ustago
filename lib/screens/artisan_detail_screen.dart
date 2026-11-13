@@ -540,7 +540,7 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
           ),
           const SizedBox(height: 20),
 
-          // 3. Ustanın Şəkillər və Videolar Bölməsi (Ayrı-Ayrı, Yalnız ən son 1 ədəd kart, klikləndikdə tam bölmə açılır)
+          // 3. Ustanın Şəkillər və Videolar Bölməsi (Ayrı-ayrı, Yalnız ən son 1 ədəd kart, klikləndikdə tam bölmə açılır)
           if (userId != null) ...[
             _buildSeparateMediaSection(userId.toString(), name, category),
           ],
