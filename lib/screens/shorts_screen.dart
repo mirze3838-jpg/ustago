@@ -210,15 +210,20 @@ class _ShortsScreenState extends State<ShortsScreen> {
 
   /// Şəkili Firestore 1MB limitinə uyğun sıxışdırır (maks ~700KB)
   Future<Uint8List> _compressCoverImage(Uint8List bytes) async {
-    if (bytes.length <= 700000) return bytes;
+    // Thumbnail çox kiçik saxlanılmalıdır (max 150px genişlik, JPEG kimi)
+    // ki sürətli yüklənsin
     try {
-      final codec = await ui.instantiateImageCodec(bytes, targetWidth: 600);
+      final codec = await ui.instantiateImageCodec(bytes, targetWidth: 150);
       final frame = await codec.getNextFrame();
       final img = frame.image;
+      // RGBA raw bytes → PNG (flutter web-də rawRgba, digərlərində png)
       final bd = await img.toByteData(format: ui.ImageByteFormat.png);
       img.dispose();
-      if (bd != null && bd.lengthInBytes < bytes.length) {
-        return bd.buffer.asUint8List();
+      if (bd != null) {
+        // PNG artıq kiçikdir, istifadə edirik
+        final compressed = bd.buffer.asUint8List();
+        // Yalnız kiçilib-kiçilmədiyini yoxlayırıq
+        return compressed.length < bytes.length ? compressed : bytes;
       }
     } catch (e) {
       debugPrint('Cover compress error: $e');
@@ -1884,26 +1889,64 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     final String? thumbnailUrl = data['thumbnailUrl'];
     final String trade = (data['trade'] ?? '').toString();
 
-    // Video tam açılana qədər zərif tünd fon (köhnə stok şəkillər heç vaxt görünmür)
+    final tr = trade.toLowerCase();
+    List<Color> gColors = const [Color(0xFF2563EB), Color(0xFF1D4ED8)];
+    IconData trIcon = Icons.handyman_rounded;
+    if (tr.contains('santexnik') || tr.contains('su')) {
+      gColors = const [Color(0xFF0284C7), Color(0xFF0369A1)];
+      trIcon = Icons.water_drop_rounded;
+    } else if (tr.contains('elektrik') || tr.contains('işıq')) {
+      gColors = const [Color(0xFFD97706), Color(0xFFB45309)];
+      trIcon = Icons.bolt_rounded;
+    } else if (tr.contains('tikinti') || tr.contains('hörgü')) {
+      gColors = const [Color(0xFFEA580C), Color(0xFFC2410C)];
+      trIcon = Icons.foundation_rounded;
+    } else if (tr.contains('mebel')) {
+      gColors = const [Color(0xFF92400E), Color(0xFF78350F)];
+      trIcon = Icons.chair_rounded;
+    }
+
+    // Video tam açılana qədər parlaq və estetik fon
     final fallbackWidget = Container(
       width: double.infinity,
       height: double.infinity,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
+          colors: gColors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
       ),
-      child: const Center(
-        child: SizedBox(
-          width: 32,
-          height: 32,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.white38),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.22),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white.withOpacity(0.4), width: 1.5),
+                  ),
+                  child: Icon(trIcon, color: Colors.white, size: 30),
+                ),
+                const SizedBox(height: 12),
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
 

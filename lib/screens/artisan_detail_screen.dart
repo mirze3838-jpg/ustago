@@ -1089,10 +1089,81 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                                       return Image.memory(base64Decode(coverBase64), fit: BoxFit.cover);
                                     } catch (_) {}
                                   }
+                                  final tr = (data['trade'] ?? '').toString().toLowerCase();
+                                  List<Color> gColors = const [Color(0xFF2563EB), Color(0xFF1D4ED8)];
+                                  IconData trIcon = Icons.handyman_rounded;
+                                  if (tr.contains('santexnik') || tr.contains('su')) {
+                                    gColors = const [Color(0xFF0284C7), Color(0xFF0369A1)];
+                                    trIcon = Icons.water_drop_rounded;
+                                  } else if (tr.contains('elektrik') || tr.contains('işıq')) {
+                                    gColors = const [Color(0xFFD97706), Color(0xFFB45309)];
+                                    trIcon = Icons.bolt_rounded;
+                                  } else if (tr.contains('tikinti') || tr.contains('hörgü')) {
+                                    gColors = const [Color(0xFFEA580C), Color(0xFFC2410C)];
+                                    trIcon = Icons.foundation_rounded;
+                                  } else if (tr.contains('mebel')) {
+                                    gColors = const [Color(0xFF92400E), Color(0xFF78350F)];
+                                    trIcon = Icons.chair_rounded;
+                                  }
+
                                   return Container(
-                                    color: const Color(0xFF0F172A),
-                                    child: const Center(
-                                      child: Icon(Icons.play_circle_fill_rounded, color: Colors.white54, size: 48),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: gColors,
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                    ),
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        Positioned(
+                                          right: -20,
+                                          top: -20,
+                                          child: Container(
+                                            width: 100,
+                                            height: 100,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: Colors.white.withOpacity(0.12),
+                                            ),
+                                          ),
+                                        ),
+                                        Center(
+                                          child: Container(
+                                            width: 52,
+                                            height: 52,
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withOpacity(0.25),
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+                                            ),
+                                            child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 34),
+                                          ),
+                                        ),
+                                        Positioned(
+                                          top: 10,
+                                          left: 10,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withOpacity(0.3),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(trIcon, color: Colors.white, size: 12),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  (data['trade'] ?? 'Shorts').toString(),
+                                                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   );
                                 },

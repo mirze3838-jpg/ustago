@@ -1792,36 +1792,135 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=80';
   }
 
+  // DİNAMİK VƏ İŞIQLI SHORTS FALLBACK KARTI (Qaranlıq görünmür, dərhal parlaq və estetik açılır)
+  Widget _buildShortsFallbackVisual({String? title, String? trade, String? artisanName}) {
+    final tr = (trade ?? '').toLowerCase();
+    List<Color> gradientColors;
+    IconData tradeIcon;
+
+    if (tr.contains('santexnik') || tr.contains('su')) {
+      gradientColors = const [Color(0xFF0284C7), Color(0xFF0369A1)];
+      tradeIcon = Icons.water_drop_rounded;
+    } else if (tr.contains('elektrik') || tr.contains('işıq')) {
+      gradientColors = const [Color(0xFFD97706), Color(0xFFB45309)];
+      tradeIcon = Icons.bolt_rounded;
+    } else if (tr.contains('tikinti') || tr.contains('hörgü') || tr.contains('bina')) {
+      gradientColors = const [Color(0xFFEA580C), Color(0xFFC2410C)];
+      tradeIcon = Icons.foundation_rounded;
+    } else if (tr.contains('mebel') || tr.contains('dülgər')) {
+      gradientColors = const [Color(0xFF92400E), Color(0xFF78350F)];
+      tradeIcon = Icons.chair_rounded;
+    } else if (tr.contains('rəngsaz') || tr.contains('boya')) {
+      gradientColors = const [Color(0xFFDB2777), Color(0xFFBE185D)];
+      tradeIcon = Icons.format_paint_rounded;
+    } else if (tr.contains('kondisioner') || tr.contains('soyuducu')) {
+      gradientColors = const [Color(0xFF0891B2), Color(0xFF0E7490)];
+      tradeIcon = Icons.ac_unit_rounded;
+    } else {
+      gradientColors = const [Color(0xFF2563EB), Color(0xFF1D4ED8)];
+      tradeIcon = Icons.handyman_rounded;
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: gradientColors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Dekorativ parlaq işıq elementləri
+          Positioned(
+            right: -15,
+            top: -15,
+            child: Container(
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.12),
+              ),
+            ),
+          ),
+          Positioned(
+            left: -20,
+            bottom: -20,
+            child: Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.08),
+              ),
+            ),
+          ),
+          Center(
+            child: Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.25),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white.withOpacity(0.5), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                color: Colors.white,
+                size: 30,
+              ),
+            ),
+          ),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white.withOpacity(0.2), width: 0.8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(tradeIcon, color: Colors.white, size: 10),
+                  const SizedBox(width: 3),
+                  Text(
+                    trade ?? 'Shorts',
+                    style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // DİNAMİK YÜKLƏNƏN SHORTS KARTI (Videonun başlıq şəkli ilə, qaranlıq görünmür)
   Widget _buildDynamicShortsCard(Map<String, dynamic> item, int index) {
     final String? thumbnailBase64 = item['thumbnailBase64'];
     final String? thumbnailUrl = item['thumbnailUrl'];
     final String trade = (item['trade'] ?? 'Tikinti').toString();
+    final String artisanName = (item['artisanName'] ?? 'Usta').toString();
+    final String title = (item['title'] ?? '').toString();
 
-    // Video kadrı yüklənənə qədər zərif tünd fon (köhnə stok şəkillər heç vaxt görünmür)
-    final Widget fallbackVisual = Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-      ),
-      child: Center(
-        child: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(
-            Icons.play_arrow_rounded,
-            color: Colors.white38,
-            size: 28,
-          ),
-        ),
-      ),
+    // Video kadrı çıxarılana qədər parlaq və işıqlı fallback
+    final Widget fallbackVisual = _buildShortsFallbackVisual(
+      title: title,
+      trade: trade,
+      artisanName: artisanName,
     );
 
     Widget coverWidget;
@@ -2543,36 +2642,18 @@ class _HomeScreenState extends State<HomeScreen> {
                               return _ShortsVideoThumbnail(
                                 key: ValueKey('post_thumb_${doc.id}'),
                                 videoUrl: videoUrl,
-                                fallback: Container(
-                                  decoration: const BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [Color(0xFF2C3E50), Color(0xFF1A252F)],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                                  ),
-                                  padding: const EdgeInsets.all(8),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Icon(Icons.play_circle_fill_rounded, color: Colors.white70, size: 36),
-                                      if ((data['title'] ?? '').toString().isNotEmpty) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          data['title'].toString(),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w500),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
+                                fallback: _buildShortsFallbackVisual(
+                                  title: (data['title'] ?? '').toString(),
+                                  trade: (data['category'] ?? data['trade'] ?? 'Usta İşi').toString(),
+                                  artisanName: (data['authorName'] ?? '').toString(),
                                 ),
                               );
                             }
-                            return Container(
-                              color: const Color(0xFF1E293B),
+                            return _buildShortsFallbackVisual(
+                              title: (data['title'] ?? '').toString(),
+                              trade: (data['category'] ?? data['trade'] ?? 'Usta İşi').toString(),
+                              artisanName: (data['authorName'] ?? '').toString(),
+                            );
                               child: const Center(
                                 child: Icon(Icons.videocam_rounded, color: Colors.white54, size: 32),
                               ),
@@ -4587,19 +4668,17 @@ class _HomeScreenState extends State<HomeScreen> {
                               _ShortsVideoThumbnail(
                                 key: ValueKey('short_thumb_${doc.id}'),
                                 videoUrl: videoUrl,
-                                fallback: Container(
-                                  color: const Color(0xFF1E293B),
-                                  child: const Center(
-                                    child: Icon(Icons.play_circle_fill_rounded, color: Colors.white54, size: 32),
-                                  ),
+                                fallback: _buildShortsFallbackVisual(
+                                  title: (data['title'] ?? 'Shorts').toString(),
+                                  trade: (data['trade'] ?? 'Usta İşi').toString(),
+                                  artisanName: (data['artisanName'] ?? '').toString(),
                                 ),
                               )
                             else
-                              Container(
-                                color: const Color(0xFF1E293B),
-                                child: const Center(
-                                  child: Icon(Icons.videocam_rounded, color: Colors.white54, size: 32),
-                                ),
+                              _buildShortsFallbackVisual(
+                                title: (data['title'] ?? 'Shorts').toString(),
+                                trade: (data['trade'] ?? 'Usta İşi').toString(),
+                                artisanName: (data['artisanName'] ?? '').toString(),
                               ),
                             Container(
                               decoration: BoxDecoration(
@@ -4668,7 +4747,33 @@ class _CoverWaveClipper extends CustomClipper<Path> {
 }
 
 
-/// Videonun öz içindən (0.7s) kadr çıxararaq kartın üz qabığında göstərən vidcet
+/// Mobildə RAM və GPU Video Decoder limitini qoruyan Növbə sistemi
+class _ThumbnailQueue {
+  static int _running = 0;
+  static const int _maxConcurrent = 1; // Eyni anda yalnız 1 video üçün kadr çıxarılır
+  static final List<Completer<void>> _queue = [];
+
+  static Future<void> acquire() async {
+    if (_running < _maxConcurrent) {
+      _running++;
+      return;
+    }
+    final completer = Completer<void>();
+    _queue.add(completer);
+    await completer.future;
+  }
+
+  static void release() {
+    _running--;
+    if (_queue.isNotEmpty) {
+      _running++;
+      final next = _queue.removeAt(0);
+      next.complete();
+    }
+  }
+}
+
+/// Videonun öz içindən kadr çıxararaq kartın üz qabığında göstərən vidcet
 class _ShortsVideoThumbnail extends StatefulWidget {
   final String videoUrl;
   final Widget fallback;
@@ -4705,13 +4810,6 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
   }
 
   Future<void> _initThumbnail() async {
-    // Mobil tətbiqdə (APK) hər grid elementi üçün VideoPlayerController başlatmaq
-    // RAM və prosessoru həddən artıq yükləyərək telefonun donmasına səbəb olur.
-    // Buna görə yalnız Web-də video thumbnail başladırıq, Mobildə dərhal fallback göstəririk.
-    if (!kIsWeb) return;
-
-    // Web-də Flutter video_player brauzerin native <video> elementini işlədir —
-    // cross-origin video göstərmək üçün CORS tələb olunmur (yalnız piksel oxumaq üçün lazımdır)
     String url = widget.videoUrl.trim();
     if (url.isEmpty) return;
 
@@ -4720,7 +4818,7 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
       if (!url.contains('/dl/') || url.split('/').length < 7) {
         try {
           final pageUrl = url.replaceFirst('/dl/', '/');
-          final res = await http.get(Uri.parse(pageUrl)).timeout(const Duration(seconds: 4));
+          final res = await http.get(Uri.parse(pageUrl)).timeout(const Duration(seconds: 3));
           if (res.statusCode == 200) {
             final m = RegExp(r'href="([^"]+/dl/[^"]+)"').firstMatch(res.body);
             if (m != null) {
@@ -4731,32 +4829,41 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
       }
     }
 
+    // Telefonun donmaması üçün növbəni gözləyirik
+    await _ThumbnailQueue.acquire();
+
     try {
+      if (!mounted) return;
+
       final controller = VideoPlayerController.networkUrl(Uri.parse(url));
       _controller = controller;
 
-      // Timeout: web üçün 10s, mobil üçün 15s
-      final timeoutDur = kIsWeb ? const Duration(seconds: 10) : const Duration(seconds: 15);
+      // Timeout: 6 saniyə (donub ilişib qalmasın)
       await controller.initialize().timeout(
-        timeoutDur,
+        const Duration(seconds: 6),
         onTimeout: () {
-          debugPrint('Thumbnail initialize timeout: $url');
+          debugPrint('Thumbnail timeout: $url');
         },
       );
 
       if (!mounted) {
         controller.dispose();
+        _controller = null;
         return;
       }
 
-      if (!controller.value.isInitialized) return;
+      if (!controller.value.isInitialized) {
+        controller.dispose();
+        _controller = null;
+        return;
+      }
 
       await controller.setVolume(0);
 
-      // Videonun ilk kadrını dərhal çəkirik
+      // İlk kadrı sabitləyirik
       final duration = controller.value.duration;
-      final seekTarget = duration > const Duration(milliseconds: 300)
-          ? const Duration(milliseconds: 300)
+      final seekTarget = duration > const Duration(milliseconds: 200)
+          ? const Duration(milliseconds: 200)
           : Duration.zero;
 
       if (seekTarget > Duration.zero) {
@@ -4764,7 +4871,7 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
       }
       try {
         await controller.play();
-        await Future.delayed(const Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 40));
         await controller.pause();
       } catch (_) {}
 
@@ -4775,6 +4882,9 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
       }
     } catch (e) {
       debugPrint('Thumbnail extraction error: $e');
+    } finally {
+      // Növbədəki növbəti videoya icazə veririk
+      _ThumbnailQueue.release();
     }
   }
 
@@ -4789,7 +4899,7 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
     final bool ready = _isInitialized && _controller != null && _controller!.value.isInitialized;
     return IgnorePointer(
       child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 300),
+        duration: const Duration(milliseconds: 250),
         child: ready
             ? SizedBox.expand(
                 key: const ValueKey('video_ready'),
