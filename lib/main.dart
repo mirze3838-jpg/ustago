@@ -42,6 +42,33 @@ class UstaGoApp extends StatelessWidget {
         ),
       ),
       // Tətbiq birbaşa Ana Səhifəyə açılır (Qeydiyyat məcburiyyəti yoxdur)
+      // Vebdə/Kompüterdə açıldıqda mərkəzdə tam telefon ekranı görünüşü
+      builder: (context, child) {
+        return Container(
+          color: const Color(0xFF0F172A), // Zərif tünd fon (kompüter kənarları üçün)
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: 480, // Standart mobil telefon eni
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.35),
+                      blurRadius: 30,
+                      spreadRadius: 5,
+                    ),
+                  ],
+                ),
+                child: ClipRect(
+                  child: child ?? const SizedBox(),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
       home: const HomeScreen(),
     );
   }
