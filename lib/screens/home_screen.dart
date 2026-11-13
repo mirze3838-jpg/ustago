@@ -4185,7 +4185,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }).toList();
   }
 
-  /// Gördüyüm İşlər (Portfolio) — 3 sütunlu fotoşəkillər şəbəkəsi
+  /// Gördüyüm İşlər (Portfolio) — 3 sütunlu fotoşəkillər şəbəkəsi (yeni dizayn)
   Widget _buildUstaPortfolioGrid(String uid, String authorName, String role) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
@@ -4209,35 +4209,52 @@ class _HomeScreenState extends State<HomeScreen> {
         if (photoDocs.isEmpty) {
           return Container(
             margin: const EdgeInsets.symmetric(horizontal: 16),
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(20),
               border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 3)),
+              ],
             ),
             child: Column(
               children: [
-                const Icon(Icons.photo_library_outlined, size: 40, color: Color(0xFF94A3B8)),
-                const SizedBox(height: 8),
-                const Text(
-                  'Hələlik heç bir portfolio şəkli yoxdur',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Gördüyünüz işlərin fotoşəkillərini əlavə edərək müştərilərə təqdim edin.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
-                ),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1769D2),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                Container(
+                  width: 64, height: 64,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFFBFDBFE), width: 2),
                   ),
-                  icon: const Icon(Icons.add_a_photo_rounded, color: Colors.white, size: 16),
-                  label: const Text('İlk İşini Paylaş', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                  onPressed: () => _showAddPostDialog(uid, authorName, role, initialTab: 0, lockTab: true),
+                  child: const Icon(Icons.add_a_photo_rounded, size: 30, color: Color(0xFF1769D2)),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Portfolio boşdur',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1E293B)),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'İş fotoşəkillərini əlavə edərək müştərilərə işini göstər.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xFF64748B), fontSize: 12, height: 1.4),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1769D2),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
+                    ),
+                    icon: const Icon(Icons.add_photo_alternate_rounded, size: 18),
+                    label: const Text('İlk İşini Paylaş', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                    onPressed: () => _showAddPostDialog(uid, authorName, role, initialTab: 0, lockTab: true),
+                  ),
                 ),
               ],
             ),
@@ -4247,27 +4264,45 @@ class _HomeScreenState extends State<HomeScreen> {
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Başlıq + düymə
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '${photoDocs.length} iş şəkli',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                        ),
+                        child: Text(
+                          '${photoDocs.length} iş şəkli',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
+                        ),
+                      ),
+                    ],
                   ),
                   InkWell(
                     onTap: () => _showAddPostDialog(uid, authorName, role, initialTab: 0, lockTab: true),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                      child: Row(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1769D2),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Row(
                         mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(Icons.add_photo_alternate_rounded, size: 16, color: Color(0xFF1769D2)),
+                        children: [
+                          Icon(Icons.add_photo_alternate_rounded, size: 14, color: Colors.white),
                           SizedBox(width: 4),
                           Text(
-                            'Yeni Əlavə Et',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
+                            'Əlavə Et',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
                         ],
                       ),
@@ -4275,14 +4310,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
+              // Grid
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 6,
+                  mainAxisSpacing: 6,
                   childAspectRatio: 1.0,
                 ),
                 itemCount: photoDocs.length,
@@ -4294,30 +4330,87 @@ class _HomeScreenState extends State<HomeScreen> {
                     base64Img = (data['imagesBase64'] as List).first.toString();
                   }
 
-                  return InkWell(
-                    onTap: () => _showPostDetailModal(doc.id, data),
-                    borderRadius: BorderRadius.circular(12),
+                  // Şəkil varsa tap işləsin, yoxsa heç nə etməsin
+                  final bool hasImage = (base64Img != null && base64Img.isNotEmpty) ||
+                      (data['thumbnailUrl']?.toString().isNotEmpty == true &&
+                          !data['thumbnailUrl'].toString().contains('unsplash.com'));
+
+                  return GestureDetector(
+                    onTap: hasImage ? () => _showPostDetailModal(doc.id, data) : null,
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         decoration: BoxDecoration(
                           color: const Color(0xFFF1F5F9),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Builder(
                           builder: (context) {
                             if (base64Img != null && base64Img.isNotEmpty) {
                               try {
-                                return Image.memory(base64Decode(base64Img), fit: BoxFit.cover);
+                                return Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    Image.memory(base64Decode(base64Img), fit: BoxFit.cover),
+                                    // Üzərindən yüngül kölgə
+                                    Positioned(
+                                      bottom: 0, left: 0, right: 0,
+                                      child: Container(
+                                        height: 32,
+                                        decoration: BoxDecoration(
+                                          borderRadius: const BorderRadius.only(
+                                            bottomLeft: Radius.circular(12),
+                                            bottomRight: Radius.circular(12),
+                                          ),
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topCenter,
+                                            end: Alignment.bottomCenter,
+                                            colors: [Colors.transparent, Colors.black.withOpacity(0.35)],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
                               } catch (_) {}
                             }
                             final thumbUrl = data['thumbnailUrl']?.toString();
                             if (thumbUrl != null && thumbUrl.isNotEmpty && !thumbUrl.contains('unsplash.com')) {
-                              return Image.network(thumbUrl, fit: BoxFit.cover);
+                              return Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Image.network(thumbUrl, fit: BoxFit.cover),
+                                  Positioned(
+                                    bottom: 0, left: 0, right: 0,
+                                    child: Container(
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        borderRadius: const BorderRadius.only(
+                                          bottomLeft: Radius.circular(12),
+                                          bottomRight: Radius.circular(12),
+                                        ),
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [Colors.transparent, Colors.black.withOpacity(0.35)],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
                             }
-                            return const Center(
-                              child: Icon(Icons.image_outlined, color: Color(0xFF94A3B8), size: 28),
+                            // Şəkil yoxdur → boş placeholder (klikə reaksiya vermiri)
+                            return Container(
+                              color: const Color(0xFFF1F5F9),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Icon(Icons.image_outlined, color: Color(0xFFCBD5E1), size: 28),
+                                  SizedBox(height: 4),
+                                  Text('Şəkil yoxdur', style: TextStyle(fontSize: 9, color: Color(0xFFCBD5E1))),
+                                ],
+                              ),
                             );
                           },
                         ),
@@ -4583,6 +4676,11 @@ class _ShortsVideoThumbnailState extends State<_ShortsVideoThumbnail> {
   }
 
   Future<void> _initThumbnail() async {
+    // Mobil tətbiqdə (APK) hər grid elementi üçün VideoPlayerController başlatmaq
+    // RAM və prosessoru həddən artıq yükləyərək telefonun donmasına səbəb olur.
+    // Buna görə yalnız Web-də video thumbnail başladırıq, Mobildə dərhal fallback göstəririk.
+    if (!kIsWeb) return;
+
     // Web-də Flutter video_player brauzerin native <video> elementini işlədir —
     // cross-origin video göstərmək üçün CORS tələb olunmur (yalnız piksel oxumaq üçün lazımdır)
     String url = widget.videoUrl.trim();
