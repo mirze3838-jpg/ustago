@@ -41,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _unreadNotifications = 3;
   int _ustaProfileGalleryTab = 0; // 0: Portfolio, 1: Shorts
   bool _isUstaBioExpanded = false;
+  late final ShortsScreen _shortsTab;
 
   // Kateqoriyalar və Şəhərlər (Admin tərəfindən artırıla bilər, Firestore ilə canlı sinxronlaşır)
   List<Map<String, dynamic>> _categories = List.from(CategoryCityService.defaultCategories);
@@ -54,6 +55,19 @@ class _HomeScreenState extends State<HomeScreen> {
     _currentIndex = widget.initialTabIndex;
     _loadUserRole();
     _initCategoryAndCityStreams();
+    _shortsTab = ShortsScreen(
+      onNavigateTab: (idx) {
+        if (mounted) setState(() => _currentIndex = idx);
+      },
+      onOpenArtisanProfile: (artisanData) async {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ArtisanDetailScreen(artisanData: artisanData),
+          ),
+        );
+      },
+    );
   }
 
   void _initCategoryAndCityStreams() {
@@ -267,17 +281,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case 0:
         return _buildHomeContent();
       case 1:
-        return ShortsScreen(
-          onNavigateTab: (idx) => setState(() => _currentIndex = idx),
-          onOpenArtisanProfile: (artisanData) async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ArtisanDetailScreen(artisanData: artisanData),
-              ),
-            );
-          },
-        );
+        return _shortsTab;
       case 2:
         return const MarketScreen();
       case 3:
@@ -1865,7 +1869,20 @@ class _HomeScreenState extends State<HomeScreen> {
         final targetIndex = await Navigator.push<int>(
           context,
           MaterialPageRoute(
-            builder: (_) => ShortsScreen(initialIndex: index),
+            builder: (_) => ShortsScreen(
+              initialIndex: index,
+              onNavigateTab: (idx) {
+                Navigator.pop(context, idx);
+              },
+              onOpenArtisanProfile: (artisanData) async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ArtisanDetailScreen(artisanData: artisanData),
+                  ),
+                );
+              },
+            ),
           ),
         );
         if (targetIndex != null && mounted) {

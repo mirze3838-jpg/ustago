@@ -1165,15 +1165,17 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
           setState(() => _isPlaying = false);
         }
 
-        // Əgər tab idarəedicisi varsa tabı 4 (Profil) edirik, yoxsa HomeScreen(initialTabIndex: 4) açırıq
+        // Əgər onNavigateTab callback varsa onu çağırırıq
         if (widget.onNavigateTab != null) {
           widget.onNavigateTab!(4);
           return;
         }
 
-        // Pop back to HomeScreen (which handles tab switch via returned value or popUntil)
-        Navigator.popUntil(context, (route) => route.isFirst);
-        return;
+        // Navigator.push ilə açılmışsa, 4 dəyəri ilə geri dönürük (HomeScreen tab keçidi üçün)
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context, 4);
+          return;
+        }
       }
     }
 
