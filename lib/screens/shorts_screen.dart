@@ -1010,8 +1010,9 @@ class _ShortsScreenState extends State<ShortsScreen> {
                         _buildNavShortcut(Icons.home_outlined, 'Ana səhifə', () => _navigateFromBottomBar(0)),
                         _buildNavShortcut(Icons.play_circle_fill, 'Shorts', null, isActive: true),
                         _buildNavShortcut(Icons.storefront_outlined, 'Alış-Satış', () => _navigateFromBottomBar(2)),
-                        _buildNavShortcut(Icons.chat_bubble_outline, 'Mesajlar', () => _navigateFromBottomBar(3)),
-                        _buildNavShortcut(Icons.person_outline, 'Profil', () => _navigateFromBottomBar(4)),
+                        _buildNavShortcut(Icons.map_outlined, 'Xəritə', () => _navigateFromBottomBar(3)),
+                        _buildNavShortcut(Icons.chat_bubble_outline, 'Mesajlar', () => _navigateFromBottomBar(4)),
+                        _buildNavShortcut(Icons.person_outline, 'Profil', () => _navigateFromBottomBar(5)),
                       ],
                     ),
                   ),
@@ -1248,13 +1249,13 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
 
         // Əgər onNavigateTab callback varsa onu çağırırıq
         if (widget.onNavigateTab != null) {
-          widget.onNavigateTab!(4);
+          widget.onNavigateTab!(5);
           return;
         }
 
-        // Navigator.push ilə açılmışsa, 4 dəyəri ilə geri dönürük (HomeScreen tab keçidi üçün)
+        // Navigator.push ilə açılmışsa, 5 dəyəri ilə geri dönürük (HomeScreen tab keçidi üçün)
         if (Navigator.canPop(context)) {
-          Navigator.pop(context, 4);
+          Navigator.pop(context, 5);
           return;
         }
       }

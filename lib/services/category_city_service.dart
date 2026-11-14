@@ -432,6 +432,212 @@ class CategoryCityService {
     return results;
   }
 
+  /// Azərbaycanın şəhər və rayonlarının real coğrafi koordinatları [lat, lng]
+  static const Map<String, List<double>> regionCoordinates = {
+    'Bakı': [40.4093, 49.8671],
+    'Sumqayıt': [40.5897, 49.6686],
+    'Gəncə': [40.6828, 46.3606],
+    'Xırdalan': [40.4481, 49.7550],
+    'Mingəçevir': [40.7640, 47.0595],
+    'Şirvan': [39.9378, 48.9290],
+    'Naxçıvan': [39.2089, 45.4122],
+    'Şəki': [41.1919, 47.1706],
+    'Quba': [41.3611, 48.5136],
+    'Lənkəran': [38.7543, 48.8506],
+    'Xankəndi': [39.8265, 46.7656],
+    'Şuşa': [39.7601, 46.7496],
+    'Qusar': [41.4275, 48.4302],
+    'Xaçmaz': [41.4644, 48.8056],
+    'Qəbələ': [40.9814, 47.8458],
+    'İsmayıllı': [40.7849, 48.1514],
+    'Şamaxı': [40.6314, 48.6414],
+    'Masallı': [39.0353, 48.6654],
+    'Cəlilabad': [39.2052, 48.4919],
+    'Astara': [38.4560, 48.8750],
+    'Lerik': [38.7739, 48.4150],
+    'Yardımlı': [38.9056, 48.2405],
+    'Bərdə': [40.3744, 47.1267],
+    'Ağcabədi': [40.0502, 47.4594],
+    'Ağdam': [39.9910, 46.9274],
+    'Tərtər': [40.3450, 46.9289],
+    'Füzuli': [39.6003, 47.1431],
+    'Laçın': [39.6383, 46.5461],
+    'Kəlbəcər': [40.1068, 46.0383],
+    'Zaqatala': [41.6316, 46.6448],
+    'Balakən': [41.7258, 46.4044],
+    'Qax': [41.4183, 46.9204],
+    'Oğuz': [41.0713, 47.4651],
+    'Göyçay': [40.6525, 47.7406],
+    'Ağdaş': [40.6470, 47.4738],
+    'Ucar': [40.5190, 47.6542],
+    'Kürdəmir': [40.3453, 48.1509],
+    'Zərdab': [40.2184, 47.7121],
+    'Ağsu': [40.5703, 48.4009],
+    'Qobustan': [40.5336, 48.9282],
+    'Yevlax': [40.6183, 47.1501],
+    'Goranboy': [40.6103, 46.7897],
+    'Şəmkir': [40.8297, 46.0178],
+    'Tovuz': [40.9922, 45.6289],
+    'Ağstafa': [41.1189, 45.4539],
+    'Qazax': [41.0925, 45.3656],
+    'Gədəbəy': [40.5698, 45.8147],
+    'Daşkəsən': [40.5202, 46.0779],
+    'Göygöl': [40.5858, 46.3189],
+    'Samux': [40.7642, 46.4087],
+    'Sabirabad': [40.0087, 48.4770],
+    'Saatlı': [39.9321, 48.3689],
+    'İmişli': [39.8710, 48.0600],
+    'Beyləqan': [39.7756, 47.6186],
+    'Salyan': [39.5962, 48.9848],
+    'Neftçala': [39.3768, 49.2470],
+    'Biləsuvar': [39.4583, 48.5450],
+    'Hacıqabul': [40.0433, 48.9356],
+    'Siyəzən': [41.0761, 49.1120],
+    'Şabran': [41.2012, 48.9860],
+    'Xızı': [40.9085, 49.0748],
+    'Babək': [39.1508, 45.4485],
+    'Culfa': [38.9539, 45.6308],
+    'Ordubad': [38.9096, 46.0227],
+    'Şərur': [39.5528, 44.9799],
+    'Şahbuz': [39.4072, 45.5739],
+    'Kəngərli': [39.3872, 45.1640],
+    'Sədərək': [39.7142, 44.8856],
+  };
+
+  /// Bakı rayonları, qəsəbələr və məşhur kəndlərin real koordinatları [lat, lng]
+  static const Map<String, List<double>> villageCoordinates = {
+    'Yasamal': [40.3860, 49.8050],
+    'Nəsimi': [40.4025, 49.8325],
+    'Nərimanov': [40.4065, 49.8730],
+    'Nizami': [40.4130, 49.9270],
+    'Xətai': [40.3865, 49.9145],
+    'Səbail': [40.3585, 49.8320],
+    'Binəqədi': [40.4640, 49.8260],
+    'Sabunçu': [40.4430, 49.9470],
+    'Suraxanı': [40.4210, 50.0080],
+    'Xəzər': [40.4910, 50.1450],
+    'Qaradağ': [40.3050, 49.7080],
+    'Pirallahı': [40.4710, 50.3260],
+    'Maştağa': [40.5290, 49.9970],
+    'Bilgəh': [40.5690, 50.0360],
+    'Buzovna': [40.5190, 50.1140],
+    'Mərdəkan': [40.4920, 50.1450],
+    'Şüvəlan': [40.4830, 50.1940],
+    'Binə': [40.4460, 50.0880],
+    'Hövsan': [40.3690, 50.0720],
+    'Qaraçuxur': [40.4060, 49.9720],
+    'Bakıxanov': [40.4200, 49.9560],
+    'Zabrat': [40.4780, 49.9480],
+    'Mehdiabad': [40.4930, 49.8830],
+    'Badamdar': [40.3430, 49.8050],
+    'Lökbatan': [40.3250, 49.7330],
+    'Sulutəpə': [40.4360, 49.7540],
+    'Biləcəri': [40.4220, 49.8030],
+    'Pirşağı': [40.5480, 49.9080],
+    'Nardaran': [40.5580, 50.0080],
+    'Kürdəxanı': [40.5540, 49.9460],
+    'Balaxanı': [40.4640, 49.9190],
+    'Ramana': [40.4530, 49.9760],
+    'Zirə': [40.3710, 50.2910],
+    'Türkan': [40.3660, 50.2050],
+    'Qala': [40.4420, 50.1650],
+    'Əhmədli': [40.3860, 49.9540],
+    'Günəşli': [40.3770, 49.9830],
+    'Əmircan': [40.4260, 49.9840],
+    'Bülbülə': [40.4270, 50.0030],
+    'Zığ': [40.3660, 49.9760],
+    'Şağan': [40.4950, 50.1230],
+    'Şıxov': [40.3120, 49.8190],
+    'Sahil': [40.2280, 49.5750],
+    'Səngəçal': [40.1720, 49.4580],
+    'Ələt': [39.9410, 49.4060],
+    'Masazır': [40.4710, 49.7660],
+    'Saray': [40.5330, 49.7180],
+    'Novxanı': [40.5310, 49.7820],
+    'Corat': [40.5730, 49.7080],
+    'Hacı Zeynalabdin': [40.6180, 49.5760],
+    'Lahıc': [40.8489, 48.3831],
+    'Basqal': [40.7525, 48.3869],
+    'Qırmızı Qəsəbə': [41.3700, 48.5180],
+    'Xınalıq': [41.1783, 48.1258],
+    'Şahdağ': [41.3210, 48.1480],
+    'Nabran': [41.7620, 48.7280],
+    'Xudat': [41.6306, 48.6789],
+    'Vəndam': [40.9610, 47.9260],
+    'Nic': [40.8960, 47.6510],
+    'Kiş': [41.2530, 47.1930],
+    'İstisu': [40.0050, 45.9500],
+    'Quzanlı': [40.1650, 47.1520],
+    'Horadiz': [39.4486, 47.3397],
+  };
+
+  /// Seçilmiş şəhər/rayon və kənd üçün [lat, lng] qaytarır
+  static List<double> getCoordinates(String region, [String village = '']) {
+    final normV = normalizeAz(village);
+    if (normV.isNotEmpty) {
+      for (final entry in villageCoordinates.entries) {
+        if (normalizeAz(entry.key) == normV) {
+          return entry.value;
+        }
+      }
+    }
+
+    List<double> base = const [40.4093, 49.8671];
+    final normR = normalizeAz(region);
+    for (final entry in regionCoordinates.entries) {
+      if (normalizeAz(entry.key) == normR) {
+        base = entry.value;
+        break;
+      }
+    }
+
+    if (normV.isNotEmpty && normV != 'merkez') {
+      final h = normV.codeUnits.fold<int>(0, (acc, c) => (acc * 31 + c) & 0x7FFFFFFF);
+      final dLat = ((h % 13) - 6) * 0.0045;
+      final dLng = (((h ~/ 13) % 13) - 6) * 0.0055;
+      return [base[0] + dLat, base[1] + dLng];
+    }
+
+    return base;
+  }
+
+  /// Ustanın profil ünvanına ("Şəhər, Kənd") uyğun küçə səviyyəli koordinat qaytarır
+  static List<double> resolveArtisanCoordinates(String cityField, String uid) {
+    final parts = cityField.split(',');
+    final String rawRegion = parts.isNotEmpty ? parts[0].trim() : 'Bakı';
+    final String rawVillage = parts.length > 1 ? parts.sublist(1).join(' ').trim() : '';
+
+    String matchedRegion = rawRegion;
+    final normField = normalizeAz(cityField);
+    if (matchedRegion.isEmpty) matchedRegion = 'Bakı';
+
+    for (final region in defaultCities) {
+      if (normalizeAz(rawRegion) == normalizeAz(region)) {
+        matchedRegion = region;
+        break;
+      }
+      if (normField.contains(normalizeAz(region))) {
+        matchedRegion = region;
+      }
+    }
+
+    String matchedVillage = rawVillage;
+    if (matchedVillage.isEmpty) {
+      for (final vKey in villageCoordinates.keys) {
+        if (normField.contains(normalizeAz(vKey))) {
+          matchedVillage = vKey;
+          break;
+        }
+      }
+    }
+
+    final base = getCoordinates(matchedRegion, matchedVillage);
+    final int h = uid.hashCode & 0x7FFFFFFF;
+    final double dLat = ((h % 11) - 5) * 0.0008;
+    final double dLng = (((h ~/ 11) % 11) - 5) * 0.0010;
+    return [base[0] + dLat, base[1] + dLng];
+  }
+
   // Sabit ikon uyğunluğu (Tree shaking xətalarının qarşısını alır)
   static IconData getIconByCode(int? code) {
     if (code == null) return Icons.handyman;

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
@@ -38,7 +39,12 @@ class _HomeScreenState extends State<HomeScreen> {
   late int _currentIndex;
   String _selectedCity = 'Bakı';
   String _selectedVillage = '';
+  String _selectedMapCategory = '';
   String? _selectedMapPinId;
+  double _mapLat = 40.4093;
+  double _mapLng = 49.8671;
+  double _mapZoom = 12.0;
+  final TextEditingController _mapSearchController = TextEditingController();
   String? _currentUserRole;
   final TextEditingController _searchController = TextEditingController();
   int _adminSecretTap = 0;
@@ -121,11 +127,21 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _centerMapOnSelection({String? city, String? village}) {
+    final c = city ?? _selectedCity;
+    final v = village ?? _selectedVillage;
+    final coords = CategoryCityService.getCoordinates(c, v);
+    _mapLat = coords[0];
+    _mapLng = coords[1];
+    _mapZoom = v.isNotEmpty ? 14.0 : 12.0;
+  }
+
   @override
   void dispose() {
     _catSub?.cancel();
     _citySub?.cancel();
     _searchController.dispose();
+    _mapSearchController.dispose();
     super.dispose();
   }
 
@@ -280,8 +296,10 @@ class _HomeScreenState extends State<HomeScreen> {
       case 2:
         return const MarketScreen();
       case 3:
-        return _buildMessagesTab();
+        return _buildMapTab();
       case 4:
+        return _buildMessagesTab();
+      case 5:
         return _buildProfileTab();
       default:
         return _buildHomeContent();
@@ -952,7 +970,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   _selectedCity = region;
                                   _selectedVillage = village;
                                   _selectedMapPinId = null;
+                                  _centerMapOnSelection(city: region, village: village);
                                   _searchController.clear();
+                                  _currentIndex = 3;
                                 });
                               },
                             );
@@ -1166,21 +1186,75 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
 
-        // 1.5. Xəritədə Yaxın Ustalar Bölməsi (Mavi axtarış panelinin düz altında, Kateqoriyalardan əvvəl)
-        SliverToBoxAdapter(
-          child: _buildNearbyArtisansMapSection(),
-        ),
-
-        // 2. Kateqoriyalar Bölməsi
+        // 2. Kateqoriyalar Bölməsi (Yanında sürətli "Xəritə" keçidi ilə)
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.only(top: 16, left: 16, right: 16),
-            child: _buildSectionTitle(
-              icon: Icons.grid_view_rounded,
-              iconColor: const Color(0xFF1769D2),
-              title: 'Kateqoriyalar',
-              actionTitle: 'Hamısına bax',
-              onTap: _showAllCategoriesSheet,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: const [
+                    Icon(Icons.grid_view_rounded, color: Color(0xFF1769D2), size: 22),
+                    SizedBox(width: 8),
+                    Text(
+                      'Kateqoriyalar',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                    ),
+                  ],
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _centerMapOnSelection();
+                          _currentIndex = 3;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFFA7F3D0)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.map_rounded, size: 14, color: Color(0xFF059669)),
+                            SizedBox(width: 4),
+                            Text(
+                              'Xəritə',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF059669),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    InkWell(
+                      onTap: _showAllCategoriesSheet,
+                      child: Row(
+                        children: const [
+                          Text(
+                            'Hamısına bax',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1769D2)),
+                          ),
+                          SizedBox(width: 4),
+                          Icon(Icons.arrow_forward_rounded, size: 14, color: Color(0xFF1769D2)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),
@@ -1904,6 +1978,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       _selectedCity = region;
                                       _selectedVillage = village;
                                       _selectedMapPinId = null;
+                                      _centerMapOnSelection(city: region, village: village);
                                     });
                                   },
                                 );
@@ -1964,6 +2039,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 _selectedCity = tempRegion;
                                 _selectedVillage = '';
                                 _selectedMapPinId = null;
+                                _centerMapOnSelection(city: tempRegion, village: '');
                               });
                             },
                           ),
@@ -1983,6 +2059,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   _selectedCity = tempRegion;
                                   _selectedVillage = v;
                                   _selectedMapPinId = null;
+                                  _centerMapOnSelection(city: tempRegion, village: v);
                                 });
                               },
                             );
@@ -2001,764 +2078,904 @@ class _HomeScreenState extends State<HomeScreen> {
     searchCtrl.dispose();
   }
 
-  /// "Xəritədə Yaxın Ustalar" bölməsi (Ana səhifədə mavi axtarış panelinin düz altında)
-  Widget _buildNearbyArtisansMapSection() {
+  /// Açıq rəngli, real küçə xəritəsi ilə ayrıca "Xəritə" bölməsi (Alış-Satış ilə Mesajlar arasında)
+  Widget _buildMapTab() {
     final regionVillages = CategoryCityService.getVillagesForRegion(_selectedCity);
-    const List<Offset> pinSlots = [
-      Offset(0.45, 0.36),
-      Offset(0.20, 0.23),
-      Offset(0.73, 0.22),
-      Offset(0.15, 0.56),
-      Offset(0.76, 0.54),
-      Offset(0.33, 0.59),
-      Offset(0.59, 0.57),
-      Offset(0.58, 0.19),
-    ];
+    final rawQuery = _mapSearchController.text.trim();
+    final normQ = CategoryCityService.normalizeAz(rawQuery);
+    final locationSuggestions = rawQuery.isNotEmpty
+        ? CategoryCityService.searchLocations(rawQuery, maxResults: 8)
+        : const <Map<String, String>>[];
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final filterCats = _categories.where((c) => c['id'] != 'def_diger').toList();
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: Column(
         children: [
-          _buildSectionTitle(
-            icon: Icons.map_rounded,
-            iconColor: const Color(0xFF059669),
-            title: 'Xəritədə Yaxın Ustalar',
-            actionTitle: 'Tam xəritə',
-            onTap: _showFullMapModal,
-          ),
-          const SizedBox(height: 8),
-          // Seçilmiş Rayon üzrə Kənd/Qəsəbə sürətli filtri
-          SizedBox(
-            height: 32,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: ChoiceChip(
-                    label: Text('Bütün $_selectedCity'),
-                    selected: _selectedVillage.isEmpty,
-                    visualDensity: VisualDensity.compact,
-                    selectedColor: const Color(0xFF059669),
-                    backgroundColor: const Color(0xFFF1F5F9),
-                    labelStyle: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      color: _selectedVillage.isEmpty ? Colors.white : const Color(0xFF334155),
-                    ),
-                    onSelected: (_) {
-                      setState(() {
-                        _selectedVillage = '';
-                        _selectedMapPinId = null;
-                      });
-                    },
-                  ),
-                ),
-                ...regionVillages.take(15).map((v) {
-                  final selected = CategoryCityService.normalizeAz(_selectedVillage) == CategoryCityService.normalizeAz(v);
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: ChoiceChip(
-                      label: Text(v),
-                      selected: selected,
-                      visualDensity: VisualDensity.compact,
-                      selectedColor: const Color(0xFF1769D2),
-                      backgroundColor: Colors.white,
-                      side: BorderSide(color: selected ? const Color(0xFF1769D2) : const Color(0xFFE2E8F0)),
-                      labelStyle: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: selected ? Colors.white : const Color(0xFF334155),
-                      ),
-                      onSelected: (_) {
-                        setState(() {
-                          _selectedVillage = selected ? '' : v;
-                          _selectedMapPinId = null;
-                        });
-                      },
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _ustaStream,
-            builder: (context, snapshot) {
-              final docs = snapshot.data?.docs ?? [];
-              final allArtisans = docs.map((d) {
-                final m = Map<String, dynamic>.from(d.data());
-                m['id'] = d.id;
-                m['uid'] = d.id;
-                return m;
-              }).toList();
-
-              final sc = CategoryCityService.normalizeAz(_selectedCity);
-              final sv = CategoryCityService.normalizeAz(_selectedVillage);
-
-              allArtisans.sort((a, b) {
-                final aCity = CategoryCityService.normalizeAz((a['city'] ?? '').toString());
-                final bCity = CategoryCityService.normalizeAz((b['city'] ?? '').toString());
-                if (sv.isNotEmpty) {
-                  final aV = aCity.contains(sv);
-                  final bV = bCity.contains(sv);
-                  if (aV != bV) return aV ? -1 : 1;
-                }
-                final aC = aCity.contains(sc);
-                final bC = bCity.contains(sc);
-                if (aC != bC) return aC ? -1 : 1;
-                final double aRat = (a['rating'] is num) ? (a['rating'] as num).toDouble() : 0.0;
-                final double bRat = (b['rating'] is num) ? (b['rating'] as num).toDouble() : 0.0;
-                return bRat.compareTo(aRat);
-              });
-
-              final exactMatches = allArtisans.where((a) {
-                final c = CategoryCityService.normalizeAz((a['city'] ?? '').toString());
-                if (sv.isNotEmpty) return c.contains(sv);
-                return c.contains(sc);
-              }).toList();
-
-              final pins = (exactMatches.isNotEmpty ? exactMatches : allArtisans).take(pinSlots.length).toList();
-              Map<String, dynamic>? selectedPin;
-              if (_selectedMapPinId != null) {
-                for (final p in pins) {
-                  if (p['id'] == _selectedMapPinId) {
-                    selectedPin = p;
-                    break;
-                  }
-                }
-              }
-
-              return Container(
-                height: 215,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: const Color(0xFF93C5FD).withOpacity(0.6)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF0F172A).withOpacity(0.10),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(18),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final w = constraints.maxWidth;
-                      final h = constraints.maxHeight;
-                      return Stack(
-                        children: [
-                          Positioned.fill(
-                            child: CustomPaint(
-                              painter: _InteractiveMapBackgroundPainter(),
-                            ),
+          // 1. Üst Axtarış və Filtr Paneli
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.only(bottom: 10),
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFECFDF5),
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                          // Yuxarı sol: aktiv ərazi və tapılan usta sayı
-                          Positioned(
-                            top: 10,
-                            left: 10,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF0F172A).withOpacity(0.78),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: Colors.white24),
+                          child: const Icon(Icons.map_rounded, color: Color(0xFF059669), size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Usta Xəritəsi',
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0F172A),
+                                ),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.my_location_rounded, color: Color(0xFF34D399), size: 14),
-                                  const SizedBox(width: 5),
-                                  Text(
-                                    '${_selectedVillage.isNotEmpty ? "$_selectedCity, $_selectedVillage" : _selectedCity} • ${exactMatches.length} yaxın usta',
+                              Text(
+                                'Rayon və kəndlər üzrə yaxın ustalar',
+                                style: TextStyle(fontSize: 11.5, color: Color(0xFF64748B)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        InkWell(
+                          onTap: _showLocationSearchSheet,
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFFBFDBFE)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.location_on_rounded, color: Color(0xFF1769D2), size: 15),
+                                const SizedBox(width: 4),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(maxWidth: 118),
+                                  child: Text(
+                                    _selectedVillage.isNotEmpty ? '$_selectedCity, $_selectedVillage' : _selectedCity,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF1769D2),
                                     ),
                                   ),
-                                ],
-                              ),
+                                ),
+                                const Icon(Icons.keyboard_arrow_down, color: Color(0xFF1769D2), size: 16),
+                              ],
                             ),
                           ),
-                          // Yuxarı sağ: Tam xəritə düyməsi
-                          Positioned(
-                            top: 10,
-                            right: 10,
-                            child: InkWell(
-                              onTap: _showFullMapModal,
-                              borderRadius: BorderRadius.circular(16),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.92),
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: const [
-                                    Icon(Icons.open_in_full_rounded, color: Color(0xFF1769D2), size: 13),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'Böyüt',
-                                      style: TextStyle(
-                                        color: Color(0xFF1769D2),
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          // Xəritə Pinləri
-                          for (int i = 0; i < pins.length; i++)
-                            Builder(
-                              builder: (context) {
-                                final u = pins[i];
-                                final uid = (u['id'] ?? '').toString();
-                                final base = pinSlots[i % pinSlots.length];
-                                final hash = uid.hashCode;
-                                final dx = (((hash % 7) - 3) * 0.008);
-                                final dy = ((((hash >> 3) % 7) - 3) * 0.008);
-                                final px = (w * (base.dx + dx)).clamp(16.0, w - 90.0);
-                                final py = (h * (base.dy + dy)).clamp(42.0, h - 78.0);
-                                final isSelected = _selectedMapPinId == uid;
-                                final uName = (u['fullName'] ?? 'Usta').toString();
-                                final shortName = uName.split(' ').first;
-                                final avatarBytes = _decodeB64(u['photoBase64'] as String?);
-                                final bool matchesExact = CategoryCityService.normalizeAz((u['city'] ?? '').toString())
-                                    .contains(sv.isNotEmpty ? sv : sc);
+                        ),
+                      ],
+                    ),
+                  ),
 
-                                return Positioned(
-                                  left: px,
-                                  top: py,
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedMapPinId = isSelected ? null : uid;
-                                      });
-                                    },
-                                    child: AnimatedScale(
-                                      scale: isSelected ? 1.14 : 1.0,
-                                      duration: const Duration(milliseconds: 160),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.all(2.5),
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: isSelected
-                                                  ? const Color(0xFFF59E0B)
-                                                  : (matchesExact ? const Color(0xFF10B981) : const Color(0xFF38BDF8)),
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: (isSelected ? const Color(0xFFF59E0B) : const Color(0xFF10B981))
-                                                      .withOpacity(0.55),
-                                                  blurRadius: 8,
-                                                ),
-                                              ],
-                                            ),
-                                            child: CircleAvatar(
-                                              radius: 15,
-                                              backgroundColor: const Color(0xFF1E293B),
-                                              backgroundImage: avatarBytes != null ? MemoryImage(avatarBytes) : null,
-                                              child: avatarBytes == null
-                                                  ? Text(
-                                                      uName.isNotEmpty ? uName[0].toUpperCase() : 'U',
-                                                      style: const TextStyle(
-                                                        color: Colors.white,
-                                                        fontWeight: FontWeight.bold,
-                                                        fontSize: 12,
-                                                      ),
-                                                    )
-                                                  : null,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                            decoration: BoxDecoration(
-                                              color: isSelected
-                                                  ? const Color(0xFF1769D2)
-                                                  : const Color(0xFF0F172A).withOpacity(0.82),
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            child: Text(
-                                              shortName,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 9.5,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                );
+                  // Xəritə daxili axtarış qutusu
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TextField(
+                      controller: _mapSearchController,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: 'Rayon, kənd (Maştağa, Quba...), usta və ya peşə axtar...',
+                        hintStyle: const TextStyle(fontSize: 12.5, color: Color(0xFF94A3B8)),
+                        prefixIcon: const Icon(Icons.search, size: 20, color: Color(0xFF64748B)),
+                        suffixIcon: rawQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18, color: Colors.grey),
+                                onPressed: () {
+                                  _mapSearchController.clear();
+                                  setState(() {});
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: const Color(0xFFF1F5F9),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  if (locationSuggestions.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 34,
+                      child: ListView(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        scrollDirection: Axis.horizontal,
+                        children: locationSuggestions.map((loc) {
+                          final region = loc['region'] ?? '';
+                          final village = loc['village'] ?? '';
+                          final display = loc['display'] ?? region;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: ActionChip(
+                              avatar: const Icon(Icons.pin_drop_rounded, size: 14, color: Color(0xFF059669)),
+                              label: Text(display, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                              backgroundColor: const Color(0xFFECFDF5),
+                              side: const BorderSide(color: Color(0xFFA7F3D0)),
+                              onPressed: () {
+                                FocusScope.of(context).unfocus();
+                                setState(() {
+                                  if (!_cities.contains(region) && region.isNotEmpty) {
+                                    _cities.add(region);
+                                  }
+                                  _selectedCity = region;
+                                  _selectedVillage = village;
+                                  _selectedMapPinId = null;
+                                  _centerMapOnSelection(city: region, village: village);
+                                  _mapSearchController.clear();
+                                });
                               },
                             ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
 
-                          if (pins.isEmpty && snapshot.connectionState != ConnectionState.waiting)
-                            Center(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.black54,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Text(
-                                  'Bu ərazidə hələ usta qeydiyyatı yoxdur',
-                                  style: TextStyle(color: Colors.white, fontSize: 12),
-                                ),
-                              ),
+                  const SizedBox(height: 8),
+                  // Kənd / Qəsəbə sürətli filtri
+                  SizedBox(
+                    height: 32,
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: Text('Bütün $_selectedCity'),
+                            selected: _selectedVillage.isEmpty,
+                            visualDensity: VisualDensity.compact,
+                            selectedColor: const Color(0xFF059669),
+                            backgroundColor: const Color(0xFFF1F5F9),
+                            labelStyle: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: _selectedVillage.isEmpty ? Colors.white : const Color(0xFF334155),
                             ),
-
-                          // Seçilmiş Usta Pin Kartı
-                          if (selectedPin != null)
-                            Positioned(
-                              left: 10,
-                              right: 10,
-                              bottom: 8,
-                              child: Builder(
-                                builder: (context) {
-                                  final u = selectedPin!;
-                                  final uName = (u['fullName'] ?? 'Usta').toString();
-                                  final uTrade = (u['category'] ?? 'Usta').toString();
-                                  final uCity = (u['city'] ?? 'Bakı').toString();
-                                  final uPhone = (u['phone'] ?? '').toString();
-                                  final avatarBytes = _decodeB64(u['photoBase64'] as String?);
-                                  return InkWell(
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(builder: (_) => ArtisanDetailScreen(artisanData: u)),
-                                      );
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.96),
-                                        borderRadius: BorderRadius.circular(14),
-                                        boxShadow: [
-                                          BoxShadow(color: Colors.black.withOpacity(0.22), blurRadius: 8),
-                                        ],
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          CircleAvatar(
-                                            radius: 18,
-                                            backgroundColor: const Color(0xFF1769D2).withOpacity(0.12),
-                                            backgroundImage: avatarBytes != null ? MemoryImage(avatarBytes) : null,
-                                            child: avatarBytes == null
-                                                ? Text(
-                                                    uName.isNotEmpty ? uName[0].toUpperCase() : 'U',
-                                                    style: const TextStyle(
-                                                      fontWeight: FontWeight.bold,
-                                                      color: Color(0xFF1769D2),
-                                                    ),
-                                                  )
-                                                : null,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Text(
-                                                  uName,
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 13,
-                                                    color: Color(0xFF0F172A),
-                                                  ),
-                                                ),
-                                                Text(
-                                                  '$uTrade • $uCity',
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    color: Color(0xFF64748B),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          if (uPhone.isNotEmpty) ...[
-                                            IconButton(
-                                              visualDensity: VisualDensity.compact,
-                                              padding: EdgeInsets.zero,
-                                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                              icon: const Icon(Icons.call, color: Color(0xFF00C853), size: 19),
-                                              onPressed: () => _makeCall(uPhone),
-                                            ),
-                                            IconButton(
-                                              visualDensity: VisualDensity.compact,
-                                              padding: EdgeInsets.zero,
-                                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                              icon: const Icon(Icons.chat, color: Colors.green, size: 19),
-                                              onPressed: () => _openWhatsApp(uPhone),
-                                            ),
-                                          ],
-                                          IconButton(
-                                            visualDensity: VisualDensity.compact,
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                                            icon: const Icon(Icons.close, color: Colors.grey, size: 18),
-                                            onPressed: () => setState(() => _selectedMapPinId = null),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
+                            onSelected: (_) {
+                              setState(() {
+                                _selectedVillage = '';
+                                _selectedMapPinId = null;
+                                _centerMapOnSelection(city: _selectedCity, village: '');
+                              });
+                            },
+                          ),
+                        ),
+                        ...regionVillages.take(15).map((v) {
+                          final sel = CategoryCityService.normalizeAz(_selectedVillage) == CategoryCityService.normalizeAz(v);
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: ChoiceChip(
+                              label: Text(v),
+                              selected: sel,
+                              visualDensity: VisualDensity.compact,
+                              selectedColor: const Color(0xFF1769D2),
+                              backgroundColor: Colors.white,
+                              side: BorderSide(color: sel ? const Color(0xFF1769D2) : const Color(0xFFE2E8F0)),
+                              labelStyle: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: sel ? Colors.white : const Color(0xFF334155),
                               ),
-                            )
-                          else if (pins.isNotEmpty)
-                            Positioned(
-                              bottom: 8,
-                              left: 12,
-                              right: 12,
-                              child: Center(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.58),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Text(
-                                    'Əlaqə və profil üçün xəritədəki ustanın üzərinə toxunun',
-                                    style: TextStyle(color: Colors.white70, fontSize: 10.5),
-                                  ),
-                                ),
-                              ),
+                              onSelected: (_) {
+                                final nextVillage = sel ? '' : v;
+                                setState(() {
+                                  _selectedVillage = nextVillage;
+                                  _selectedMapPinId = null;
+                                  _centerMapOnSelection(city: _selectedCity, village: nextVillage);
+                                });
+                              },
                             ),
-                        ],
-                      );
-                    },
+                          );
+                        }),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
+
+                  const SizedBox(height: 6),
+                  // İxtisas / Kateqoriya filtri
+                  SizedBox(
+                    height: 30,
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: const Text('Bütün ustalar'),
+                            selected: _selectedMapCategory.isEmpty,
+                            visualDensity: VisualDensity.compact,
+                            selectedColor: const Color(0xFF0F172A),
+                            backgroundColor: const Color(0xFFF8FAFC),
+                            labelStyle: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: _selectedMapCategory.isEmpty ? Colors.white : const Color(0xFF475569),
+                            ),
+                            onSelected: (_) {
+                              setState(() {
+                                _selectedMapCategory = '';
+                                _selectedMapPinId = null;
+                              });
+                            },
+                          ),
+                        ),
+                        ...filterCats.map((cat) {
+                          final rawTitle = (cat['title'] as String).replaceAll('\n', ' ');
+                          final sel = CategoryCityService.normalizeAz(_selectedMapCategory) ==
+                              CategoryCityService.normalizeAz(rawTitle);
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: ChoiceChip(
+                              label: Text(rawTitle),
+                              selected: sel,
+                              visualDensity: VisualDensity.compact,
+                              selectedColor: const Color(0xFF0F172A),
+                              backgroundColor: Colors.white,
+                              side: BorderSide(color: sel ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0)),
+                              labelStyle: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: sel ? Colors.white : const Color(0xFF475569),
+                              ),
+                              onSelected: (_) {
+                                setState(() {
+                                  _selectedMapCategory = sel ? '' : rawTitle;
+                                  _selectedMapPinId = null;
+                                });
+                              },
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // 2. Real Açıq Rəngli Küçə Xəritəsi + Usta Pinləri + Aşağı Kartlar
+          Expanded(
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _ustaStream,
+              builder: (context, snapshot) {
+                final docs = snapshot.data?.docs ?? [];
+                final allArtisans = docs.map((d) {
+                  final m = Map<String, dynamic>.from(d.data());
+                  m['id'] = d.id;
+                  m['uid'] = d.id;
+                  return m;
+                }).where((u) {
+                  if (normQ.isNotEmpty) {
+                    final c = CategoryCityService.normalizeAz((u['city'] ?? '').toString());
+                    final n = CategoryCityService.normalizeAz((u['fullName'] ?? '').toString());
+                    final t = CategoryCityService.normalizeAz((u['category'] ?? '').toString());
+                    final b = CategoryCityService.normalizeAz((u['bio'] ?? '').toString());
+                    if (!c.contains(normQ) && !n.contains(normQ) && !t.contains(normQ) && !b.contains(normQ)) {
+                      return false;
+                    }
+                  }
+                  if (_selectedMapCategory.isNotEmpty) {
+                    final t = CategoryCityService.normalizeAz((u['category'] ?? '').toString());
+                    final target = CategoryCityService.normalizeAz(_selectedMapCategory);
+                    final words = target.split(' ').where((w) => w.length > 3).toList();
+                    final matchesCat = t.contains(target) || words.any((w) => t.contains(w));
+                    if (!matchesCat) return false;
+                  }
+                  return true;
+                }).toList();
+
+                final sc = CategoryCityService.normalizeAz(_selectedCity);
+                final sv = CategoryCityService.normalizeAz(_selectedVillage);
+
+                allArtisans.sort((a, b) {
+                  final aCity = CategoryCityService.normalizeAz((a['city'] ?? '').toString());
+                  final bCity = CategoryCityService.normalizeAz((b['city'] ?? '').toString());
+                  if (sv.isNotEmpty) {
+                    final aV = aCity.contains(sv);
+                    final bV = bCity.contains(sv);
+                    if (aV != bV) return aV ? -1 : 1;
+                  }
+                  final aC = aCity.contains(sc);
+                  final bC = bCity.contains(sc);
+                  if (aC != bC) return aC ? -1 : 1;
+                  final double aRat = (a['rating'] is num) ? (a['rating'] as num).toDouble() : 0.0;
+                  final double bRat = (b['rating'] is num) ? (b['rating'] as num).toDouble() : 0.0;
+                  return bRat.compareTo(aRat);
+                });
+
+                final areaMatches = allArtisans.where((a) {
+                  final c = CategoryCityService.normalizeAz((a['city'] ?? '').toString());
+                  if (sv.isNotEmpty) return c.contains(sv);
+                  return c.contains(sc);
+                }).toList();
+
+                final List<Map<String, dynamic>> displayArtisans =
+                    areaMatches.isNotEmpty ? areaMatches : allArtisans;
+
+                Map<String, dynamic>? selectedPin;
+                if (_selectedMapPinId != null) {
+                  for (final u in allArtisans) {
+                    if (u['id'] == _selectedMapPinId) {
+                      selectedPin = u;
+                      break;
+                    }
+                  }
+                }
+
+                return Stack(
+                  children: [
+                    // Real küçə tile xəritəsi
+                    Positioned.fill(
+                      child: _buildRealSlippyMapCanvas(allArtisans),
+                    ),
+
+                    // Yuxarı sol: tapılan usta sayı göstəricisi
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.95),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withOpacity(0.10), blurRadius: 8, offset: const Offset(0, 2)),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${_selectedVillage.isNotEmpty ? "$_selectedCity, $_selectedVillage" : _selectedCity} • ${areaMatches.length} usta',
+                              style: const TextStyle(
+                                color: Color(0xFF0F172A),
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Sağ tərəf: Zoom (+ / -) və Mərkəzlə düymələri
+                    Positioned(
+                      right: 12,
+                      top: 12,
+                      child: Column(
+                        children: [
+                          _buildMapCircleBtn(
+                            icon: Icons.add_rounded,
+                            tooltip: 'Yaxınlaşdır',
+                            onTap: () {
+                              setState(() => _mapZoom = (_mapZoom + 1.0).clamp(7.0, 17.0));
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          _buildMapCircleBtn(
+                            icon: Icons.remove_rounded,
+                            tooltip: 'Uzaqlaşdır',
+                            onTap: () {
+                              setState(() => _mapZoom = (_mapZoom - 1.0).clamp(7.0, 17.0));
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          _buildMapCircleBtn(
+                            icon: Icons.my_location_rounded,
+                            iconColor: const Color(0xFF1769D2),
+                            tooltip: 'Bölgəyə mərkəzlə',
+                            onTap: () {
+                              setState(() => _centerMapOnSelection());
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Aşağı bölmə: Seçilmiş Usta Kartı və ya Üfüqi Usta Siyahısı
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 12,
+                      child: selectedPin != null
+                          ? Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: _buildMapSpotlightCard(selectedPin),
+                            )
+                          : (displayArtisans.isEmpty
+                              ? Center(
+                                  child: Container(
+                                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.95),
+                                      borderRadius: BorderRadius.circular(14),
+                                      boxShadow: [
+                                        BoxShadow(color: Colors.black.withOpacity(0.10), blurRadius: 8),
+                                      ],
+                                    ),
+                                    child: const Text(
+                                      'Bu axtarış üzrə usta tapılmadı',
+                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF475569)),
+                                    ),
+                                  ),
+                                )
+                              : SizedBox(
+                                  height: 112,
+                                  child: ListView.separated(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: displayArtisans.take(15).length,
+                                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                                    itemBuilder: (context, index) => _buildMapCompactCarouselCard(displayArtisans[index]),
+                                  ),
+                                )),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ],
       ),
     );
   }
 
-  /// Böyüdülmüş Tam Xəritə Modalı (Zoom + Rayon/Kənd + İxtisas axtarışı)
-  Future<void> _showFullMapModal() async {
-    final mapSearchCtrl = TextEditingController();
-    String? modalSelectedPinId = _selectedMapPinId;
+  Widget _buildRealSlippyMapCanvas(List<Map<String, dynamic>> artisans) {
+    final int tileZ = _mapZoom.floor().clamp(7, 17);
+    final int nTiles = 1 << tileZ;
+    final double worldPx = 256.0 * math.pow(2.0, _mapZoom).toDouble();
+    final double tileSize = 256.0 * math.pow(2.0, _mapZoom - tileZ).toDouble();
 
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useRootNavigator: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) {
-          final q = CategoryCityService.normalizeAz(mapSearchCtrl.text);
+    double lngToX(double lng) => ((lng + 180.0) / 360.0) * worldPx;
+    double latToY(double lat) {
+      final double rad = lat.clamp(-85.0, 85.0) * math.pi / 180.0;
+      final double s = math.sin(rad);
+      final double f = 0.5 - math.log((1.0 + s) / (1.0 - s)) / (4.0 * math.pi);
+      return f * worldPx;
+    }
 
-          return SizedBox(
-            height: MediaQuery.of(ctx).size.height * 0.88,
-            child: Column(
-              children: [
-                const SizedBox(height: 10),
-                Container(
-                  width: 42,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(10),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double w = constraints.maxWidth;
+        final double h = constraints.maxHeight;
+        final double centerX = lngToX(_mapLng);
+        final double centerY = latToY(_mapLat);
+
+        final int minTx = ((centerX - w / 2.0) / tileSize).floor().clamp(0, nTiles - 1);
+        final int maxTx = ((centerX + w / 2.0) / tileSize).floor().clamp(0, nTiles - 1);
+        final int minTy = ((centerY - h / 2.0) / tileSize).floor().clamp(0, nTiles - 1);
+        final int maxTy = ((centerY + h / 2.0) / tileSize).floor().clamp(0, nTiles - 1);
+
+        final List<Widget> tileWidgets = [];
+        const subdomains = ['a', 'b', 'c'];
+
+        for (int tx = minTx; tx <= maxTx; tx++) {
+          for (int ty = minTy; ty <= maxTy; ty++) {
+            final double left = w / 2.0 + (tx * tileSize - centerX);
+            final double top = h / 2.0 + (ty * tileSize - centerY);
+            final sub = subdomains[(tx + ty) % 3];
+            final cartoUrl = 'https://$sub.basemaps.cartocdn.com/rastertiles/voyager/$tileZ/$tx/$ty.png';
+            final osmUrl = 'https://tile.openstreetmap.org/$tileZ/$tx/$ty.png';
+
+            tileWidgets.add(
+              Positioned(
+                key: ValueKey('tile_${tileZ}_${tx}_$ty'),
+                left: left,
+                top: top,
+                width: tileSize + 0.6,
+                height: tileSize + 0.6,
+                child: Image.network(
+                  cartoUrl,
+                  fit: BoxFit.fill,
+                  gaplessPlayback: true,
+                  errorBuilder: (_, __, ___) => Image.network(
+                    osmUrl,
+                    fit: BoxFit.fill,
+                    gaplessPlayback: true,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: Row(
+              ),
+            );
+          }
+        }
+
+        final List<Widget> pinWidgets = [];
+        for (final u in artisans) {
+          final uid = (u['id'] ?? '').toString();
+          final uCity = (u['city'] ?? 'Bakı').toString();
+          final coords = CategoryCityService.resolveArtisanCoordinates(uCity, uid);
+          final double px = w / 2.0 + (lngToX(coords[1]) - centerX);
+          final double py = h / 2.0 + (latToY(coords[0]) - centerY);
+          if (px < -70 || px > w + 70 || py < -70 || py > h + 70) continue;
+
+          pinWidgets.add(_buildMapPinMarker(u, uid, px, py));
+        }
+
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            if (_selectedMapPinId != null) {
+              setState(() => _selectedMapPinId = null);
+            }
+          },
+          onPanUpdate: (details) {
+            final double cx = centerX - details.delta.dx;
+            final double cy = centerY - details.delta.dy;
+            final double nLng = ((cx / worldPx) * 360.0 - 180.0).clamp(43.5, 52.0);
+            final double yF = (cy / worldPx).clamp(0.01, 0.99);
+            final double n = math.pi - 2.0 * math.pi * yF;
+            final double nLat = (180.0 / math.pi * math.atan(0.5 * (math.exp(n) - math.exp(-n)))).clamp(37.5, 42.6);
+            setState(() {
+              _mapLat = nLat;
+              _mapLng = nLng;
+            });
+          },
+          child: ClipRect(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: CustomPaint(painter: _BrightStreetMapFallbackPainter()),
+                ),
+                ...tileWidgets,
+                ...pinWidgets,
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMapPinMarker(Map<String, dynamic> u, String uid, double px, double py) {
+    final bool isSelected = _selectedMapPinId == uid;
+    final String uName = (u['fullName'] ?? 'Usta').toString();
+    final String shortName = uName.split(' ').first;
+    final String uTrade = (u['category'] ?? 'Usta').toString();
+    final avatarBytes = _decodeB64(u['photoBase64'] as String?);
+
+    return Positioned(
+      left: px - 42,
+      top: py - 58,
+      width: 84,
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedMapPinId = isSelected ? null : uid;
+          });
+        },
+        child: AnimatedScale(
+          scale: isSelected ? 1.15 : 1.0,
+          duration: const Duration(milliseconds: 160),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(2.5),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isSelected ? const Color(0xFFF59E0B) : const Color(0xFF1769D2),
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.24),
+                      blurRadius: 6,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: CircleAvatar(
+                  radius: 15,
+                  backgroundColor: Colors.white,
+                  backgroundImage: avatarBytes != null ? MemoryImage(avatarBytes) : null,
+                  child: avatarBytes == null
+                      ? Text(
+                          uName.isNotEmpty ? uName[0].toUpperCase() : 'U',
+                          style: TextStyle(
+                            color: isSelected ? const Color(0xFFB45309) : const Color(0xFF1769D2),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        )
+                      : null,
+                ),
+              ),
+              Container(
+                margin: const EdgeInsets.only(top: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFF1769D2) : Colors.white.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isSelected ? const Color(0xFF1769D2) : const Color(0xFFCBD5E1),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.14),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  isSelected ? '$shortName ($uTrade)' : shortName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : const Color(0xFF0F172A),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMapCircleBtn({
+    required IconData icon,
+    required VoidCallback onTap,
+    String? tooltip,
+    Color iconColor = const Color(0xFF0F172A),
+  }) {
+    return Material(
+      color: Colors.white.withOpacity(0.95),
+      elevation: 4,
+      shadowColor: Colors.black26,
+      shape: const CircleBorder(),
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Tooltip(
+          message: tooltip ?? '',
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Icon(icon, color: iconColor, size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMapSpotlightCard(Map<String, dynamic> u) {
+    final uName = (u['fullName'] ?? 'Usta').toString();
+    final uTrade = (u['category'] ?? 'Usta').toString();
+    final uCity = (u['city'] ?? 'Bakı').toString();
+    final uPhone = (u['phone'] ?? '').toString();
+    final rating = u['rating'] != null ? u['rating'].toString() : 'Yeni';
+    final avatarBytes = _decodeB64(u['photoBase64'] as String?);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.16), blurRadius: 14, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Row(
+        children: [
+          InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => ArtisanDetailScreen(artisanData: u)),
+              );
+            },
+            child: CircleAvatar(
+              radius: 26,
+              backgroundColor: const Color(0xFFEFF6FF),
+              backgroundImage: avatarBytes != null ? MemoryImage(avatarBytes) : null,
+              child: avatarBytes == null
+                  ? Text(
+                      uName.isNotEmpty ? uName[0].toUpperCase() : 'U',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF1769D2)),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => ArtisanDetailScreen(artisanData: u)),
+                );
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
                     children: [
-                      const Icon(Icons.map_rounded, color: Color(0xFF059669)),
-                      const SizedBox(width: 8),
-                      Expanded(
+                      Flexible(
                         child: Text(
-                          'Xəritədə Ustalar (${_selectedVillage.isNotEmpty ? "$_selectedCity, $_selectedVillage" : _selectedCity})',
+                          uName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A)),
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(ctx),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.verified, color: Color(0xFF1769D2), size: 15),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$uTrade • $uCity',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
+                      const SizedBox(width: 3),
+                      Text(rating, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (uPhone.isNotEmpty) ...[
+            IconButton(
+              icon: const Icon(Icons.call, color: Color(0xFF00C853), size: 22),
+              tooltip: 'Zəng et',
+              onPressed: () => _makeCall(uPhone),
+            ),
+            IconButton(
+              icon: const Icon(Icons.chat, color: Colors.green, size: 22),
+              tooltip: 'WhatsApp',
+              onPressed: () => _openWhatsApp(uPhone),
+            ),
+          ],
+          IconButton(
+            icon: const Icon(Icons.close, color: Colors.grey, size: 20),
+            onPressed: () => setState(() => _selectedMapPinId = null),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMapCompactCarouselCard(Map<String, dynamic> u) {
+    final uid = (u['id'] ?? '').toString();
+    final uName = (u['fullName'] ?? 'Usta').toString();
+    final uTrade = (u['category'] ?? 'Usta').toString();
+    final uCity = (u['city'] ?? 'Bakı').toString();
+    final uPhone = (u['phone'] ?? '').toString();
+    final avatarBytes = _decodeB64(u['photoBase64'] as String?);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () {
+        final coords = CategoryCityService.resolveArtisanCoordinates(uCity, uid);
+        setState(() {
+          _selectedMapPinId = uid;
+          _mapLat = coords[0];
+          _mapLng = coords[1];
+          if (_mapZoom < 13.0) _mapZoom = 13.5;
+        });
+      },
+      child: Container(
+        width: 245,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.97),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.10), blurRadius: 8, offset: const Offset(0, 3)),
+          ],
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: const Color(0xFFEFF6FF),
+              backgroundImage: avatarBytes != null ? MemoryImage(avatarBytes) : null,
+              child: avatarBytes == null
+                  ? Text(
+                      uName.isNotEmpty ? uName[0].toUpperCase() : 'U',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    uName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: Color(0xFF0F172A)),
+                  ),
+                  Text(
+                    uTrade,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11.5, color: Color(0xFF1769D2), fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on, size: 11, color: Colors.redAccent),
+                      const SizedBox(width: 2),
+                      Expanded(
+                        child: Text(
+                          uCity,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                        ),
                       ),
                     ],
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: TextField(
-                    controller: mapSearchCtrl,
-                    onChanged: (_) => setModalState(() {}),
-                    decoration: InputDecoration(
-                      hintText: 'Rayon, kənd, usta adı və ya peşə axtar...',
-                      prefixIcon: const Icon(Icons.search),
-                      filled: true,
-                      fillColor: const Color(0xFFF1F5F9),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: _ustaStream,
-                    builder: (context, snapshot) {
-                      final docs = snapshot.data?.docs ?? [];
-                      final filtered = docs.map((d) {
-                        final m = Map<String, dynamic>.from(d.data());
-                        m['id'] = d.id;
-                        m['uid'] = d.id;
-                        return m;
-                      }).where((u) {
-                        if (q.isEmpty) return true;
-                        final c = CategoryCityService.normalizeAz((u['city'] ?? '').toString());
-                        final n = CategoryCityService.normalizeAz((u['fullName'] ?? '').toString());
-                        final t = CategoryCityService.normalizeAz((u['category'] ?? '').toString());
-                        return c.contains(q) || n.contains(q) || t.contains(q);
-                      }).toList();
-
-                      final sc = CategoryCityService.normalizeAz(_selectedCity);
-                      final sv = CategoryCityService.normalizeAz(_selectedVillage);
-                      filtered.sort((a, b) {
-                        final aCity = CategoryCityService.normalizeAz((a['city'] ?? '').toString());
-                        final bCity = CategoryCityService.normalizeAz((b['city'] ?? '').toString());
-                        if (sv.isNotEmpty) {
-                          final aV = aCity.contains(sv);
-                          final bV = bCity.contains(sv);
-                          if (aV != bV) return aV ? -1 : 1;
-                        }
-                        final aC = aCity.contains(sc);
-                        final bC = bCity.contains(sc);
-                        if (aC != bC) return aC ? -1 : 1;
-                        return 0;
-                      });
-
-                      const slots = [
-                        Offset(0.46, 0.40),
-                        Offset(0.22, 0.22),
-                        Offset(0.72, 0.24),
-                        Offset(0.18, 0.60),
-                        Offset(0.75, 0.62),
-                        Offset(0.35, 0.72),
-                        Offset(0.60, 0.74),
-                        Offset(0.58, 0.16),
-                        Offset(0.32, 0.36),
-                        Offset(0.62, 0.44),
-                        Offset(0.14, 0.42),
-                        Offset(0.82, 0.40),
-                      ];
-                      final mapPins = filtered.take(slots.length).toList();
-
-                      return Column(
-                        children: [
-                          SizedBox(
-                            height: 260,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(18),
-                                child: InteractiveViewer(
-                                  minScale: 1.0,
-                                  maxScale: 2.5,
-                                  child: LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      final w = constraints.maxWidth;
-                                      final h = constraints.maxHeight;
-                                      return Stack(
-                                        children: [
-                                          Positioned.fill(
-                                            child: CustomPaint(painter: _InteractiveMapBackgroundPainter()),
-                                          ),
-                                          for (int i = 0; i < mapPins.length; i++)
-                                            Builder(
-                                              builder: (context) {
-                                                final u = mapPins[i];
-                                                final uid = (u['id'] ?? '').toString();
-                                                final base = slots[i];
-                                                final px = (w * base.dx).clamp(16.0, w - 85.0);
-                                                final py = (h * base.dy).clamp(16.0, h - 55.0);
-                                                final isSel = modalSelectedPinId == uid;
-                                                final uName = (u['fullName'] ?? 'Usta').toString();
-                                                final avatarBytes = _decodeB64(u['photoBase64'] as String?);
-                                                return Positioned(
-                                                  left: px,
-                                                  top: py,
-                                                  child: GestureDetector(
-                                                    onTap: () {
-                                                      setModalState(() => modalSelectedPinId = uid);
-                                                    },
-                                                    child: Column(
-                                                      mainAxisSize: MainAxisSize.min,
-                                                      children: [
-                                                        Container(
-                                                          padding: const EdgeInsets.all(2),
-                                                          decoration: BoxDecoration(
-                                                            shape: BoxShape.circle,
-                                                            color: isSel ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
-                                                          ),
-                                                          child: CircleAvatar(
-                                                            radius: isSel ? 17 : 14,
-                                                            backgroundColor: const Color(0xFF1E293B),
-                                                            backgroundImage: avatarBytes != null ? MemoryImage(avatarBytes) : null,
-                                                            child: avatarBytes == null
-                                                                ? Text(
-                                                                    uName.isNotEmpty ? uName[0].toUpperCase() : 'U',
-                                                                    style: const TextStyle(
-                                                                      color: Colors.white,
-                                                                      fontWeight: FontWeight.bold,
-                                                                      fontSize: 11,
-                                                                    ),
-                                                                  )
-                                                                : null,
-                                                          ),
-                                                        ),
-                                                        Container(
-                                                          margin: const EdgeInsets.only(top: 2),
-                                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                                          decoration: BoxDecoration(
-                                                            color: isSel ? const Color(0xFF1769D2) : Colors.black87,
-                                                            borderRadius: BorderRadius.circular(6),
-                                                          ),
-                                                          child: Text(
-                                                            uName.split(' ').first,
-                                                            style: const TextStyle(color: Colors.white, fontSize: 9.5),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                        ],
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Expanded(
-                            child: filtered.isEmpty
-                                ? const Center(child: Text('Uyğun usta tapılmadı', style: TextStyle(color: Colors.grey)))
-                                : ListView.separated(
-                                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                                    itemCount: filtered.length,
-                                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                                    itemBuilder: (context, index) {
-                                      final u = filtered[index];
-                                      final uid = (u['id'] ?? '').toString();
-                                      final isSel = modalSelectedPinId == uid;
-                                      final uName = (u['fullName'] ?? 'Usta').toString();
-                                      final uTrade = (u['category'] ?? 'Usta').toString();
-                                      final uCity = (u['city'] ?? 'Bakı').toString();
-                                      final uPhone = (u['phone'] ?? '').toString();
-                                      final avatarBytes = _decodeB64(u['photoBase64'] as String?);
-                                      return InkWell(
-                                        borderRadius: BorderRadius.circular(14),
-                                        onTap: () {
-                                          Navigator.pop(ctx);
-                                          Navigator.push(
-                                            this.context,
-                                            MaterialPageRoute(builder: (_) => ArtisanDetailScreen(artisanData: u)),
-                                          );
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.all(10),
-                                          decoration: BoxDecoration(
-                                            color: isSel ? const Color(0xFFFFFBEB) : const Color(0xFFF8FAFC),
-                                            borderRadius: BorderRadius.circular(14),
-                                            border: Border.all(
-                                              color: isSel ? const Color(0xFFF59E0B) : const Color(0xFFE2E8F0),
-                                            ),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              CircleAvatar(
-                                                radius: 22,
-                                                backgroundColor: const Color(0xFF1769D2).withOpacity(0.12),
-                                                backgroundImage: avatarBytes != null ? MemoryImage(avatarBytes) : null,
-                                                child: avatarBytes == null
-                                                    ? Text(
-                                                        uName.isNotEmpty ? uName[0].toUpperCase() : 'U',
-                                                        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
-                                                      )
-                                                    : null,
-                                              ),
-                                              const SizedBox(width: 10),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(uName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                                    const SizedBox(height: 2),
-                                                    Text(
-                                                      '$uTrade • $uCity',
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                      style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              if (uPhone.isNotEmpty) ...[
-                                                IconButton(
-                                                  icon: const Icon(Icons.call, color: Color(0xFF00C853), size: 20),
-                                                  onPressed: () => _makeCall(uPhone),
-                                                ),
-                                                IconButton(
-                                                  icon: const Icon(Icons.chat, color: Colors.green, size: 20),
-                                                  onPressed: () => _openWhatsApp(uPhone),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          );
-        },
+            if (uPhone.isNotEmpty)
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                icon: const Icon(Icons.call, color: Color(0xFF00C853), size: 19),
+                onPressed: () => _makeCall(uPhone),
+              ),
+          ],
+        ),
       ),
     );
-    mapSearchCtrl.dispose();
   }
 
   // BÖLMƏ BAŞLIĞI
@@ -3357,7 +3574,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // AŞAĞI NAVİQASİYA (Dizayndakı kimi 5 tab)
+  // AŞAĞI NAVİQASİYA (6 tab: Alış-Satış ilə Mesajlar arasında Xəritə bölməsi)
   Widget _buildBottomNav() {
     return Container(
       decoration: BoxDecoration(
@@ -3384,31 +3601,36 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.white,
         selectedItemColor: const Color(0xFF1769D2),
         unselectedItemColor: const Color(0xFF94A3B8),
-        selectedFontSize: 11,
-        unselectedFontSize: 11,
+        selectedFontSize: 10.5,
+        unselectedFontSize: 10,
         elevation: 0,
-        items: [
-          const BottomNavigationBarItem(
+        items: const [
+          BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
             activeIcon: Icon(Icons.home_filled),
             label: 'Ana səhifə',
           ),
-          const BottomNavigationBarItem(
+          BottomNavigationBarItem(
             icon: Icon(Icons.play_circle_outline),
             activeIcon: Icon(Icons.play_circle_fill),
             label: 'Shorts',
           ),
-          const BottomNavigationBarItem(
+          BottomNavigationBarItem(
             icon: Icon(Icons.storefront_outlined),
             activeIcon: Icon(Icons.storefront_rounded),
             label: 'Alış-Satış',
           ),
-          const BottomNavigationBarItem(
+          BottomNavigationBarItem(
+            icon: Icon(Icons.map_outlined),
+            activeIcon: Icon(Icons.map_rounded),
+            label: 'Xəritə',
+          ),
+          BottomNavigationBarItem(
             icon: Icon(Icons.chat_bubble_outline),
             activeIcon: Icon(Icons.chat_bubble),
             label: 'Mesajlar',
           ),
-          const BottomNavigationBarItem(
+          BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
             activeIcon: Icon(Icons.person),
             label: 'Profil',
@@ -6881,88 +7103,59 @@ class _AuthorNameText extends StatelessWidget {
   }
 }
 
-/// Ana səhifədəki "Xəritədə Yaxın Ustalar" vidceti üçün müasir vektor xəritə fonu
-class _InteractiveMapBackgroundPainter extends CustomPainter {
+/// Açıq rəngli xəritə altlığı (tile-lar yüklənərkən və ya offline olduqda Google Maps üslublu fon)
+class _BrightStreetMapFallbackPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final bgPaint = Paint()
-      ..shader = const LinearGradient(
-        colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F2942)],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), bgPaint);
-
-    // İncə koordinat toru
-    final gridPaint = Paint()
-      ..color = Colors.white.withOpacity(0.05)
-      ..strokeWidth = 1;
-    for (double x = 0; x < size.width; x += 28) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
-    }
-    for (double y = 0; y < size.height; y += 28) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-
-    // Məhəllə blokları
-    final blockPaint = Paint()..color = Colors.white.withOpacity(0.04);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(size.width * 0.08, size.height * 0.18, size.width * 0.22, size.height * 0.25), const Radius.circular(8)),
-      blockPaint,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(size.width * 0.56, size.height * 0.14, size.width * 0.28, size.height * 0.24), const Radius.circular(8)),
-      blockPaint,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(size.width * 0.26, size.height * 0.55, size.width * 0.34, size.height * 0.26), const Radius.circular(8)),
-      blockPaint,
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Paint()..color = const Color(0xFFEEF2F6),
     );
 
-    // Əsas yollar və prospektlər
-    final majorRoadPaint = Paint()
-      ..color = const Color(0xFF38BDF8).withOpacity(0.18)
-      ..strokeWidth = 6
+    final parkPaint = Paint()..color = const Color(0xFFDCFCE7);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(size.width * 0.08, size.height * 0.18, size.width * 0.24, size.height * 0.20),
+        const Radius.circular(14),
+      ),
+      parkPaint,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(size.width * 0.64, size.height * 0.56, size.width * 0.26, size.height * 0.22),
+        const Radius.circular(16),
+      ),
+      parkPaint,
+    );
+
+    final waterPaint = Paint()..color = const Color(0xFFD6EAFF);
+    final seaPath = Path()
+      ..moveTo(size.width * 0.78, 0)
+      ..quadraticBezierTo(size.width * 0.68, size.height * 0.35, size.width * 0.88, size.height)
+      ..lineTo(size.width, size.height)
+      ..lineTo(size.width, 0)
+      ..close();
+    canvas.drawPath(seaPath, waterPaint);
+
+    final roadPaint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 7
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
-    final minorRoadPaint = Paint()
-      ..color = Colors.white.withOpacity(0.10)
-      ..strokeWidth = 2.5
+    final highwayPaint = Paint()
+      ..color = const Color(0xFFFDE68A)
+      ..strokeWidth = 5
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
 
     final mainRoad = Path()
-      ..moveTo(0, size.height * 0.45)
-      ..quadraticBezierTo(size.width * 0.42, size.height * 0.32, size.width, size.height * 0.58);
-    canvas.drawPath(mainRoad, majorRoadPaint);
+      ..moveTo(0, size.height * 0.44)
+      ..quadraticBezierTo(size.width * 0.44, size.height * 0.36, size.width * 0.85, size.height * 0.55);
+    canvas.drawPath(mainRoad, roadPaint);
+    canvas.drawPath(mainRoad, highwayPaint);
 
-    final crossRoad = Path()
-      ..moveTo(size.width * 0.35, 0)
-      ..quadraticBezierTo(size.width * 0.48, size.height * 0.5, size.width * 0.40, size.height);
-    canvas.drawPath(crossRoad, minorRoadPaint);
-
-    final secRoad = Path()
-      ..moveTo(size.width * 0.72, 0)
-      ..lineTo(size.width * 0.62, size.height);
-    canvas.drawPath(secRoad, minorRoadPaint);
-
-    // Mərkəzi radar dairələri
-    final center = Offset(size.width * 0.45, size.height * 0.46);
-    for (final r in [34.0, 68.0, 108.0]) {
-      canvas.drawCircle(
-        center,
-        r,
-        Paint()
-          ..color = const Color(0xFF34D399).withOpacity(0.14)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2,
-      );
-    }
-    canvas.drawCircle(
-      center,
-      5,
-      Paint()..color = const Color(0xFF34D399).withOpacity(0.8),
-    );
+    canvas.drawLine(Offset(size.width * 0.36, 0), Offset(size.width * 0.42, size.height), roadPaint);
+    canvas.drawLine(Offset(0, size.height * 0.72), Offset(size.width * 0.75, size.height * 0.66), roadPaint);
   }
 
   @override
