@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -25,6 +26,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String _selectedRole = 'usta';
   String _selectedCategory = 'Tikinti';
   String _selectedCity = 'Bakı';
+  double _selectedLat = 40.4093;
+  double _selectedLng = 49.8671;
+  double _mapZoom = 13.5;
+  bool _isLocationConfirmed = false;
+  bool _isDraggingMap = false;
   Uint8List? _profileImageBytes;
   bool _isLoading = false;
   bool _obscurePass = true;
@@ -76,6 +82,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _passController.dispose();
     _districtController.dispose();
     super.dispose();
+  }
+
+  void _syncMapToSelectedLocation({bool markConfirmed = false}) {
+    final district = _districtController.text.trim();
+    final coords = CategoryCityService.getCoordinates(_selectedCity, district);
+    _selectedLat = coords[0];
+    _selectedLng = coords[1];
+    _mapZoom = district.isNotEmpty ? 14.0 : 12.5;
+    _isLocationConfirmed = markConfirmed;
   }
 
   // İstəyə bağlı profil şəkli seçmək
@@ -210,12 +225,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (selected != null && mounted) {
       setState(() {
         _districtController.text = selected;
+        _syncMapToSelectedLocation();
       });
     }
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final bool requiresLocationConfirm = _selectedRole == 'usta' || _selectedRole == 'worker';
+    if (requiresLocationConfirm && !_isLocationConfirmed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Usta və fəhlə qeydiyyatı üçün xəritədə dəqiq konumu təsdiqləmək vacibdir!'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -229,8 +256,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _passController.text,
         phone: _phoneController.text,
         role: _selectedRole,
-        category: _selectedRole == 'usta' ? _selectedCategory : null,
+        category: _selectedRole == 'usta'
+            ? _selectedCategory
+            : (_selectedRole == 'worker' ? 'Fəhlə (Köməkçi işlər)' : null),
         city: fullCity,
+        lat: _selectedLat,
+        lng: _selectedLng,
         profileImageBytes: _profileImageBytes,
       );
 
@@ -302,6 +333,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       body: Form(
         key: _formKey,
         child: ListView(
+          physics: _isDraggingMap ? const NeverScrollableScrollPhysics() : null,
           padding: const EdgeInsets.all(24),
           children: [
             // Profil Şəkli Seçimi (İstəyə bağlı)
@@ -417,6 +449,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         setState(() {
                           _selectedCity = val;
                           _districtController.clear();
+                          _syncMapToSelectedLocation();
                         });
                       }
                     },
@@ -427,7 +460,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   flex: 6,
                   child: TextFormField(
                     controller: _districtController,
-                    onChanged: (_) => setState(() {}),
+                    onChanged: (_) {
+                      setState(() {
+                        _syncMapToSelectedLocation();
+                      });
+                    },
                     decoration: InputDecoration(
                       labelText: 'Kənd / Qəsəbə / Ərazi *',
                       hintText: 'Məs: Maştağa, Yasamal',
@@ -468,6 +505,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       onPressed: () {
                         setState(() {
                           _districtController.text = village;
+                          _syncMapToSelectedLocation();
                         });
                       },
                     ),
@@ -475,6 +513,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 }).toList(),
               ),
             ),
+            if (_selectedRole == 'usta' || _selectedRole == 'worker') ...[
+              const SizedBox(height: 14),
+              _buildRegistrationMapPickerCard(),
+            ],
             const SizedBox(height: 14),
 
             // Telefon Nömrəsi
@@ -555,6 +597,233 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRegistrationMapPickerCard() {
+    final int tileZ = _mapZoom.floor().clamp(8, 17);
+    final int nTiles = 1 << tileZ;
+    final double worldPx = 256.0 * math.pow(2.0, _mapZoom).toDouble();
+    final double tileSize = 256.0 * math.pow(2.0, _mapZoom - tileZ).toDouble();
+
+    double lngToX(double lng) => ((lng + 180.0) / 360.0) * worldPx;
+    double latToY(double lat) {
+      final double rad = lat.clamp(-85.0, 85.0) * math.pi / 180.0;
+      final double s = math.sin(rad);
+      final double f = 0.5 - math.log((1.0 + s) / (1.0 - s)) / (4.0 * math.pi);
+      return f * worldPx;
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: _isLocationConfirmed ? const Color(0xFF10B981) : const Color(0xFFEF4444).withOpacity(0.55),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+            child: Row(
+              children: [
+                Icon(
+                  _isLocationConfirmed ? Icons.verified_rounded : Icons.add_location_alt_rounded,
+                  color: _isLocationConfirmed ? const Color(0xFF059669) : const Color(0xFF1769D2),
+                  size: 20,
+                ),
+                const SizedBox(width: 6),
+                const Expanded(
+                  child: Text(
+                    'Xəritədə Dəqiq Konumunuz (Vacib *)',
+                    style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                  ),
+                ),
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                  ),
+                  onPressed: () => setState(() => _syncMapToSelectedLocation()),
+                  icon: const Icon(Icons.my_location_rounded, size: 15),
+                  label: const Text('Bölgəyə mərkəzlə', style: TextStyle(fontSize: 11)),
+                ),
+              ],
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              'Xəritəni sürüşdürərək işlədiyiniz dəqiq yeri mərkəz nişanının altına gətirin və təsdiqləyin.',
+              style: TextStyle(fontSize: 11.5, color: Color(0xFF64748B)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 215,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Listener(
+                onPointerDown: (_) {
+                  if (!_isDraggingMap) setState(() => _isDraggingMap = true);
+                },
+                onPointerUp: (_) {
+                  if (_isDraggingMap) setState(() => _isDraggingMap = false);
+                },
+                onPointerCancel: (_) {
+                  if (_isDraggingMap) setState(() => _isDraggingMap = false);
+                },
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final double w = constraints.maxWidth;
+                    final double h = constraints.maxHeight;
+                    final double centerX = lngToX(_selectedLng);
+                    final double centerY = latToY(_selectedLat);
+
+                    final int minTx = ((centerX - w / 2.0) / tileSize).floor().clamp(0, nTiles - 1);
+                    final int maxTx = ((centerX + w / 2.0) / tileSize).floor().clamp(0, nTiles - 1);
+                    final int minTy = ((centerY - h / 2.0) / tileSize).floor().clamp(0, nTiles - 1);
+                    final int maxTy = ((centerY + h / 2.0) / tileSize).floor().clamp(0, nTiles - 1);
+
+                    final List<Widget> tileWidgets = [];
+                    for (int tx = minTx; tx <= maxTx; tx++) {
+                      for (int ty = minTy; ty <= maxTy; ty++) {
+                        final double left = w / 2.0 + (tx * tileSize - centerX);
+                        final double top = h / 2.0 + (ty * tileSize - centerY);
+                        final int sub = (tx + ty) % 4;
+                        final String googleTileUrl = 'https://mt$sub.google.com/vt/lyrs=m&x=$tx&y=$ty&z=$tileZ&hl=az';
+                        final String arcgisUrl =
+                            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/$tileZ/$ty/$tx';
+
+                        tileWidgets.add(
+                          Positioned(
+                            key: ValueKey('reg_tile_${tileZ}_${tx}_$ty'),
+                            left: left,
+                            top: top,
+                            width: tileSize + 0.6,
+                            height: tileSize + 0.6,
+                            child: Image.network(
+                              googleTileUrl,
+                              fit: BoxFit.fill,
+                              gaplessPlayback: true,
+                              errorBuilder: (_, __, ___) => Image.network(
+                                arcgisUrl,
+                                fit: BoxFit.fill,
+                                gaplessPlayback: true,
+                                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                    }
+
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onPanUpdate: (details) {
+                        final double cx = centerX - details.delta.dx;
+                        final double cy = centerY - details.delta.dy;
+                        final double nLng = ((cx / worldPx) * 360.0 - 180.0).clamp(43.5, 52.0);
+                        final double yF = (cy / worldPx).clamp(0.01, 0.99);
+                        final double n = math.pi - 2.0 * math.pi * yF;
+                        final double nLat =
+                            (180.0 / math.pi * math.atan(0.5 * (math.exp(n) - math.exp(-n)))).clamp(37.5, 42.6);
+                        setState(() {
+                          _selectedLat = nLat;
+                          _selectedLng = nLng;
+                          _isLocationConfirmed = true;
+                        });
+                      },
+                      child: Stack(
+                        children: [
+                          Container(color: const Color(0xFFEAF2F8)),
+                          ...tileWidgets,
+                          const Center(
+                            child: Padding(
+                              padding: EdgeInsets.only(bottom: 24),
+                              child: Icon(
+                                Icons.location_on_rounded,
+                                color: Color(0xFFDC2626),
+                                size: 40,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            right: 8,
+                            top: 8,
+                            child: Column(
+                              children: [
+                                _buildMiniZoomBtn(
+                                  icon: Icons.add,
+                                  onTap: () => setState(() => _mapZoom = (_mapZoom + 1.0).clamp(8.0, 17.0)),
+                                ),
+                                const SizedBox(height: 6),
+                                _buildMiniZoomBtn(
+                                  icon: Icons.remove,
+                                  onTap: () => setState(() => _mapZoom = (_mapZoom - 1.0).clamp(8.0, 17.0)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _isLocationConfirmed ? const Color(0xFF059669) : const Color(0xFF1769D2),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                setState(() {
+                  _isLocationConfirmed = true;
+                });
+              },
+              icon: Icon(_isLocationConfirmed ? Icons.check_circle_rounded : Icons.pin_drop_rounded, size: 18),
+              label: Text(
+                _isLocationConfirmed
+                    ? '✓ Konum Təsdiqləndi (${_selectedLat.toStringAsFixed(4)}, ${_selectedLng.toStringAsFixed(4)})'
+                    : 'Konumu Təsdiqlə (Vacib *)',
+                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniZoomBtn({required IconData icon, required VoidCallback onTap}) {
+    return Material(
+      color: Colors.white.withOpacity(0.92),
+      elevation: 3,
+      shape: const CircleBorder(),
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: Icon(icon, size: 18, color: const Color(0xFF0F172A)),
         ),
       ),
     );

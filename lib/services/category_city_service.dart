@@ -208,6 +208,22 @@ class CategoryCityService {
       'Sahil',
       'Səngəçal',
       'Ələt',
+      'Qobu',
+      'Hökməli',
+      'Xocasən',
+      'Keşlə',
+      '8-ci km',
+      'Ağ Şəhər',
+      'Bayıl',
+      'İçərişəhər',
+      'Yeni Yasamal',
+      'Montin',
+      'Neftçilər',
+      'Xalqlar Dostluğu',
+      'Həzi Aslanov',
+      'Koroğlu',
+      'Qara Qarayev',
+      'Yeni Suraxanı',
     ],
     'Sumqayıt': [
       'Mərkəz',
@@ -215,6 +231,8 @@ class CategoryCityService {
       'Hacı Zeynalabdin',
       'Saray',
       'Novxanı',
+      'Ceyranbatan',
+      'Qobu',
       'Yaşma',
       '17-ci mikrorayon',
       '9-cu mikrorayon',
@@ -361,6 +379,7 @@ class CategoryCityService {
     return input
         .toLowerCase()
         .replaceAll('ə', 'e')
+        .replaceAll('?', 'e')
         .replaceAll('ş', 's')
         .replaceAll('ç', 'c')
         .replaceAll('ğ', 'g')
@@ -551,6 +570,49 @@ class CategoryCityService {
     'Sahil': [40.2280, 49.5750],
     'Səngəçal': [40.1720, 49.4580],
     'Ələt': [39.9410, 49.4060],
+    'Qobu': [40.4047, 49.7131],
+    'Qobu Park': [40.3950, 49.7180],
+    'Hökməli': [40.4244, 49.7228],
+    'Xocasən': [40.4150, 49.7660],
+    'Ceyranbatan': [40.5419, 49.6908],
+    'Digah': [40.4925, 49.8747],
+    'Məmmədli': [40.5064, 49.9142],
+    'Fatmayı': [40.5567, 49.8469],
+    'Görədil': [40.5625, 49.8189],
+    'Müşfiqabad': [40.4439, 49.6203],
+    '28 May': [40.4414, 49.6692],
+    'Güzdək': [40.3742, 49.6803],
+    'Aşağı Güzdək': [40.4578, 49.6872],
+    'Keşlə': [40.4050, 49.9030],
+    '8-ci km': [40.4060, 49.9440],
+    'Qaraşəhər': [40.3820, 49.8820],
+    'Ağ Şəhər': [40.3825, 49.8950],
+    'Bayıl': [40.3420, 49.8350],
+    '20-ci sahə': [40.3310, 49.8180],
+    'İçərişəhər': [40.3661, 49.8352],
+    'Yeni Yasamal': [40.3910, 49.7820],
+    '20 Yanvar': [40.4042, 49.8075],
+    'Elmlər': [40.3753, 49.8156],
+    'İnşaatçılar': [40.3892, 49.8025],
+    'Gənclik': [40.4003, 49.8519],
+    'Montin': [40.4120, 49.8680],
+    'Memar Əcəmi': [40.4150, 49.8140],
+    'Neftçilər': [40.4117, 49.9425],
+    'Xalqlar Dostluğu': [40.3972, 49.9531],
+    'Həzi Aslanov': [40.3731, 49.9536],
+    'Koroğlu': [40.4208, 49.9181],
+    'Qara Qarayev': [40.4183, 49.9347],
+    'Dərnəgül': [40.4256, 49.8617],
+    'Azadlıq': [40.4261, 49.8417],
+    '7-ci mkr': [40.4280, 49.8520],
+    '8-ci mkr': [40.4240, 49.8380],
+    '9-cu mkr': [40.4220, 49.8080],
+    'Rəsulzadə': [40.4380, 49.8380],
+    'Binəqədi kəndi': [40.4640, 49.8260],
+    'Yeni Suraxanı': [40.4320, 50.0320],
+    'Qobustan qəs.': [40.0820, 49.4120],
+    'Puta': [40.2960, 49.6600],
+    'Qızıldaş': [40.3520, 49.6780],
     'Masazır': [40.4710, 49.7660],
     'Saray': [40.5330, 49.7180],
     'Novxanı': [40.5310, 49.7820],
@@ -571,7 +633,7 @@ class CategoryCityService {
     'Horadiz': [39.4486, 47.3397],
   };
 
-  /// Seçilmiş şəhər/rayon və kənd üçün [lat, lng] qaytarır
+  /// Seçilmiş şəhər/rayon və kənd üçün dəqiq [lat, lng] qaytarır
   static List<double> getCoordinates(String region, [String village = '']) {
     final normV = normalizeAz(village);
     if (normV.isNotEmpty) {
@@ -580,29 +642,35 @@ class CategoryCityService {
           return entry.value;
         }
       }
-    }
-
-    List<double> base = const [40.4093, 49.8671];
-    final normR = normalizeAz(region);
-    for (final entry in regionCoordinates.entries) {
-      if (normalizeAz(entry.key) == normR) {
-        base = entry.value;
-        break;
+      for (final entry in villageCoordinates.entries) {
+        final kNorm = normalizeAz(entry.key);
+        if (normV.contains(kNorm) || kNorm.contains(normV)) {
+          return entry.value;
+        }
       }
     }
 
-    if (normV.isNotEmpty && normV != 'merkez') {
-      final h = normV.codeUnits.fold<int>(0, (acc, c) => (acc * 31 + c) & 0x7FFFFFFF);
-      final dLat = ((h % 13) - 6) * 0.0045;
-      final dLng = (((h ~/ 13) % 13) - 6) * 0.0055;
-      return [base[0] + dLat, base[1] + dLng];
+    final normR = normalizeAz(region);
+    for (final entry in regionCoordinates.entries) {
+      if (normalizeAz(entry.key) == normR) {
+        return entry.value;
+      }
     }
 
-    return base;
+    return const [40.4093, 49.8671];
   }
 
-  /// Ustanın profil ünvanına ("Şəhər, Kənd") uyğun küçə səviyyəli koordinat qaytarır
-  static List<double> resolveArtisanCoordinates(String cityField, String uid) {
+  /// Ustanın saxlanmış koordinatlarına və ya profil ünvanına ("Şəhər, Kənd") uyğun dəqiq koordinat qaytarır
+  static List<double> resolveArtisanCoordinates(
+    String cityField,
+    String uid, {
+    double? lat,
+    double? lng,
+  }) {
+    if (lat != null && lng != null && lat >= 38.0 && lat <= 42.5 && lng >= 44.0 && lng <= 51.5) {
+      return [lat, lng];
+    }
+
     final parts = cityField.split(',');
     final String rawRegion = parts.isNotEmpty ? parts[0].trim() : 'Bakı';
     final String rawVillage = parts.length > 1 ? parts.sublist(1).join(' ').trim() : '';
@@ -631,11 +699,7 @@ class CategoryCityService {
       }
     }
 
-    final base = getCoordinates(matchedRegion, matchedVillage);
-    final int h = uid.hashCode & 0x7FFFFFFF;
-    final double dLat = ((h % 11) - 5) * 0.0008;
-    final double dLng = (((h ~/ 11) % 11) - 5) * 0.0010;
-    return [base[0] + dLat, base[1] + dLng];
+    return getCoordinates(matchedRegion, matchedVillage);
   }
 
   // Sabit ikon uyğunluğu (Tree shaking xətalarının qarşısını alır)

@@ -21,6 +21,8 @@ class AuthService {
     String? category,
     String? city,
     String? phone,
+    double? lat,
+    double? lng,
     Uint8List? profileImageBytes,
   }) async {
     // İstifadəçi yaradılır
@@ -46,8 +48,10 @@ class AuthService {
       'email': email.trim(),
       'phone': phone?.trim() ?? '',
       'role': role,
-      'category': category ?? 'Tikinti',
+      'category': category ?? (role == 'worker' ? 'Fəhlə (Köməkçi işlər)' : 'Tikinti'),
       'city': (city != null && city.trim().isNotEmpty) ? city.trim() : 'Bakı',
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
       'photoBase64': photoBase64 ?? '',
       'isVerified': true,
       'createdAt': FieldValue.serverTimestamp(),

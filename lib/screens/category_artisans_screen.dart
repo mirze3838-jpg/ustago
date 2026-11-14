@@ -40,7 +40,7 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
     _activeCityFilter = widget.selectedCity;
     _artisansStream = FirebaseFirestore.instance
         .collection('users')
-        .where('role', isEqualTo: 'usta')
+        .where('role', whereIn: ['usta', 'worker'])
         .snapshots();
     _citySub = CategoryCityService.getCitiesStream().listen((cities) {
       if (mounted) setState(() => _cities = cities);
@@ -70,7 +70,8 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
     if (u == t || u.contains(t) || t.contains(u)) return true;
 
     const categoryKeywords = {
-      'tikinti': ['tikinti', 'hörgü', 'suvaq', 'bünövrə', 'dam'],
+      'tikinti': ['tikinti', 'hörgü', 'suvaq', 'bünövrə', 'dam', 'fəhlə', 'köməkçi'],
+      'fəhlə': ['fəhlə', 'fehle', 'köməkçi'],
       'santexnik': ['santexnik', 'boru', 'kran', 'su təchizatı'],
       'elektrik': ['elektrik', 'şit', 'naqil', 'işıqlandırma'],
       'təmir': ['təmir', 'quraşdırma'],

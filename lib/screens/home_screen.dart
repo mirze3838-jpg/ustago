@@ -55,6 +55,10 @@ class _HomeScreenState extends State<HomeScreen> {
   late final ShortsScreen _shortsTab;
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _shortsStream;
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _ustaStream;
+  QuerySnapshot<Map<String, dynamic>>? _latestShortsSnapshot;
+  QuerySnapshot<Map<String, dynamic>>? _latestUstaSnapshot;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _shortsSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _ustaSub;
 
   // Base64 görüntüləri təkrar decode etməmək üçün yaddaş keşi
   static final Map<String, Uint8List> _b64Cache = {};
@@ -90,11 +94,27 @@ class _HomeScreenState extends State<HomeScreen> {
         .collection('shorts')
         .orderBy('createdAt', descending: true)
         .limit(3)
-        .snapshots();
+        .snapshots()
+        .asBroadcastStream();
     _ustaStream = FirebaseFirestore.instance
         .collection('users')
-        .where('role', isEqualTo: 'usta')
-        .snapshots();
+        .where('role', whereIn: ['usta', 'worker'])
+        .snapshots()
+        .asBroadcastStream();
+    _shortsSub = _shortsStream.listen((snap) {
+      if (mounted) {
+        setState(() => _latestShortsSnapshot = snap);
+      } else {
+        _latestShortsSnapshot = snap;
+      }
+    }, onError: (_) {});
+    _ustaSub = _ustaStream.listen((snap) {
+      if (mounted) {
+        setState(() => _latestUstaSnapshot = snap);
+      } else {
+        _latestUstaSnapshot = snap;
+      }
+    }, onError: (_) {});
     _loadUserRole();
     _initCategoryAndCityStreams();
     _shortsTab = ShortsScreen(
@@ -141,6 +161,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _catSub?.cancel();
     _citySub?.cancel();
+    _shortsSub?.cancel();
+    _ustaSub?.cancel();
     _searchController.dispose();
     _mapSearchController.dispose();
     super.dispose();
@@ -862,12 +884,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: _ustaStream,
+                initialData: _latestUstaSnapshot,
                 builder: (context, uSnap) {
                   final rawQuery = _searchController.text.trim();
                   final q = rawQuery.toLowerCase();
                   final normQ = CategoryCityService.normalizeAz(rawQuery);
                   final matchingLocations = CategoryCityService.searchLocations(rawQuery);
-                  final docs = uSnap.data?.docs ?? [];
+                  final docs = (uSnap.data ?? _latestUstaSnapshot)?.docs ?? [];
                   final matchingUstas = docs.where((d) {
                     final data = d.data();
                     final city = CategoryCityService.normalizeAz((data['city'] ?? '').toString());
@@ -1299,9 +1322,12 @@ class _HomeScreenState extends State<HomeScreen> {
             height: 205,
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _shortsStream,
+              initialData: _latestShortsSnapshot,
               builder: (context, snapshot) {
                 // Səhifə yenilənərkən 3 zərif işıqlı skelet kartı yan-yana
-                if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    !snapshot.hasData &&
+                    _latestShortsSnapshot == null) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     child: Row(
@@ -1337,7 +1363,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
-                final docs = snapshot.data?.docs ?? [];
+                final docs = (snapshot.data ?? _latestShortsSnapshot)?.docs ?? [];
                 final List<Map<String, dynamic>> dynamicShorts = [];
 
                 for (var d in docs) {
@@ -1417,15 +1443,18 @@ class _HomeScreenState extends State<HomeScreen> {
         SliverToBoxAdapter(
           child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: _ustaStream,
+            initialData: _latestUstaSnapshot,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+              if (snapshot.connectionState == ConnectionState.waiting &&
+                  !snapshot.hasData &&
+                  _latestUstaSnapshot == null) {
                 return const SizedBox(
                   height: 155,
                   child: Center(child: CircularProgressIndicator()),
                 );
               }
 
-              final docs = snapshot.data?.docs ?? [];
+              final docs = (snapshot.data ?? _latestUstaSnapshot)?.docs ?? [];
               if (docs.isEmpty) {
                 return const SizedBox(
                   height: 100,
@@ -2370,8 +2399,9 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _ustaStream,
+              initialData: _latestUstaSnapshot,
               builder: (context, snapshot) {
-                final docs = snapshot.data?.docs ?? [];
+                final docs = (snapshot.data ?? _latestUstaSnapshot)?.docs ?? [];
                 final allArtisans = docs.map((d) {
                   final m = Map<String, dynamic>.from(d.data());
                   m['id'] = d.id;
@@ -2465,7 +2495,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              '${_selectedVillage.isNotEmpty ? "$_selectedCity, $_selectedVillage" : _selectedCity} • ${areaMatches.length} usta',
+                              areaMatches.isNotEmpty
+                                  ? '${_selectedVillage.isNotEmpty ? "$_selectedCity, $_selectedVillage" : _selectedCity} • ${areaMatches.length} usta'
+                                  : '${_selectedVillage.isNotEmpty ? "$_selectedCity, $_selectedVillage" : _selectedCity} • ${displayArtisans.length} usta',
                               style: const TextStyle(
                                 color: Color(0xFF0F172A),
                                 fontSize: 12,
@@ -2631,10 +2663,32 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         final List<Widget> pinWidgets = [];
+        final List<List<double>> placedCoords = [];
         for (final u in artisans) {
           final uid = (u['id'] ?? '').toString();
           final uCity = (u['city'] ?? 'Bakı').toString();
-          final coords = CategoryCityService.resolveArtisanCoordinates(uCity, uid);
+          final double? uLat = (u['lat'] is num) ? (u['lat'] as num).toDouble() : null;
+          final double? uLng = (u['lng'] is num) ? (u['lng'] as num).toDouble() : null;
+          var coords = CategoryCityService.resolveArtisanCoordinates(
+            uCity,
+            uid,
+            lat: uLat,
+            lng: uLng,
+          );
+          int overlapIdx = 0;
+          for (final prev in placedCoords) {
+            if ((coords[0] - prev[0]).abs() < 0.0001 && (coords[1] - prev[1]).abs() < 0.0001) {
+              overlapIdx++;
+            }
+          }
+          if (overlapIdx > 0) {
+            final double angle = overlapIdx * 2.0943951; // 120 dərəcə addımla kiçik dairə
+            coords = [
+              coords[0] + math.sin(angle) * 0.0003,
+              coords[1] + math.cos(angle) * 0.0003,
+            ];
+          }
+          placedCoords.add(coords);
           final double px = w / 2.0 + (lngToX(coords[1]) - centerX);
           final double py = h / 2.0 + (latToY(coords[0]) - centerY);
           if (px < -70 || px > w + 70 || py < -70 || py > h + 70) continue;
@@ -2907,7 +2961,14 @@ class _HomeScreenState extends State<HomeScreen> {
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: () {
-        final coords = CategoryCityService.resolveArtisanCoordinates(uCity, uid);
+        final double? uLat = (u['lat'] is num) ? (u['lat'] as num).toDouble() : null;
+        final double? uLng = (u['lng'] is num) ? (u['lng'] as num).toDouble() : null;
+        final coords = CategoryCityService.resolveArtisanCoordinates(
+          uCity,
+          uid,
+          lat: uLat,
+          lng: uLng,
+        );
         setState(() {
           _selectedMapPinId = uid;
           _mapLat = coords[0];
@@ -4186,10 +4247,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 // Hesab Növü (Rol)
                 DropdownButtonFormField<String>(
-                  value: selectedRole,
+                  value: ['usta', 'worker', 'customer', 'seller'].contains(selectedRole) ? selectedRole : 'usta',
                   decoration: const InputDecoration(labelText: 'Hesab Növü', prefixIcon: Icon(Icons.badge_outlined)),
                   items: const [
                     DropdownMenuItem(value: 'usta', child: Text('Usta kimi')),
+                    DropdownMenuItem(value: 'worker', child: Text('Fəhlə kimi')),
                     DropdownMenuItem(value: 'customer', child: Text('Müştəri kimi')),
                     DropdownMenuItem(value: 'seller', child: Text('Satıcı / Mağaza')),
                   ],
@@ -4330,10 +4392,22 @@ class _HomeScreenState extends State<HomeScreen> {
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1769D2)),
               onPressed: () async {
                 final String district = districtController.text.trim();
+                if ((selectedRole == 'usta' || selectedRole == 'worker') && district.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Usta və fəhlə üçün kənd / qəsəbə / ərazi göstərmək vacibdir!'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
                 final String fullCity = district.isNotEmpty ? '$selectedCityVal, $district' : selectedCityVal;
+                final coords = CategoryCityService.getCoordinates(selectedCityVal, district);
                 final updatedName = nameController.text.trim();
                 final updatedPhone = phoneController.text.trim();
-                final updatedTrade = selectedRole == 'usta' ? selectedUstaCategory : '';
+                final updatedTrade = selectedRole == 'usta'
+                    ? selectedUstaCategory
+                    : (selectedRole == 'worker' ? 'Fəhlə (Köməkçi işlər)' : '');
 
                 await FirebaseFirestore.instance.collection('users').doc(uid).set({
                   'fullName': updatedName,
@@ -4341,7 +4415,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   'role': selectedRole,
                   'category': updatedTrade,
                   'city': fullCity,
-                  'isWorking': selectedRole == 'usta' ? isWorkingStatus : false,
+                  'lat': coords[0],
+                  'lng': coords[1],
+                  'isWorking': (selectedRole == 'usta' || selectedRole == 'worker') ? isWorkingStatus : false,
                   'bio': selectedRole == 'usta' ? bioController.text.trim() : (userData?['bio'] ?? ''),
                 }, SetOptions(merge: true));
 
@@ -4584,7 +4660,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? 'Sistem Administratoru'
                       : (userRole == 'seller'
                           ? 'Satıcı (Mağaza Sahibi)'
-                          : (userRole == 'usta' ? '${userData?['category'] ?? 'Tikinti'} Ustası' : 'Müştəri')),
+                          : (userRole == 'usta'
+                              ? '${userData?['category'] ?? 'Tikinti'} Ustası'
+                              : (userRole == 'worker' ? 'Fəhlə (Köməkçi işlər)' : 'Müştəri'))),
                   style: TextStyle(
                     color: isAdmin ? Colors.amber.shade900 : const Color(0xFF1769D2),
                     fontSize: 12,
