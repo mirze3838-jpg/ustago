@@ -88,7 +88,7 @@ class CategoryCityService {
     },
   ];
 
-  // Standart Başlanğıc Şəhərlər
+  // Standart Başlanğıc Şəhər və Rayonlar (Azərbaycanın bütün bölgələri)
   static const List<String> defaultCities = [
     'Bakı',
     'Sumqayıt',
@@ -100,7 +100,337 @@ class CategoryCityService {
     'Şəki',
     'Quba',
     'Lənkəran',
+    'Xankəndi',
+    'Şuşa',
+    'Qusar',
+    'Xaçmaz',
+    'Qəbələ',
+    'İsmayıllı',
+    'Şamaxı',
+    'Masallı',
+    'Cəlilabad',
+    'Astara',
+    'Lerik',
+    'Yardımlı',
+    'Bərdə',
+    'Ağcabədi',
+    'Ağdam',
+    'Tərtər',
+    'Füzuli',
+    'Laçın',
+    'Kəlbəcər',
+    'Zaqatala',
+    'Balakən',
+    'Qax',
+    'Oğuz',
+    'Göyçay',
+    'Ağdaş',
+    'Ucar',
+    'Kürdəmir',
+    'Zərdab',
+    'Ağsu',
+    'Qobustan',
+    'Yevlax',
+    'Goranboy',
+    'Şəmkir',
+    'Tovuz',
+    'Ağstafa',
+    'Qazax',
+    'Gədəbəy',
+    'Daşkəsən',
+    'Göygöl',
+    'Samux',
+    'Sabirabad',
+    'Saatlı',
+    'İmişli',
+    'Beyləqan',
+    'Salyan',
+    'Neftçala',
+    'Biləsuvar',
+    'Hacıqabul',
+    'Siyəzən',
+    'Şabran',
+    'Xızı',
+    'Babək',
+    'Culfa',
+    'Ordubad',
+    'Şərur',
+    'Şahbuz',
+    'Kəngərli',
+    'Sədərək',
   ];
+
+  // Şəhər / Rayonlar üzrə Rayon, Qəsəbə və Kəndlər
+  static const Map<String, List<String>> villagesByRegion = {
+    'Bakı': [
+      'Yasamal',
+      'Nəsimi',
+      'Nərimanov',
+      'Nizami',
+      'Xətai',
+      'Səbail',
+      'Binəqədi',
+      'Sabunçu',
+      'Suraxanı',
+      'Xəzər',
+      'Qaradağ',
+      'Pirallahı',
+      'Maştağa',
+      'Bilgəh',
+      'Buzovna',
+      'Mərdəkan',
+      'Şüvəlan',
+      'Binə',
+      'Hövsan',
+      'Qaraçuxur',
+      'Bakıxanov',
+      'Zabrat',
+      'Mehdiabad',
+      'Badamdar',
+      'Lökbatan',
+      'Sulutəpə',
+      'Biləcəri',
+      'Pirşağı',
+      'Nardaran',
+      'Kürdəxanı',
+      'Balaxanı',
+      'Ramana',
+      'Zirə',
+      'Türkan',
+      'Qala',
+      'Əhmədli',
+      'Günəşli',
+      'Əmircan',
+      'Bülbülə',
+      'Zığ',
+      'Şağan',
+      'Şıxov',
+      'Sahil',
+      'Səngəçal',
+      'Ələt',
+    ],
+    'Sumqayıt': [
+      'Mərkəz',
+      'Corat',
+      'Hacı Zeynalabdin',
+      'Saray',
+      'Novxanı',
+      'Yaşma',
+      '17-ci mikrorayon',
+      '9-cu mikrorayon',
+      'Kimyaçılar qəsəbəsi',
+    ],
+    'Xırdalan': [
+      'Mərkəz',
+      'Masazır',
+      'Saray',
+      'Novxanı',
+      'Mehdiabad',
+      'Digah',
+      'Məmmədli',
+      'Görədil',
+      'Fatmayı',
+      'Hökməli',
+      'Qobu',
+      'Güzdək',
+      'Aşağı Güzdək',
+      'Ceyranbatan',
+      'Pereküşkül',
+    ],
+    'Gəncə': [
+      'Mərkəz',
+      'Kəpəz',
+      'Nizami',
+      'Gülüstan',
+      'Yeni Gəncə',
+      'Bağmanlar',
+      'Cavadbəyli',
+      'Hacıkənd',
+      'Məhsəti qəsəbəsi',
+      'Natəvan qəsəbəsi',
+    ],
+    'Mingəçevir': ['Mərkəz', 'Energetiklər', 'Günəşli', 'Kür qırağı', 'Həzi Aslanov'],
+    'Şirvan': ['Mərkəz', 'Bayramlı', 'Hacıqəhrəmanlı', 'Çılpaqlı', 'Kür'],
+    'Naxçıvan': ['Mərkəz', 'Əliabad', 'Qaraçuq', 'Bulqan', 'Tumbul', 'Xəlilli'],
+    'Şəki': [
+      'Mərkəz',
+      'Kiş',
+      'Oxud',
+      'Baş Göynük',
+      'Aşağı Göynük',
+      'Baş Layısqı',
+      'Cəfərabad',
+      'Turut',
+      'Orta Zəyzid',
+      'Bideyiz',
+      'Aydınbulaq',
+      'Cumakənd',
+    ],
+    'Quba': [
+      'Mərkəz',
+      'Qırmızı Qəsəbə',
+      'Xınalıq',
+      'Qəçrəş',
+      'Nügədi',
+      'Birinci Nügədi',
+      'İkinci Nügədi',
+      'Amsar',
+      'Alpan',
+      'Rustov',
+      'Zərdabi',
+      'Təngəaltı',
+      'Alekseyevka',
+      'Vladimirovka',
+    ],
+    'Qusar': ['Mərkəz', 'Ləzə', 'Hil', 'Həzrə', 'Urva', 'Şahdağ', 'Bala Qusar', 'Kuzun'],
+    'Xaçmaz': ['Mərkəz', 'Xudat', 'Nabran', 'Yalama', 'Nərəcan', 'Köhmə Xaçmaz', 'Qusarçay', 'Çarxı'],
+    'Qəbələ': ['Mərkəz', 'Vəndam', 'Nic', 'Bum', 'Həzrə', 'Zarağan', 'Tüntül', 'Laza', 'Qəmərvan', 'Durca'],
+    'İsmayıllı': ['Mərkəz', 'Lahıc', 'Basqal', 'İvanovka', 'Buynuz', 'Talıstan', 'Topçu', 'Qubaxəlilli', 'Təzəkənd'],
+    'Şamaxı': ['Mərkəz', 'Pirqulu', 'Çuxuryurd', 'Məlhəm', 'Sabir qəsəbəsi', 'Dəmirçi', 'Avaxıl', 'Mədrəsə'],
+    'Lənkəran': [
+      'Mərkəz',
+      'Liman',
+      'Nərimanabad',
+      'Xanbulan',
+      'Separadi',
+      'Kərgəlan',
+      'Gərmətük',
+      'Boladı',
+      'Veravul',
+      'Bürcəli',
+      'Osaküçə',
+      'Haftoni',
+    ],
+    'Masallı': ['Mərkəz', 'Ərkivan', 'Boradigah', 'Bədəlan', 'Hışkədərə', 'Viləş', 'Təklə', 'Qızılavar', 'Banbaşı'],
+    'Cəlilabad': ['Mərkəz', 'Göytəpə', 'Alar', 'Privolnoye', 'Günəşli', 'Üçtəpə', 'Muğan', 'Qarazəncir'],
+    'Astara': ['Mərkəz', 'Ərçivan', 'Şahağac', 'Pensər', 'Kijəbə', 'Kakalos', 'Sım', 'Siyaku'],
+    'Lerik': ['Mərkəz', 'Piran', 'Hamarmişə', 'Cəngəmiran', 'Noda', 'Bürsülüm', 'Gürdəsər'],
+    'Yardımlı': ['Mərkəz', 'Ostayırr', 'Bozayran', 'Alar', 'Şəfəqli', 'Arvana'],
+    'Bərdə': ['Mərkəz', 'Lənbəran', 'Alpout', 'Gərənə', 'Kətəlparaq', 'Qarayusifli', 'Soğanverdilər', 'Nazırlı'],
+    'Ağcabədi': ['Mərkəz', 'Hindarx', 'Boyat', 'Hüsülü', 'Muğanlı', 'Avşar', 'Salmanbəyli'],
+    'Ağdam': ['Mərkəz', 'Quzanlı', 'Xındırıstan', 'Üçoğlan', 'Bənövşələr', 'Əhmədağalı', 'Zəngişalı'],
+    'Tərtər': ['Mərkəz', 'Şıxarx', 'Seysulan', 'Borsunlu', 'Sarov', 'Qapanlı', 'Evoğlu'],
+    'Füzuli': ['Mərkəz', 'Horadiz', 'Böyük Bəhmənli', 'Kürdmahmudlu', 'Qayıdış', 'Zobucuq'],
+    'Laçın': ['Mərkəz', 'Zabux', 'Sus', 'Qorçu', 'Bəyik', 'Minkənd'],
+    'Kəlbəcər': ['Mərkəz', 'İstisu', 'Zülfüqarlı', 'Vəng', 'Yanşaq'],
+    'Şuşa': ['Mərkəz', 'Daşaltı', 'Turşsu', 'Xəlfəli', 'Malıbəyli'],
+    'Xankəndi': ['Mərkəz', 'Kərkicahan'],
+    'Zaqatala': ['Mərkəz', 'Car', 'Əliabad', 'Danaçı', 'Muğanlı', 'Yuxarı Tala', 'Aşağı Tala', 'Gözbarax', 'Kebəloba'],
+    'Balakən': ['Mərkəz', 'Qabaqçöl', 'Mahamalar', 'Katex', 'Tülü', 'Hənifə', 'Gərəkli'],
+    'Qax': ['Mərkəz', 'İlisu', 'Qum', 'Ləkit', 'Tasmalı', 'Almalı', 'Zərnə', 'Qaxbaş'],
+    'Oğuz': ['Mərkəz', 'Xalxal', 'Böyük Söyüdlü', 'Padar', 'Qumlaq', 'Bucaq', 'Kərimli'],
+    'Göyçay': ['Mərkəz', 'Qarabaqqal', 'Çərəkə', 'Potu', 'Bığır', 'Ləkçılpaq', 'İnçə', 'Şəhadət'],
+    'Ağdaş': ['Mərkəz', 'Ləki', 'Türyançay', 'Pirəzə', 'Aşağı Ləki', 'Qülbəndə', 'Ağzıbir'],
+    'Ucar': ['Mərkəz', 'Qazyan', 'Alpout', 'Bərgüşad', 'Lək', 'Müsüsü', 'Boyat'],
+    'Kürdəmir': ['Mərkəz', 'Karrar', 'Atakişili', 'Şilyan', 'Mollakənd', 'Sığırlı', 'Qarasu'],
+    'Zərdab': ['Mərkəz', 'Bəyimli', 'Dəkkəoba', 'Məlikli', 'Əlvənd', 'Şıxbağı'],
+    'Ağsu': ['Mərkəz', 'Ləngəbiz', 'Padar', 'Bico', 'Gəgəli', 'Pirhəsənli'],
+    'Qobustan': ['Mərkəz', 'Mərəzə', 'Cəngi', 'Təklə', 'Bədəlli', 'Sündü'],
+    'Yevlax': ['Mərkəz', 'Aran', 'Xaldan', 'Qoyunbinəsi', 'Havərli', 'Səmədabad'],
+    'Goranboy': ['Mərkəz', 'Dəliməmmədli', 'Qızılhacılı', 'Səfikürd', 'Borsunlu', 'Aşağı Ağcakənd'],
+    'Şəmkir': ['Mərkəz', 'Dəllər', 'Çinarlı', 'Zəyəm', 'Kür', 'Təzəkənd', 'Düyərli', 'Könüllü', 'Morul'],
+    'Tovuz': ['Mərkəz', 'Qovlar', 'Aşağı Quşçu', 'Düz Qırıqlı', 'Əlimərdanlı', 'Bozalqanlı', 'Dönük Qırıqlı', 'Əyyublu'],
+    'Ağstafa': ['Mərkəz', 'Poylu', 'Dağ Kəsəmən', 'Qıraq Kəsəmən', 'Köçəsgər', 'Zəlimxan'],
+    'Qazax': ['Mərkəz', 'Daş Salahlı', 'Çaylı', 'Aşağı Əskipara', 'Kəmərli', 'Qaymaqlı', 'Aslanbəyli'],
+    'Gədəbəy': ['Mərkəz', 'Slavyanka', 'Şınıx', 'Novosaratovka', 'Söyüdlü', 'Zəhmət'],
+    'Daşkəsən': ['Mərkəz', 'Xoşbulaq', 'Bayan', 'Quşçu', 'Zəylik'],
+    'Göygöl': ['Mərkəz', 'Hacıməlik', 'Toğanalı', 'Çaykənd', 'Balçılı', 'Üçtəpə'],
+    'Samux': ['Mərkəz', 'Nəbiağalı', 'Qarayeri', 'İnstitut qəsəbəsi', 'Alabaşlı'],
+    'Sabirabad': ['Mərkəz', 'Cavadd', 'Qarağaclı', 'Qaratəpə', 'Şəhriyar', 'Ulacalı', 'Nizami'],
+    'Saatlı': ['Mərkəz', 'Məzrəli', 'Qıraqlı', 'Nərimankənd', 'Varxankənd'],
+    'İmişli': ['Mərkəz', 'Bəhramtəpə', 'Oruclu', 'Qaradonlu', 'Sarxanlı', 'Məzrəli'],
+    'Beyləqan': ['Mərkəz', 'Milabad', 'Birinci Şahsevən', 'Kəbirli', 'Dünyamalılar', 'Örənqala'],
+    'Salyan': ['Mərkəz', 'Qaraçala', 'Xıllı', 'Şorsulu', 'Babazənan', 'Marışlı', 'Arbatan'],
+    'Neftçala': ['Mərkəz', 'Bankə', 'Xıllı', 'Həsənabad', 'Qoltuq', 'Tatarməhlə'],
+    'Biləsuvar': ['Mərkəz', 'Xırmandalı', 'Bəydili', 'Bağbanlar', 'Əsgərabad', 'Nəsimi'],
+    'Hacıqabul': ['Mərkəz', 'Navahı', 'Muğan', 'Qızılburun', 'Atbulaq', 'Rəncbər'],
+    'Siyəzən': ['Mərkəz', 'Gilgilçay', 'Zarat', 'Beşdam', 'Eynibulaq'],
+    'Şabran': ['Mərkəz', 'Gəndob', 'Pirəbədil', 'Rəhimli', 'Padar', 'Sözü'],
+    'Xızı': ['Mərkəz', 'Altıağac', 'Giləzi', 'Şorabad', 'Baxışlı'],
+    'Babək': ['Mərkəz', 'Nehrəm', 'Cəhri', 'Təzəkənd', 'Qahab', 'Şıxmahmud'],
+    'Culfa': ['Mərkəz', 'Bənəniyar', 'Əbrəqunus', 'Yaycı', 'Kırna'],
+    'Ordubad': ['Mərkəz', 'Vənənd', 'Dəstə', 'Aza', 'Nüsnüs', 'Sabirkənd'],
+    'Şərur': ['Mərkəz', 'Püsyan', 'Yengicə', 'Cəlilkənd', 'Oğlanqala'],
+    'Şahbuz': ['Mərkəz', 'Badamlı', 'Kükü', 'Biçənək', 'Kolani'],
+    'Kəngərli': ['Qıvraq', 'Şahtaxtı', 'Qarabağlar', 'Xok'],
+    'Sədərək': ['Heydərabad', 'Sədərək kəndi', 'Dəmirçi'],
+  };
+
+  /// Azərbaycan dilindəki hərfləri axtarış üçün standartlaşdırır (məs: Maştağa == mastaga)
+  static String normalizeAz(String input) {
+    return input
+        .toLowerCase()
+        .replaceAll('ə', 'e')
+        .replaceAll('ş', 's')
+        .replaceAll('ç', 'c')
+        .replaceAll('ğ', 'g')
+        .replaceAll('ö', 'o')
+        .replaceAll('ü', 'u')
+        .replaceAll('ı', 'i')
+        .trim();
+  }
+
+  /// Seçilmiş şəhər/rayon üçün rayon, qəsəbə və kənd siyahısını qaytarır
+  static List<String> getVillagesForRegion(String region) {
+    final normTarget = normalizeAz(region);
+    for (final entry in villagesByRegion.entries) {
+      if (normalizeAz(entry.key) == normTarget) {
+        return entry.value;
+      }
+    }
+    return const ['Mərkəz', 'Qəsəbə', 'Kənd ərazisi'];
+  }
+
+  /// Axtarış sözünə görə Azərbaycanın rayon, qəsəbə və kəndlərini tapır
+  static List<Map<String, String>> searchLocations(String query, {int maxResults = 15}) {
+    final q = normalizeAz(query);
+    if (q.isEmpty) return [];
+
+    final List<Map<String, String>> results = [];
+    final Set<String> seen = {};
+
+    void addResult(String region, String village) {
+      if (results.length >= maxResults) return;
+      final key = '${normalizeAz(region)}|${normalizeAz(village)}';
+      if (seen.contains(key)) return;
+      seen.add(key);
+      results.add({
+        'region': region,
+        'village': village,
+        'display': village.isEmpty ? region : '$region, $village',
+      });
+    }
+
+    // 1. Başlayan (exact prefix) uyğunluqlar ön sırada
+    for (final region in defaultCities) {
+      if (normalizeAz(region).startsWith(q)) {
+        addResult(region, '');
+      }
+      final villages = villagesByRegion[region] ?? const <String>[];
+      for (final v in villages) {
+        if (normalizeAz(v).startsWith(q)) {
+          addResult(region, v);
+        }
+      }
+    }
+
+    // 2. İçində keçən (contains) uyğunluqlar
+    if (results.length < maxResults) {
+      for (final region in defaultCities) {
+        if (normalizeAz(region).contains(q)) {
+          addResult(region, '');
+        }
+        final villages = villagesByRegion[region] ?? const <String>[];
+        for (final v in villages) {
+          if (normalizeAz(v).contains(q)) {
+            addResult(region, v);
+          }
+        }
+      }
+    }
+
+    return results;
+  }
 
   // Sabit ikon uyğunluğu (Tree shaking xətalarının qarşısını alır)
   static IconData getIconByCode(int? code) {

@@ -37,6 +37,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final AuthService _authService = AuthService();
   late int _currentIndex;
   String _selectedCity = 'Bakı';
+  String _selectedVillage = '';
+  String? _selectedMapPinId;
   String? _currentUserRole;
   final TextEditingController _searchController = TextEditingController();
   int _adminSecretTap = 0;
@@ -842,15 +844,18 @@ class _HomeScreenState extends State<HomeScreen> {
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: _ustaStream,
                 builder: (context, uSnap) {
-                  final q = _searchController.text.trim().toLowerCase();
+                  final rawQuery = _searchController.text.trim();
+                  final q = rawQuery.toLowerCase();
+                  final normQ = CategoryCityService.normalizeAz(rawQuery);
+                  final matchingLocations = CategoryCityService.searchLocations(rawQuery);
                   final docs = uSnap.data?.docs ?? [];
                   final matchingUstas = docs.where((d) {
                     final data = d.data();
-                    final city = (data['city'] ?? '').toString().toLowerCase();
-                    final name = (data['fullName'] ?? '').toString().toLowerCase();
-                    final cat = (data['category'] ?? '').toString().toLowerCase();
-                    final bio = (data['bio'] ?? '').toString().toLowerCase();
-                    return city.contains(q) || name.contains(q) || cat.contains(q) || bio.contains(q);
+                    final city = CategoryCityService.normalizeAz((data['city'] ?? '').toString());
+                    final name = CategoryCityService.normalizeAz((data['fullName'] ?? '').toString());
+                    final cat = CategoryCityService.normalizeAz((data['category'] ?? '').toString());
+                    final bio = CategoryCityService.normalizeAz((data['bio'] ?? '').toString());
+                    return city.contains(normQ) || name.contains(normQ) || cat.contains(normQ) || bio.contains(normQ);
                   }).map((d) {
                     final m = Map<String, dynamic>.from(d.data());
                     m['id'] = d.id;
@@ -858,11 +863,19 @@ class _HomeScreenState extends State<HomeScreen> {
                     return m;
                   }).toList();
 
-                  // Seçilmiş şəhəri axtarış nəticələrində üst sırada göstər
-                  final sc = _selectedCity.toLowerCase();
+                  // Seçilmiş şəhər və kəndi axtarış nəticələrində üst sırada göstər
+                  final sc = CategoryCityService.normalizeAz(_selectedCity);
+                  final sv = CategoryCityService.normalizeAz(_selectedVillage);
                   matchingUstas.sort((a, b) {
-                    final aCityMatch = (a['city'] ?? '').toString().toLowerCase().contains(sc);
-                    final bCityMatch = (b['city'] ?? '').toString().toLowerCase().contains(sc);
+                    final aCity = CategoryCityService.normalizeAz((a['city'] ?? '').toString());
+                    final bCity = CategoryCityService.normalizeAz((b['city'] ?? '').toString());
+                    if (sv.isNotEmpty) {
+                      final aV = aCity.contains(sv);
+                      final bV = bCity.contains(sv);
+                      if (aV != bV) return aV ? -1 : 1;
+                    }
+                    final aCityMatch = aCity.contains(sc);
+                    final bCityMatch = bCity.contains(sc);
                     if (aCityMatch != bCityMatch) return aCityMatch ? -1 : 1;
                     final double aRat = (a['rating'] is num) ? (a['rating'] as num).toDouble() : 0.0;
                     final double bRat = (b['rating'] is num) ? (b['rating'] as num).toDouble() : 0.0;
@@ -870,8 +883,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   });
 
                   final matchingCats = _categories.where((c) {
-                    final title = (c['title'] as String).toLowerCase();
-                    return title.contains(q);
+                    final title = CategoryCityService.normalizeAz(c['title'] as String);
+                    return title.contains(normQ);
                   }).toList();
 
                   return Column(
@@ -880,15 +893,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.search, color: Color(0xFF1769D2), size: 20),
-                              const SizedBox(width: 8),
-                              Text(
-                                '"${_searchController.text.trim()}" axtarış nəticələri',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                              ),
-                            ],
+                          Flexible(
+                            child: Row(
+                              children: [
+                                const Icon(Icons.search, color: Color(0xFF1769D2), size: 20),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    '"$rawQuery" axtarış nəticələri',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                           InkWell(
                             onTap: () {
@@ -901,7 +919,49 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 12),
 
-                      if (matchingUstas.isEmpty && matchingCats.isEmpty)
+                      if (matchingLocations.isNotEmpty) ...[
+                        Row(
+                          children: const [
+                            Icon(Icons.location_on_rounded, size: 16, color: Color(0xFF10B981)),
+                            SizedBox(width: 6),
+                            Text(
+                              'Uyğun Rayon və Kəndlər (Xəritədə göstər)',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: matchingLocations.map((loc) {
+                            final region = loc['region'] ?? '';
+                            final village = loc['village'] ?? '';
+                            final display = loc['display'] ?? region;
+                            return ActionChip(
+                              avatar: const Icon(Icons.pin_drop_rounded, size: 15, color: Color(0xFF059669)),
+                              label: Text(display, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                              backgroundColor: const Color(0xFFECFDF5),
+                              side: const BorderSide(color: Color(0xFFA7F3D0)),
+                              onPressed: () {
+                                FocusScope.of(context).unfocus();
+                                setState(() {
+                                  if (!_cities.contains(region) && region.isNotEmpty) {
+                                    _cities.add(region);
+                                  }
+                                  _selectedCity = region;
+                                  _selectedVillage = village;
+                                  _selectedMapPinId = null;
+                                  _searchController.clear();
+                                });
+                              },
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      if (matchingUstas.isEmpty && matchingCats.isEmpty && matchingLocations.isEmpty)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           child: Center(
@@ -910,12 +970,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Icon(Icons.search_off_rounded, color: Colors.grey.shade400, size: 36),
                                 const SizedBox(height: 6),
                                 Text(
-                                  '"$q" üzrə usta və ya kateqoriya tapılmadı',
+                                  '"$q" üzrə usta, ərazi və ya kateqoriya tapılmadı',
                                   style: const TextStyle(color: Colors.grey, fontSize: 13),
                                 ),
                                 const SizedBox(height: 2),
                                 const Text(
-                                  'Fərqli şəhər (məs: Yasamal, Gəncə, Bakı) və ya peşə daxil edin',
+                                  'Rayon, kənd (məs: Maştağa, Quba, Yasamal) və ya peşə daxil edin',
                                   style: TextStyle(color: Colors.grey, fontSize: 11),
                                 ),
                               ],
@@ -1105,6 +1165,11 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
+
+        // 1.5. Xəritədə Yaxın Ustalar Bölməsi (Mavi axtarış panelinin düz altında, Kateqoriyalardan əvvəl)
+        SliverToBoxAdapter(
+          child: _buildNearbyArtisansMapSection(),
+        ),
 
         // 2. Kateqoriyalar Bölməsi
         SliverToBoxAdapter(
@@ -1661,8 +1726,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         controller: _searchController,
                         onChanged: (_) => setState(() {}),
                         decoration: InputDecoration(
-                          hintText: 'Usta, şəhər, rayon və ya xidmət axtarın...',
-                          hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                          hintText: 'Usta, rayon, kənd və ya xidmət axtarın...',
+                          hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12.5),
                           border: InputBorder.none,
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(vertical: 12),
@@ -1680,33 +1745,33 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     Container(height: 24, width: 1, color: const Color(0xFFE2E8F0)),
                     const SizedBox(width: 8),
-                    // Şəhər seçimi (Admin tərəfindən artırılan şəhərlər daxil olmaqla)
-                    DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _cities.contains(_selectedCity) ? _selectedCity : (_cities.isNotEmpty ? _cities.first : 'Bakı'),
-                        icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF1769D2), size: 18),
-                        items: _cities.map((String city) {
-                          return DropdownMenuItem<String>(
-                            value: city,
-                            child: Row(
-                              children: [
-                                const Icon(Icons.location_on, color: Color(0xFF1769D2), size: 16),
-                                const SizedBox(width: 4),
-                                Text(
-                                  city,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF1E293B),
-                                  ),
+                    // Şəhər / Rayon / Kənd seçici düyməsi
+                    InkWell(
+                      onTap: _showLocationSearchSheet,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.location_on, color: Color(0xFF1769D2), size: 16),
+                            const SizedBox(width: 3),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 112),
+                              child: Text(
+                                _selectedVillage.isNotEmpty ? '$_selectedCity, $_selectedVillage' : _selectedCity,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1E293B),
                                 ),
-                              ],
+                              ),
                             ),
-                          );
-                        }).toList(),
-                        onChanged: (v) {
-                          if (v != null) setState(() => _selectedCity = v);
-                        },
+                            const Icon(Icons.keyboard_arrow_down, color: Color(0xFF1769D2), size: 18),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -1717,6 +1782,983 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  /// Rayon və Kənd/Qəsəbə üzrə sürətli lokasiya seçimi pəncərəsi
+  Future<void> _showLocationSearchSheet() async {
+    final searchCtrl = TextEditingController();
+    String tempRegion = _selectedCity;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final query = searchCtrl.text.trim();
+          final normQ = CategoryCityService.normalizeAz(query);
+          final locationMatches = query.isNotEmpty
+              ? CategoryCityService.searchLocations(query, maxResults: 30)
+              : const <Map<String, String>>[];
+          final villages = CategoryCityService.getVillagesForRegion(tempRegion);
+
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+              left: 16,
+              right: 16,
+              top: 14,
+            ),
+            child: SizedBox(
+              height: MediaQuery.of(ctx).size.height * 0.72,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: const [
+                      Icon(Icons.explore_rounded, color: Color(0xFF1769D2), size: 22),
+                      SizedBox(width: 8),
+                      Text(
+                        'Rayon, Şəhər və Kənd seçin',
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: searchCtrl,
+                    onChanged: (_) => setSheetState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'Rayon və ya kənd adı yazın (məs: Maştağa, Quba, Lahıc)...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: query.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              onPressed: () {
+                                searchCtrl.clear();
+                                setSheetState(() {});
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: const Color(0xFFF1F5F9),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (query.isNotEmpty) ...[
+                    Expanded(
+                      child: locationMatches.isEmpty
+                          ? Center(
+                              child: Text(
+                                '"$query" üzrə rayon və ya kənd tapılmadı',
+                                style: const TextStyle(color: Colors.grey, fontSize: 13),
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: locationMatches.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final loc = locationMatches[index];
+                                final region = loc['region'] ?? '';
+                                final village = loc['village'] ?? '';
+                                final isRegionOnly = village.isEmpty;
+                                return ListTile(
+                                  dense: true,
+                                  leading: Icon(
+                                    isRegionOnly ? Icons.location_city_rounded : Icons.pin_drop_rounded,
+                                    color: isRegionOnly ? const Color(0xFF1769D2) : const Color(0xFF059669),
+                                  ),
+                                  title: Text(
+                                    loc['display'] ?? region,
+                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                                  ),
+                                  subtitle: Text(
+                                    isRegionOnly ? 'Şəhər / Rayon (bütün ərazi)' : '$region bölgəsi',
+                                    style: const TextStyle(fontSize: 11.5, color: Colors.grey),
+                                  ),
+                                  onTap: () {
+                                    Navigator.pop(ctx);
+                                    setState(() {
+                                      if (!_cities.contains(region) && region.isNotEmpty) {
+                                        _cities.add(region);
+                                      }
+                                      _selectedCity = region;
+                                      _selectedVillage = village;
+                                      _selectedMapPinId = null;
+                                    });
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ] else ...[
+                    const Text(
+                      '1. Şəhər / Rayon:',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
+                    ),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      height: 38,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: _cities.map((city) {
+                          final selected = CategoryCityService.normalizeAz(city) == CategoryCityService.normalizeAz(tempRegion);
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: ChoiceChip(
+                              label: Text(city),
+                              selected: selected,
+                              selectedColor: const Color(0xFF1769D2),
+                              labelStyle: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: selected ? Colors.white : const Color(0xFF1E293B),
+                              ),
+                              onSelected: (_) {
+                                setSheetState(() => tempRegion = city);
+                              },
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      '2. $tempRegion — Rayon, Qəsəbə və Kəndlər:',
+                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: ListView(
+                        children: [
+                          ListTile(
+                            dense: true,
+                            leading: const Icon(Icons.public_rounded, color: Color(0xFF1769D2)),
+                            title: Text('Bütün $tempRegion ərazisi', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            trailing: (CategoryCityService.normalizeAz(_selectedCity) == CategoryCityService.normalizeAz(tempRegion) &&
+                                    _selectedVillage.isEmpty)
+                                ? const Icon(Icons.check_circle, color: Color(0xFF1769D2), size: 20)
+                                : null,
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              setState(() {
+                                _selectedCity = tempRegion;
+                                _selectedVillage = '';
+                                _selectedMapPinId = null;
+                              });
+                            },
+                          ),
+                          const Divider(height: 1),
+                          ...villages.where((v) => normQ.isEmpty || CategoryCityService.normalizeAz(v).contains(normQ)).map((v) {
+                            final isCurrent = CategoryCityService.normalizeAz(_selectedCity) ==
+                                    CategoryCityService.normalizeAz(tempRegion) &&
+                                CategoryCityService.normalizeAz(_selectedVillage) == CategoryCityService.normalizeAz(v);
+                            return ListTile(
+                              dense: true,
+                              leading: const Icon(Icons.location_on_outlined, color: Color(0xFF059669)),
+                              title: Text(v, style: const TextStyle(fontWeight: FontWeight.w500)),
+                              trailing: isCurrent ? const Icon(Icons.check_circle, color: Color(0xFF059669), size: 20) : null,
+                              onTap: () {
+                                Navigator.pop(ctx);
+                                setState(() {
+                                  _selectedCity = tempRegion;
+                                  _selectedVillage = v;
+                                  _selectedMapPinId = null;
+                                });
+                              },
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    searchCtrl.dispose();
+  }
+
+  /// "Xəritədə Yaxın Ustalar" bölməsi (Ana səhifədə mavi axtarış panelinin düz altında)
+  Widget _buildNearbyArtisansMapSection() {
+    final regionVillages = CategoryCityService.getVillagesForRegion(_selectedCity);
+    const List<Offset> pinSlots = [
+      Offset(0.45, 0.36),
+      Offset(0.20, 0.23),
+      Offset(0.73, 0.22),
+      Offset(0.15, 0.56),
+      Offset(0.76, 0.54),
+      Offset(0.33, 0.59),
+      Offset(0.59, 0.57),
+      Offset(0.58, 0.19),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionTitle(
+            icon: Icons.map_rounded,
+            iconColor: const Color(0xFF059669),
+            title: 'Xəritədə Yaxın Ustalar',
+            actionTitle: 'Tam xəritə',
+            onTap: _showFullMapModal,
+          ),
+          const SizedBox(height: 8),
+          // Seçilmiş Rayon üzrə Kənd/Qəsəbə sürətli filtri
+          SizedBox(
+            height: 32,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: ChoiceChip(
+                    label: Text('Bütün $_selectedCity'),
+                    selected: _selectedVillage.isEmpty,
+                    visualDensity: VisualDensity.compact,
+                    selectedColor: const Color(0xFF059669),
+                    backgroundColor: const Color(0xFFF1F5F9),
+                    labelStyle: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: _selectedVillage.isEmpty ? Colors.white : const Color(0xFF334155),
+                    ),
+                    onSelected: (_) {
+                      setState(() {
+                        _selectedVillage = '';
+                        _selectedMapPinId = null;
+                      });
+                    },
+                  ),
+                ),
+                ...regionVillages.take(15).map((v) {
+                  final selected = CategoryCityService.normalizeAz(_selectedVillage) == CategoryCityService.normalizeAz(v);
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ChoiceChip(
+                      label: Text(v),
+                      selected: selected,
+                      visualDensity: VisualDensity.compact,
+                      selectedColor: const Color(0xFF1769D2),
+                      backgroundColor: Colors.white,
+                      side: BorderSide(color: selected ? const Color(0xFF1769D2) : const Color(0xFFE2E8F0)),
+                      labelStyle: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: selected ? Colors.white : const Color(0xFF334155),
+                      ),
+                      onSelected: (_) {
+                        setState(() {
+                          _selectedVillage = selected ? '' : v;
+                          _selectedMapPinId = null;
+                        });
+                      },
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: _ustaStream,
+            builder: (context, snapshot) {
+              final docs = snapshot.data?.docs ?? [];
+              final allArtisans = docs.map((d) {
+                final m = Map<String, dynamic>.from(d.data());
+                m['id'] = d.id;
+                m['uid'] = d.id;
+                return m;
+              }).toList();
+
+              final sc = CategoryCityService.normalizeAz(_selectedCity);
+              final sv = CategoryCityService.normalizeAz(_selectedVillage);
+
+              allArtisans.sort((a, b) {
+                final aCity = CategoryCityService.normalizeAz((a['city'] ?? '').toString());
+                final bCity = CategoryCityService.normalizeAz((b['city'] ?? '').toString());
+                if (sv.isNotEmpty) {
+                  final aV = aCity.contains(sv);
+                  final bV = bCity.contains(sv);
+                  if (aV != bV) return aV ? -1 : 1;
+                }
+                final aC = aCity.contains(sc);
+                final bC = bCity.contains(sc);
+                if (aC != bC) return aC ? -1 : 1;
+                final double aRat = (a['rating'] is num) ? (a['rating'] as num).toDouble() : 0.0;
+                final double bRat = (b['rating'] is num) ? (b['rating'] as num).toDouble() : 0.0;
+                return bRat.compareTo(aRat);
+              });
+
+              final exactMatches = allArtisans.where((a) {
+                final c = CategoryCityService.normalizeAz((a['city'] ?? '').toString());
+                if (sv.isNotEmpty) return c.contains(sv);
+                return c.contains(sc);
+              }).toList();
+
+              final pins = (exactMatches.isNotEmpty ? exactMatches : allArtisans).take(pinSlots.length).toList();
+              Map<String, dynamic>? selectedPin;
+              if (_selectedMapPinId != null) {
+                for (final p in pins) {
+                  if (p['id'] == _selectedMapPinId) {
+                    selectedPin = p;
+                    break;
+                  }
+                }
+              }
+
+              return Container(
+                height: 215,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFF93C5FD).withOpacity(0.6)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0F172A).withOpacity(0.10),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final w = constraints.maxWidth;
+                      final h = constraints.maxHeight;
+                      return Stack(
+                        children: [
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: _InteractiveMapBackgroundPainter(),
+                            ),
+                          ),
+                          // Yuxarı sol: aktiv ərazi və tapılan usta sayı
+                          Positioned(
+                            top: 10,
+                            left: 10,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0F172A).withOpacity(0.78),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.white24),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.my_location_rounded, color: Color(0xFF34D399), size: 14),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    '${_selectedVillage.isNotEmpty ? "$_selectedCity, $_selectedVillage" : _selectedCity} • ${exactMatches.length} yaxın usta',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          // Yuxarı sağ: Tam xəritə düyməsi
+                          Positioned(
+                            top: 10,
+                            right: 10,
+                            child: InkWell(
+                              onTap: _showFullMapModal,
+                              borderRadius: BorderRadius.circular(16),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.92),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.open_in_full_rounded, color: Color(0xFF1769D2), size: 13),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Böyüt',
+                                      style: TextStyle(
+                                        color: Color(0xFF1769D2),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          // Xəritə Pinləri
+                          for (int i = 0; i < pins.length; i++)
+                            Builder(
+                              builder: (context) {
+                                final u = pins[i];
+                                final uid = (u['id'] ?? '').toString();
+                                final base = pinSlots[i % pinSlots.length];
+                                final hash = uid.hashCode;
+                                final dx = (((hash % 7) - 3) * 0.008);
+                                final dy = ((((hash >> 3) % 7) - 3) * 0.008);
+                                final px = (w * (base.dx + dx)).clamp(16.0, w - 90.0);
+                                final py = (h * (base.dy + dy)).clamp(42.0, h - 78.0);
+                                final isSelected = _selectedMapPinId == uid;
+                                final uName = (u['fullName'] ?? 'Usta').toString();
+                                final shortName = uName.split(' ').first;
+                                final avatarBytes = _decodeB64(u['photoBase64'] as String?);
+                                final bool matchesExact = CategoryCityService.normalizeAz((u['city'] ?? '').toString())
+                                    .contains(sv.isNotEmpty ? sv : sc);
+
+                                return Positioned(
+                                  left: px,
+                                  top: py,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedMapPinId = isSelected ? null : uid;
+                                      });
+                                    },
+                                    child: AnimatedScale(
+                                      scale: isSelected ? 1.14 : 1.0,
+                                      duration: const Duration(milliseconds: 160),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(2.5),
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: isSelected
+                                                  ? const Color(0xFFF59E0B)
+                                                  : (matchesExact ? const Color(0xFF10B981) : const Color(0xFF38BDF8)),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: (isSelected ? const Color(0xFFF59E0B) : const Color(0xFF10B981))
+                                                      .withOpacity(0.55),
+                                                  blurRadius: 8,
+                                                ),
+                                              ],
+                                            ),
+                                            child: CircleAvatar(
+                                              radius: 15,
+                                              backgroundColor: const Color(0xFF1E293B),
+                                              backgroundImage: avatarBytes != null ? MemoryImage(avatarBytes) : null,
+                                              child: avatarBytes == null
+                                                  ? Text(
+                                                      uName.isNotEmpty ? uName[0].toUpperCase() : 'U',
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 12,
+                                                      ),
+                                                    )
+                                                  : null,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                            decoration: BoxDecoration(
+                                              color: isSelected
+                                                  ? const Color(0xFF1769D2)
+                                                  : const Color(0xFF0F172A).withOpacity(0.82),
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              shortName,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 9.5,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+
+                          if (pins.isEmpty && snapshot.connectionState != ConnectionState.waiting)
+                            Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text(
+                                  'Bu ərazidə hələ usta qeydiyyatı yoxdur',
+                                  style: TextStyle(color: Colors.white, fontSize: 12),
+                                ),
+                              ),
+                            ),
+
+                          // Seçilmiş Usta Pin Kartı
+                          if (selectedPin != null)
+                            Positioned(
+                              left: 10,
+                              right: 10,
+                              bottom: 8,
+                              child: Builder(
+                                builder: (context) {
+                                  final u = selectedPin!;
+                                  final uName = (u['fullName'] ?? 'Usta').toString();
+                                  final uTrade = (u['category'] ?? 'Usta').toString();
+                                  final uCity = (u['city'] ?? 'Bakı').toString();
+                                  final uPhone = (u['phone'] ?? '').toString();
+                                  final avatarBytes = _decodeB64(u['photoBase64'] as String?);
+                                  return InkWell(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(builder: (_) => ArtisanDetailScreen(artisanData: u)),
+                                      );
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.96),
+                                        borderRadius: BorderRadius.circular(14),
+                                        boxShadow: [
+                                          BoxShadow(color: Colors.black.withOpacity(0.22), blurRadius: 8),
+                                        ],
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 18,
+                                            backgroundColor: const Color(0xFF1769D2).withOpacity(0.12),
+                                            backgroundImage: avatarBytes != null ? MemoryImage(avatarBytes) : null,
+                                            child: avatarBytes == null
+                                                ? Text(
+                                                    uName.isNotEmpty ? uName[0].toUpperCase() : 'U',
+                                                    style: const TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Color(0xFF1769D2),
+                                                    ),
+                                                  )
+                                                : null,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  uName,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 13,
+                                                    color: Color(0xFF0F172A),
+                                                  ),
+                                                ),
+                                                Text(
+                                                  '$uTrade • $uCity',
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color: Color(0xFF64748B),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          if (uPhone.isNotEmpty) ...[
+                                            IconButton(
+                                              visualDensity: VisualDensity.compact,
+                                              padding: EdgeInsets.zero,
+                                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                              icon: const Icon(Icons.call, color: Color(0xFF00C853), size: 19),
+                                              onPressed: () => _makeCall(uPhone),
+                                            ),
+                                            IconButton(
+                                              visualDensity: VisualDensity.compact,
+                                              padding: EdgeInsets.zero,
+                                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                              icon: const Icon(Icons.chat, color: Colors.green, size: 19),
+                                              onPressed: () => _openWhatsApp(uPhone),
+                                            ),
+                                          ],
+                                          IconButton(
+                                            visualDensity: VisualDensity.compact,
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                            icon: const Icon(Icons.close, color: Colors.grey, size: 18),
+                                            onPressed: () => setState(() => _selectedMapPinId = null),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            )
+                          else if (pins.isNotEmpty)
+                            Positioned(
+                              bottom: 8,
+                              left: 12,
+                              right: 12,
+                              child: Center(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.58),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Text(
+                                    'Əlaqə və profil üçün xəritədəki ustanın üzərinə toxunun',
+                                    style: TextStyle(color: Colors.white70, fontSize: 10.5),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Böyüdülmüş Tam Xəritə Modalı (Zoom + Rayon/Kənd + İxtisas axtarışı)
+  Future<void> _showFullMapModal() async {
+    final mapSearchCtrl = TextEditingController();
+    String? modalSelectedPinId = _selectedMapPinId;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final q = CategoryCityService.normalizeAz(mapSearchCtrl.text);
+
+          return SizedBox(
+            height: MediaQuery.of(ctx).size.height * 0.88,
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.map_rounded, color: Color(0xFF059669)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Xəritədə Ustalar (${_selectedVillage.isNotEmpty ? "$_selectedCity, $_selectedVillage" : _selectedCity})',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: TextField(
+                    controller: mapSearchCtrl,
+                    onChanged: (_) => setModalState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'Rayon, kənd, usta adı və ya peşə axtar...',
+                      prefixIcon: const Icon(Icons.search),
+                      filled: true,
+                      fillColor: const Color(0xFFF1F5F9),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: _ustaStream,
+                    builder: (context, snapshot) {
+                      final docs = snapshot.data?.docs ?? [];
+                      final filtered = docs.map((d) {
+                        final m = Map<String, dynamic>.from(d.data());
+                        m['id'] = d.id;
+                        m['uid'] = d.id;
+                        return m;
+                      }).where((u) {
+                        if (q.isEmpty) return true;
+                        final c = CategoryCityService.normalizeAz((u['city'] ?? '').toString());
+                        final n = CategoryCityService.normalizeAz((u['fullName'] ?? '').toString());
+                        final t = CategoryCityService.normalizeAz((u['category'] ?? '').toString());
+                        return c.contains(q) || n.contains(q) || t.contains(q);
+                      }).toList();
+
+                      final sc = CategoryCityService.normalizeAz(_selectedCity);
+                      final sv = CategoryCityService.normalizeAz(_selectedVillage);
+                      filtered.sort((a, b) {
+                        final aCity = CategoryCityService.normalizeAz((a['city'] ?? '').toString());
+                        final bCity = CategoryCityService.normalizeAz((b['city'] ?? '').toString());
+                        if (sv.isNotEmpty) {
+                          final aV = aCity.contains(sv);
+                          final bV = bCity.contains(sv);
+                          if (aV != bV) return aV ? -1 : 1;
+                        }
+                        final aC = aCity.contains(sc);
+                        final bC = bCity.contains(sc);
+                        if (aC != bC) return aC ? -1 : 1;
+                        return 0;
+                      });
+
+                      const slots = [
+                        Offset(0.46, 0.40),
+                        Offset(0.22, 0.22),
+                        Offset(0.72, 0.24),
+                        Offset(0.18, 0.60),
+                        Offset(0.75, 0.62),
+                        Offset(0.35, 0.72),
+                        Offset(0.60, 0.74),
+                        Offset(0.58, 0.16),
+                        Offset(0.32, 0.36),
+                        Offset(0.62, 0.44),
+                        Offset(0.14, 0.42),
+                        Offset(0.82, 0.40),
+                      ];
+                      final mapPins = filtered.take(slots.length).toList();
+
+                      return Column(
+                        children: [
+                          SizedBox(
+                            height: 260,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(18),
+                                child: InteractiveViewer(
+                                  minScale: 1.0,
+                                  maxScale: 2.5,
+                                  child: LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final w = constraints.maxWidth;
+                                      final h = constraints.maxHeight;
+                                      return Stack(
+                                        children: [
+                                          Positioned.fill(
+                                            child: CustomPaint(painter: _InteractiveMapBackgroundPainter()),
+                                          ),
+                                          for (int i = 0; i < mapPins.length; i++)
+                                            Builder(
+                                              builder: (context) {
+                                                final u = mapPins[i];
+                                                final uid = (u['id'] ?? '').toString();
+                                                final base = slots[i];
+                                                final px = (w * base.dx).clamp(16.0, w - 85.0);
+                                                final py = (h * base.dy).clamp(16.0, h - 55.0);
+                                                final isSel = modalSelectedPinId == uid;
+                                                final uName = (u['fullName'] ?? 'Usta').toString();
+                                                final avatarBytes = _decodeB64(u['photoBase64'] as String?);
+                                                return Positioned(
+                                                  left: px,
+                                                  top: py,
+                                                  child: GestureDetector(
+                                                    onTap: () {
+                                                      setModalState(() => modalSelectedPinId = uid);
+                                                    },
+                                                    child: Column(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Container(
+                                                          padding: const EdgeInsets.all(2),
+                                                          decoration: BoxDecoration(
+                                                            shape: BoxShape.circle,
+                                                            color: isSel ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
+                                                          ),
+                                                          child: CircleAvatar(
+                                                            radius: isSel ? 17 : 14,
+                                                            backgroundColor: const Color(0xFF1E293B),
+                                                            backgroundImage: avatarBytes != null ? MemoryImage(avatarBytes) : null,
+                                                            child: avatarBytes == null
+                                                                ? Text(
+                                                                    uName.isNotEmpty ? uName[0].toUpperCase() : 'U',
+                                                                    style: const TextStyle(
+                                                                      color: Colors.white,
+                                                                      fontWeight: FontWeight.bold,
+                                                                      fontSize: 11,
+                                                                    ),
+                                                                  )
+                                                                : null,
+                                                          ),
+                                                        ),
+                                                        Container(
+                                                          margin: const EdgeInsets.only(top: 2),
+                                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                          decoration: BoxDecoration(
+                                                            color: isSel ? const Color(0xFF1769D2) : Colors.black87,
+                                                            borderRadius: BorderRadius.circular(6),
+                                                          ),
+                                                          child: Text(
+                                                            uName.split(' ').first,
+                                                            style: const TextStyle(color: Colors.white, fontSize: 9.5),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Expanded(
+                            child: filtered.isEmpty
+                                ? const Center(child: Text('Uyğun usta tapılmadı', style: TextStyle(color: Colors.grey)))
+                                : ListView.separated(
+                                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                                    itemCount: filtered.length,
+                                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                    itemBuilder: (context, index) {
+                                      final u = filtered[index];
+                                      final uid = (u['id'] ?? '').toString();
+                                      final isSel = modalSelectedPinId == uid;
+                                      final uName = (u['fullName'] ?? 'Usta').toString();
+                                      final uTrade = (u['category'] ?? 'Usta').toString();
+                                      final uCity = (u['city'] ?? 'Bakı').toString();
+                                      final uPhone = (u['phone'] ?? '').toString();
+                                      final avatarBytes = _decodeB64(u['photoBase64'] as String?);
+                                      return InkWell(
+                                        borderRadius: BorderRadius.circular(14),
+                                        onTap: () {
+                                          Navigator.pop(ctx);
+                                          Navigator.push(
+                                            this.context,
+                                            MaterialPageRoute(builder: (_) => ArtisanDetailScreen(artisanData: u)),
+                                          );
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: isSel ? const Color(0xFFFFFBEB) : const Color(0xFFF8FAFC),
+                                            borderRadius: BorderRadius.circular(14),
+                                            border: Border.all(
+                                              color: isSel ? const Color(0xFFF59E0B) : const Color(0xFFE2E8F0),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              CircleAvatar(
+                                                radius: 22,
+                                                backgroundColor: const Color(0xFF1769D2).withOpacity(0.12),
+                                                backgroundImage: avatarBytes != null ? MemoryImage(avatarBytes) : null,
+                                                child: avatarBytes == null
+                                                    ? Text(
+                                                        uName.isNotEmpty ? uName[0].toUpperCase() : 'U',
+                                                        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
+                                                      )
+                                                    : null,
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(uName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      '$uTrade • $uCity',
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              if (uPhone.isNotEmpty) ...[
+                                                IconButton(
+                                                  icon: const Icon(Icons.call, color: Color(0xFF00C853), size: 20),
+                                                  onPressed: () => _makeCall(uPhone),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(Icons.chat, color: Colors.green, size: 20),
+                                                  onPressed: () => _openWhatsApp(uPhone),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    mapSearchCtrl.dispose();
   }
 
   // BÖLMƏ BAŞLIĞI
@@ -2924,7 +3966,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // Şəhər və Rayon / Ərazi
+                // Şəhər / Rayon və Kənd / Qəsəbə / Ərazi
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -2932,10 +3974,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       flex: 5,
                       child: DropdownButtonFormField<String>(
                         value: _cities.contains(selectedCityVal) ? selectedCityVal : (_cities.isNotEmpty ? _cities.first : 'Bakı'),
-                        decoration: const InputDecoration(labelText: 'Şəhər', prefixIcon: Icon(Icons.location_city, color: Color(0xFF1769D2))),
+                        decoration: const InputDecoration(labelText: 'Şəhər / Rayon', prefixIcon: Icon(Icons.location_city, color: Color(0xFF1769D2))),
                         items: _cities.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)))).toList(),
                         onChanged: (val) {
-                          if (val != null) setDialogState(() => selectedCityVal = val);
+                          if (val != null) {
+                            setDialogState(() {
+                              selectedCityVal = val;
+                              districtController.clear();
+                            });
+                          }
                         },
                       ),
                     ),
@@ -2944,14 +3991,44 @@ class _HomeScreenState extends State<HomeScreen> {
                       flex: 6,
                       child: TextField(
                         controller: districtController,
+                        onChanged: (_) => setDialogState(() {}),
                         decoration: const InputDecoration(
-                          labelText: 'Rayon / Ərazi',
-                          hintText: 'Məs: Yasamal, Xətai',
+                          labelText: 'Kənd / Qəsəbə / Ərazi',
+                          hintText: 'Məs: Maştağa, Yasamal',
                           prefixIcon: Icon(Icons.pin_drop_outlined),
                         ),
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 32,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: CategoryCityService.getVillagesForRegion(selectedCityVal).map((v) {
+                      final isPicked = districtController.text.trim().toLowerCase() == v.toLowerCase();
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: ActionChip(
+                          label: Text(
+                            v,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isPicked ? Colors.white : const Color(0xFF1E293B),
+                              fontWeight: isPicked ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                          backgroundColor: isPicked ? const Color(0xFF1769D2) : const Color(0xFFF1F5F9),
+                          onPressed: () {
+                            setDialogState(() {
+                              districtController.text = v;
+                            });
+                          },
+                        ),
+                      );
+                    }).toList(),
+                  ),
                 ),
                 const SizedBox(height: 12),
 
@@ -5802,5 +6879,93 @@ class _AuthorNameText extends StatelessWidget {
       },
     );
   }
+}
+
+/// Ana səhifədəki "Xəritədə Yaxın Ustalar" vidceti üçün müasir vektor xəritə fonu
+class _InteractiveMapBackgroundPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bgPaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F2942)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), bgPaint);
+
+    // İncə koordinat toru
+    final gridPaint = Paint()
+      ..color = Colors.white.withOpacity(0.05)
+      ..strokeWidth = 1;
+    for (double x = 0; x < size.width; x += 28) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
+    }
+    for (double y = 0; y < size.height; y += 28) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    // Məhəllə blokları
+    final blockPaint = Paint()..color = Colors.white.withOpacity(0.04);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(size.width * 0.08, size.height * 0.18, size.width * 0.22, size.height * 0.25), const Radius.circular(8)),
+      blockPaint,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(size.width * 0.56, size.height * 0.14, size.width * 0.28, size.height * 0.24), const Radius.circular(8)),
+      blockPaint,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(size.width * 0.26, size.height * 0.55, size.width * 0.34, size.height * 0.26), const Radius.circular(8)),
+      blockPaint,
+    );
+
+    // Əsas yollar və prospektlər
+    final majorRoadPaint = Paint()
+      ..color = const Color(0xFF38BDF8).withOpacity(0.18)
+      ..strokeWidth = 6
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final minorRoadPaint = Paint()
+      ..color = Colors.white.withOpacity(0.10)
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    final mainRoad = Path()
+      ..moveTo(0, size.height * 0.45)
+      ..quadraticBezierTo(size.width * 0.42, size.height * 0.32, size.width, size.height * 0.58);
+    canvas.drawPath(mainRoad, majorRoadPaint);
+
+    final crossRoad = Path()
+      ..moveTo(size.width * 0.35, 0)
+      ..quadraticBezierTo(size.width * 0.48, size.height * 0.5, size.width * 0.40, size.height);
+    canvas.drawPath(crossRoad, minorRoadPaint);
+
+    final secRoad = Path()
+      ..moveTo(size.width * 0.72, 0)
+      ..lineTo(size.width * 0.62, size.height);
+    canvas.drawPath(secRoad, minorRoadPaint);
+
+    // Mərkəzi radar dairələri
+    final center = Offset(size.width * 0.45, size.height * 0.46);
+    for (final r in [34.0, 68.0, 108.0]) {
+      canvas.drawCircle(
+        center,
+        r,
+        Paint()
+          ..color = const Color(0xFF34D399).withOpacity(0.14)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2,
+      );
+    }
+    canvas.drawCircle(
+      center,
+      5,
+      Paint()..color = const Color(0xFF34D399).withOpacity(0.8),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 

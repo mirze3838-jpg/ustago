@@ -104,6 +104,116 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
+  Future<void> _showVillagePickerSheet() async {
+    final villages = CategoryCityService.getVillagesForRegion(_selectedCity);
+    final searchCtrl = TextEditingController();
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final q = CategoryCityService.normalizeAz(searchCtrl.text);
+          final filtered = q.isEmpty
+              ? villages
+              : villages.where((v) => CategoryCityService.normalizeAz(v).contains(q)).toList();
+
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+              left: 18,
+              right: 18,
+              top: 16,
+            ),
+            child: SizedBox(
+              height: MediaQuery.of(ctx).size.height * 0.58,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    '$_selectedCity — Kənd / Qəsəbə / Rayon seçin',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: searchCtrl,
+                    onChanged: (_) => setSheetState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'Kənd və ya qəsəbə axtar...',
+                      prefixIcon: const Icon(Icons.search),
+                      filled: true,
+                      fillColor: const Color(0xFFF1F5F9),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  'Siyahıda tapılmadı — yazdığınız adı istifadə edə bilərsiniz',
+                                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 10),
+                                if (searchCtrl.text.trim().isNotEmpty)
+                                  ElevatedButton.icon(
+                                    onPressed: () => Navigator.pop(ctx, searchCtrl.text.trim()),
+                                    icon: const Icon(Icons.check, size: 18),
+                                    label: Text('"${searchCtrl.text.trim()}" seç'),
+                                  ),
+                              ],
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final item = filtered[index];
+                              return ListTile(
+                                dense: true,
+                                leading: const Icon(Icons.location_on_outlined, color: Color(0xFF1769D2)),
+                                title: Text(item, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                onTap: () => Navigator.pop(ctx, item),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    searchCtrl.dispose();
+    if (selected != null && mounted) {
+      setState(() {
+        _districtController.text = selected;
+      });
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -284,7 +394,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               const SizedBox(height: 16),
             ],
 
-            // Fəaliyyət Göstərdiyi Şəhər və Rayon / Ərazi
+            // Fəaliyyət Göstərdiyi / Məskunlaşdığı Şəhər, Rayon və Kənd
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -293,7 +403,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   child: DropdownButtonFormField<String>(
                     value: _cities.contains(_selectedCity) ? _selectedCity : (_cities.isNotEmpty ? _cities.first : 'Bakı'),
                     decoration: const InputDecoration(
-                      labelText: 'Şəhər *',
+                      labelText: 'Şəhər / Rayon *',
                       prefixIcon: Icon(Icons.location_city, color: Color(0xFF1769D2)),
                     ),
                     items: _cities.map((city) {
@@ -303,7 +413,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       );
                     }).toList(),
                     onChanged: (val) {
-                      if (val != null) setState(() => _selectedCity = val);
+                      if (val != null) {
+                        setState(() {
+                          _selectedCity = val;
+                          _districtController.clear();
+                        });
+                      }
                     },
                   ),
                 ),
@@ -312,16 +427,55 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   flex: 6,
                   child: TextFormField(
                     controller: _districtController,
-                    decoration: const InputDecoration(
-                      labelText: 'Rayon / Ərazi',
-                      hintText: 'Məs: Yasamal, Xətai',
-                      prefixIcon: Icon(Icons.pin_drop_outlined),
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      labelText: 'Kənd / Qəsəbə / Ərazi *',
+                      hintText: 'Məs: Maştağa, Yasamal',
+                      prefixIcon: const Icon(Icons.pin_drop_outlined),
+                      suffixIcon: IconButton(
+                        tooltip: 'Kənd və ya qəsəbə seç',
+                        icon: const Icon(Icons.list_alt_rounded, color: Color(0xFF1769D2)),
+                        onPressed: _showVillagePickerSheet,
+                      ),
                     ),
+                    validator: (v) => v!.trim().isEmpty ? 'Yaşadığınız kənd və ya ərazini qeyd edin' : null,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 36,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: CategoryCityService.getVillagesForRegion(_selectedCity).map((village) {
+                  final bool isPicked = _districtController.text.trim().toLowerCase() == village.toLowerCase();
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ActionChip(
+                      label: Text(
+                        village,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: isPicked ? FontWeight.bold : FontWeight.w500,
+                          color: isPicked ? Colors.white : const Color(0xFF1E293B),
+                        ),
+                      ),
+                      backgroundColor: isPicked ? const Color(0xFF1769D2) : const Color(0xFFF1F5F9),
+                      side: BorderSide(
+                        color: isPicked ? const Color(0xFF1769D2) : const Color(0xFFE2E8F0),
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _districtController.text = village;
+                        });
+                      },
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 14),
 
             // Telefon Nömrəsi
             TextFormField(
