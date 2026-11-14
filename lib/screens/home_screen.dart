@@ -44,6 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
   double _mapLat = 40.4093;
   double _mapLng = 49.8671;
   double _mapZoom = 12.0;
+  bool _isSatelliteMap = false;
   final TextEditingController _mapSearchController = TextEditingController();
   String? _currentUserRole;
   final TextEditingController _searchController = TextEditingController();
@@ -2506,6 +2507,15 @@ class _HomeScreenState extends State<HomeScreen> {
                               setState(() => _centerMapOnSelection());
                             },
                           ),
+                          const SizedBox(height: 8),
+                          _buildMapCircleBtn(
+                            icon: _isSatelliteMap ? Icons.map_rounded : Icons.layers_rounded,
+                            iconColor: _isSatelliteMap ? const Color(0xFF059669) : const Color(0xFF0F172A),
+                            tooltip: _isSatelliteMap ? 'Küçə xəritəsi' : 'Peyk görünüşü',
+                            onTap: () {
+                              setState(() => _isSatelliteMap = !_isSatelliteMap);
+                            },
+                          ),
                         ],
                       ),
                     ),
@@ -2586,29 +2596,30 @@ class _HomeScreenState extends State<HomeScreen> {
         final int maxTy = ((centerY + h / 2.0) / tileSize).floor().clamp(0, nTiles - 1);
 
         final List<Widget> tileWidgets = [];
-        const subdomains = ['a', 'b', 'c'];
 
         for (int tx = minTx; tx <= maxTx; tx++) {
           for (int ty = minTy; ty <= maxTy; ty++) {
             final double left = w / 2.0 + (tx * tileSize - centerX);
             final double top = h / 2.0 + (ty * tileSize - centerY);
-            final sub = subdomains[(tx + ty) % 3];
-            final cartoUrl = 'https://$sub.basemaps.cartocdn.com/rastertiles/voyager/$tileZ/$tx/$ty.png';
-            final osmUrl = 'https://tile.openstreetmap.org/$tileZ/$tx/$ty.png';
+            final int sub = (tx + ty) % 4;
+            final String lyrs = _isSatelliteMap ? 'y' : 'm';
+            final String googleTileUrl = 'https://mt$sub.google.com/vt/lyrs=$lyrs&x=$tx&y=$ty&z=$tileZ&hl=az';
+            final String arcgisUrl =
+                'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/$tileZ/$ty/$tx';
 
             tileWidgets.add(
               Positioned(
-                key: ValueKey('tile_${tileZ}_${tx}_$ty'),
+                key: ValueKey('tile_${_isSatelliteMap ? "sat" : "str"}_${tileZ}_${tx}_$ty'),
                 left: left,
                 top: top,
                 width: tileSize + 0.6,
                 height: tileSize + 0.6,
                 child: Image.network(
-                  cartoUrl,
+                  googleTileUrl,
                   fit: BoxFit.fill,
                   gaplessPlayback: true,
                   errorBuilder: (_, __, ___) => Image.network(
-                    osmUrl,
+                    arcgisUrl,
                     fit: BoxFit.fill,
                     gaplessPlayback: true,
                     errorBuilder: (_, __, ___) => const SizedBox.shrink(),

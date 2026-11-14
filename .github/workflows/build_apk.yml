@@ -96,6 +96,9 @@ jobs:
             echo "::error::Web build failed. Log: $(cat /tmp/paste_url.txt 2>/dev/null)"
             exit 1
           }
+          TS=$(date +%s)
+          sed -i "s/main\.dart\.js/main.dart.js?v=$TS/g" build/web/flutter_bootstrap.js || true
+          sed -i "s/flutter_bootstrap\.js/flutter_bootstrap.js?v=$TS/g" build/web/index.html || true
 
       - name: Upload Web Build Log on Failure
         if: failure()
