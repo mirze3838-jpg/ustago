@@ -1,11 +1,26 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
+import '../services/category_city_service.dart';
 import 'login_screen.dart';
 
 class MarketScreen extends StatefulWidget {
-  const MarketScreen({super.key});
+  final VoidCallback? onBackToHome;
+  final void Function(String cityOrAddress, double? lat, double? lng)? onNavigateToMap;
+  final int openMyListingsSignal;
+
+  const MarketScreen({
+    super.key,
+    this.onBackToHome,
+    this.onNavigateToMap,
+    this.openMyListingsSignal = 0,
+  });
 
   @override
   State<MarketScreen> createState() => _MarketScreenState();
@@ -14,82 +29,265 @@ class MarketScreen extends StatefulWidget {
 class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final AuthService _authService = AuthService();
-  String _selectedCategory = 'Hamısı';
-  final TextEditingController _searchController = TextEditingController();
-  late final Stream<QuerySnapshot<Map<String, dynamic>>> _marketStream;
 
-  final List<String> _categories = [
+  final TextEditingController _storeSearchController = TextEditingController();
+  final TextEditingController _productSearchController = TextEditingController();
+
+  String _selectedStoreCategory = 'Hamısı';
+  String _selectedProductCategory = 'Hamısı';
+  String _selectedCityFilter = 'Hamısı';
+  bool _onlyVerifiedStores = false;
+  bool _onlyFavorites = false;
+
+  String? _currentUserRole;
+  StreamSubscription? _authSub;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userDocSub;
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _marketStream;
+  QuerySnapshot<Map<String, dynamic>>? _latestMarketSnapshot;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _marketSub;
+
+  final Set<String> _favoriteIds = {};
+  final List<Map<String, dynamic>> _cartItems = [];
+  static final Map<String, Uint8List> _b64Cache = {};
+
+  static Uint8List? _decodeB64(String? b64) {
+    if (b64 == null || b64.trim().isEmpty) return null;
+    final cached = _b64Cache[b64];
+    if (cached != null) return cached;
+    try {
+      final bytes = base64Decode(b64);
+      if (_b64Cache.length > 100) _b64Cache.remove(_b64Cache.keys.first);
+      _b64Cache[b64] = bytes;
+      return bytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  final List<String> _storeCategories = const [
     'Hamısı',
     'Tikinti Materialları',
-    'Santexnika',
+    'Alətlər',
     'Elektrik',
-    'Alətlər və Texnika',
+    'Santexnika',
     'Boya və Lak',
-    'Qapı və Pəncərə',
-    'Mebel və Taxta',
   ];
 
-  // Başlanğıc nümunə mağazalar (Firestore boş olduqda da zəngin görünsün)
-  final List<Map<String, dynamic>> _sampleStores = [
+  final List<Map<String, dynamic>> _productCategoryCards = const [
     {
-      'title': 'Baku Tikinti Malları Mərkəzi',
+      'key': 'Hamısı',
+      'label': 'Hamısı',
+      'icon': Icons.layers_rounded,
+      'color': Color(0xFF1769D2),
+      'bg': Color(0xFFEFF6FF),
+    },
+    {
+      'key': 'Sement',
+      'label': 'Sement',
+      'icon': Icons.inventory_2_rounded,
+      'color': Color(0xFF92400E),
+      'bg': Color(0xFFFEF3C7),
+    },
+    {
+      'key': 'Kərpic',
+      'label': 'Kərpic',
+      'icon': Icons.grid_view_rounded,
+      'color': Color(0xFFEA580C),
+      'bg': Color(0xFFFFEDD5),
+    },
+    {
+      'key': 'Beton',
+      'label': 'Beton',
+      'icon': Icons.view_in_ar_rounded,
+      'color': Color(0xFF475569),
+      'bg': Color(0xFFF1F5F9),
+    },
+    {
+      'key': 'Alətlər',
+      'label': 'Alətlər',
+      'icon': Icons.build_rounded,
+      'color': Color(0xFFD97706),
+      'bg': Color(0xFFFEF9C3),
+    },
+    {
+      'key': 'Elektrik',
+      'label': 'Elektrik',
+      'icon': Icons.bolt_rounded,
+      'color': Color(0xFFCA8A04),
+      'bg': Color(0xFFFEF08A),
+    },
+    {
+      'key': 'Santexnika',
+      'label': 'Santexnika',
+      'icon': Icons.water_drop_rounded,
+      'color': Color(0xFF0284C7),
+      'bg': Color(0xFFE0F2FE),
+    },
+    {
+      'key': 'Boya və Lak',
+      'label': 'Boya',
+      'icon': Icons.format_paint_rounded,
+      'color': Color(0xFF9333EA),
+      'bg': Color(0xFFF3E8FF),
+    },
+  ];
+
+  final List<String> _allListingCategories = const [
+    'Tikinti Materialları',
+    'Sement',
+    'Kərpic',
+    'Beton',
+    'Alətlər',
+    'Elektrik',
+    'Santexnika',
+    'Boya və Lak',
+  ];
+
+  // Ekran görüntüsündəki kimi zəngin nümunə mağazalar (Firestore mağazaları həmişə üst sırada gəlir)
+  final List<Map<String, dynamic>> _sampleStores = const [
+    {
+      'sampleId': 'sample_abc',
+      'title': 'ABC Tikinti Mağazası',
+      'brandTag': 'ABC\nTİKİNTİ',
       'category': 'Tikinti Materialları',
       'owner': 'Rəşad Əliyev',
       'phone': '+994 50 234 56 78',
-      'address': 'Bakı ş., Dərnəgül tikinti bazarı, Sıra 4, Mağaza 12',
-      'rating': 4.9,
-      'isPromoted': true,
-      'description': 'Sement, qum, kərpic, armatur, gips və digər bütün növ qara tikinti materiallarının topdan və pərakəndə satışı. Çatdırılma var.',
-      'icon': Icons.apartment_rounded,
-      'color': Color(0xFFE65100),
+      'whatsapp': '+994502345678',
+      'city': 'Bakı',
+      'address': 'Bakı, Nərimanov r.',
+      'lat': 40.4065,
+      'lng': 49.8730,
+      'rating': 4.8,
+      'reviewCount': 124,
+      'isVerified': true,
+      'description': 'Tikinti materialları, alətlər və s.',
+      'brandColorValue': 0xFF1769D2,
+      'accentColorValue': 0xFFF59E0B,
+      'iconCode': 0,
     },
     {
-      'title': 'Santexnika Dünyası',
-      'category': 'Santexnika',
+      'sampleId': 'sample_metak',
+      'title': 'Metak Group',
+      'brandTag': 'M\nMETAK',
+      'category': 'Tikinti Materialları',
       'owner': 'Vüsal Qasımov',
       'phone': '+994 55 987 65 43',
-      'address': 'Bakı ş., Əhmədli qəsəbəsi, Sarayevo küç. 15',
-      'rating': 4.8,
-      'isPromoted': true,
-      'description': 'Kombi, radiator, boru fitinqləri, kranlar, su nasosları və kanalizasiya ləvazimatları. Rəsmi zəmanət.',
-      'icon': Icons.water_drop_rounded,
-      'color': Color(0xFF1976D2),
+      'whatsapp': '+994559876543',
+      'city': 'Bakı',
+      'address': 'Bakı, Yasamal r.',
+      'lat': 40.3860,
+      'lng': 49.8050,
+      'rating': 4.7,
+      'reviewCount': 98,
+      'isVerified': true,
+      'description': 'Tikinti və təmir materialları',
+      'brandColorValue': 0xFFEA580C,
+      'accentColorValue': 0xFF0F172A,
+      'iconCode': 1,
     },
     {
-      'title': 'Master Tool - Peşəkar Usta Alətləri',
-      'category': 'Alətlər və Texnika',
+      'sampleId': 'sample_buildmax',
+      'title': 'BuildMax',
+      'brandTag': 'BuildMax',
+      'category': 'Alətlər',
       'owner': 'Eldar Məmmədov',
       'phone': '+994 70 333 22 11',
-      'address': 'Bakı ş., Sədərək Ticarət Mərkəzi, Şirniyyat yanı',
-      'rating': 5.0,
-      'isPromoted': true,
-      'description': 'Drel, laqonda, perforator, qaynaq aparatları, lazer səviyyəölçənlər (Bosch, DeWalt, Makita, Total).',
-      'icon': Icons.handyman_rounded,
-      'color': Color(0xFFF57C00),
+      'whatsapp': '+994703332211',
+      'city': 'Bakı',
+      'address': 'Bakı, Xətai r.',
+      'lat': 40.3865,
+      'lng': 49.9145,
+      'rating': 4.6,
+      'reviewCount': 87,
+      'isVerified': true,
+      'description': 'Tikinti materialları və avadanlıq',
+      'brandColorValue': 0xFF0284C7,
+      'accentColorValue': 0xFF1E3A8A,
+      'iconCode': 2,
     },
     {
+      'sampleId': 'sample_elektrik',
       'title': 'Baku Elektrik Təchizat',
+      'brandTag': 'BAKU\nELEKTRİK',
       'category': 'Elektrik',
       'owner': 'Kamran İsmayılov',
       'phone': '+994 51 444 88 99',
-      'address': 'Bakı ş., Nərimanov r., Təbriz küç. 82',
-      'rating': 4.7,
-      'isPromoted': false,
-      'description': 'Kabel, avtomat açarlar, çılçıraqlar, led panellər və sənaye elektrik avadanlıqları.',
-      'icon': Icons.bolt_rounded,
-      'color': Color(0xFFFBC02D),
+      'whatsapp': '+994514448899',
+      'city': 'Bakı',
+      'address': 'Bakı, Nəsimi r., Təbriz küç.',
+      'lat': 40.4025,
+      'lng': 49.8325,
+      'rating': 4.8,
+      'reviewCount': 64,
+      'isVerified': true,
+      'description': 'Kabel, avtomat, LED panellər və şitlər',
+      'brandColorValue': 0xFFCA8A04,
+      'accentColorValue': 0xFF1E293B,
+      'iconCode': 3,
+    },
+  ];
+
+  // Ekran görüntüsündəki nümunə tikinti malları (2 sütunlu grid)
+  final List<Map<String, dynamic>> _sampleProducts = const [
+    {
+      'sampleId': 'prod_sement_m500',
+      'title': 'Sement M500',
+      'unit': '25 kq kisə',
+      'price': '8.50 AZN',
+      'numericPrice': 8.50,
+      'store': 'ABC Tikinti Mağazası',
+      'city': 'Bakı',
+      'address': 'Bakı, Nərimanov r.',
+      'phone': '+994 50 234 56 78',
+      'whatsapp': '+994502345678',
+      'category': 'Sement',
+      'description': 'Yüksək möhkəmlikli M500 marka tikinti sementi (25 kq kisə). Topdan və pərakəndə.',
+      'visualType': 'cement',
     },
     {
-      'title': 'Rənglər Evi - Boya Mərkəzi',
-      'category': 'Boya və Lak',
-      'owner': 'Samir Rzayev',
-      'phone': '+994 50 678 90 12',
-      'address': 'Bakı ş., Babək prospekti 22',
-      'rating': 4.8,
-      'isPromoted': false,
-      'description': 'Daxili və fasad boyaları, emulsiya, lak, divar kağızları və rəng qarışdırma xidməti.',
-      'icon': Icons.format_paint_rounded,
-      'color': Color(0xFF9C27B0),
+      'sampleId': 'prod_kerpic',
+      'title': 'Keyfiyyətli Kərpic',
+      'unit': '1 ədəd',
+      'price': '0.35 AZN',
+      'numericPrice': 0.35,
+      'store': 'Metak Group',
+      'city': 'Bakı',
+      'address': 'Bakı, Yasamal r.',
+      'phone': '+994 55 987 65 43',
+      'whatsapp': '+994559876543',
+      'category': 'Kərpic',
+      'description': 'Yüksək istilik və səs izolyasiyalı qırmızı bişmiş tikinti kərpici.',
+      'visualType': 'brick',
+    },
+    {
+      'sampleId': 'prod_armatur',
+      'title': 'Armatur Dəmir',
+      'unit': '1 ton',
+      'price': '950 AZN',
+      'numericPrice': 950.0,
+      'store': 'BuildMax',
+      'city': 'Bakı',
+      'address': 'Bakı, Xətai r.',
+      'phone': '+994 70 333 22 11',
+      'whatsapp': '+994703332211',
+      'category': 'Beton',
+      'description': 'A500C standartlı 12mm-16mm bünövrə və monolit armatur dəmiri.',
+      'visualType': 'rebar',
+    },
+    {
+      'sampleId': 'prod_matkap',
+      'title': 'Dəngəli Matkap',
+      'unit': '1 ədəd',
+      'price': '129 AZN',
+      'numericPrice': 129.0,
+      'store': 'ToolMaster',
+      'city': 'Bakı',
+      'address': 'Bakı, Sədərək TM',
+      'phone': '+994 51 444 88 99',
+      'whatsapp': '+994514448899',
+      'category': 'Alətlər',
+      'description': 'Peşəkar zərbəli (dəngəli) akkumulyatorlu drel-perforator, 2 ədəd batareya ilə.',
+      'visualType': 'drill',
     },
   ];
 
@@ -97,79 +295,82 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _marketStream = FirebaseFirestore.instance
         .collection('market_stores')
         .orderBy('createdAt', descending: true)
-        .snapshots();
+        .snapshots()
+        .asBroadcastStream();
+    _marketSub = _marketStream.listen((snap) {
+      if (mounted) {
+        setState(() => _latestMarketSnapshot = snap);
+      } else {
+        _latestMarketSnapshot = snap;
+      }
+    }, onError: (_) {});
+
+    _bindUserRoleListener();
+    _authSub = _authService.authStateChanges.listen((_) {
+      _bindUserRoleListener();
+    });
   }
 
-  Future<void> _deleteListing(String docId) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Elanı sil'),
-        content: const Text('Bu elanı silmək istədiyinizdən əminsiniz?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Xeyr')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Sil', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      try {
-        await FirebaseFirestore.instance.collection('market_stores').doc(docId).delete();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Elan silindi.'), backgroundColor: Colors.green),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Silmə xətası: $e'), backgroundColor: Colors.red),
-          );
-        }
-      }
+  @override
+  void didUpdateWidget(covariant MarketScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.openMyListingsSignal != oldWidget.openMyListingsSignal &&
+        widget.openMyListingsSignal > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showMyStoresAndListingsSheet();
+      });
     }
+  }
+
+  void _bindUserRoleListener() {
+    _userDocSub?.cancel();
+    final user = _authService.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _currentUserRole = null);
+      return;
+    }
+    _userDocSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .snapshots()
+        .listen((doc) {
+      if (mounted) {
+        setState(() {
+          _currentUserRole = doc.data()?['role']?.toString();
+        });
+      }
+    }, onError: (_) {});
   }
 
   @override
   void dispose() {
     _tabController.dispose();
-    _searchController.dispose();
+    _storeSearchController.dispose();
+    _productSearchController.dispose();
+    _authSub?.cancel();
+    _userDocSub?.cancel();
+    _marketSub?.cancel();
     super.dispose();
   }
 
-  Future<void> _makeCall(String phone) async {
-    final cleanPhone = phone.replaceAll(RegExp(r'[^\d+]'), '');
-    final uri = Uri.parse('tel:$cleanPhone');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    }
-  }
-
-  Future<void> _openWhatsApp(String phone) async {
-    var cleanPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
-    if (cleanPhone.startsWith('0')) cleanPhone = '994${cleanPhone.substring(1)}';
-    final uri = Uri.parse('https://wa.me/$cleanPhone');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
-  // Yeni Mağaza və ya Elan əlavə etmək üçün dialoq
-  void _showAddListingDialog() {
+  // ---------------------------------------------------------------------------
+  // BÖLMƏ 1.1: SATICI İCAZƏ YOXLAMASI VƏ KEÇİD DİALOQU
+  // ---------------------------------------------------------------------------
+  Future<void> _checkSellerPermissionAndRun(VoidCallback onAllowed) async {
     final user = _authService.currentUser;
     if (user == null) {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           title: const Text('Giriş tələb olunur'),
-          content: const Text('Mağaza və ya elan yerləşdirmək üçün zəhmət olmasa tətbiqə daxil olun.'),
+          content: const Text('Mağaza və elan yerləşdirmək üçün zəhmət olmasa hesabınıza daxil olun.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
@@ -189,476 +390,1637 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
       return;
     }
 
-    final storeNameController = TextEditingController();
-    final priceController = TextEditingController();
-    final phoneController = TextEditingController();
-    final addressController = TextEditingController();
-    final descController = TextEditingController();
-    String selectedCat = _categories[1];
-    String listingType = 'store'; // 'store' və ya 'product'
+    String? liveRole = _currentUserRole;
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      liveRole = doc.data()?['role']?.toString() ?? liveRole;
+    } catch (_) {}
 
-    showModalBottomSheet(
+    if (liveRole == 'seller') {
+      onAllowed();
+      return;
+    }
+
+    if (!mounted) return;
+    await showDialog(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-            left: 20,
-            right: 20,
-            top: 20,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      listingType == 'store' ? 'Yeni Mağaza Əlavə Et' : 'Məhsul / Elan Yerləşdir',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ChoiceChip(
-                        label: const Center(child: Text('Mağaza')),
-                        selected: listingType == 'store',
-                        selectedColor: const Color(0xFF1769D2),
-                        labelStyle: TextStyle(
-                          color: listingType == 'store' ? Colors.white : Colors.black87,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        onSelected: (v) {
-                          if (v) setModalState(() => listingType = 'store');
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ChoiceChip(
-                        label: const Center(child: Text('Məhsul / Elan')),
-                        selected: listingType == 'product',
-                        selectedColor: const Color(0xFF1769D2),
-                        labelStyle: TextStyle(
-                          color: listingType == 'product' ? Colors.white : Colors.black87,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        onSelected: (v) {
-                          if (v) setModalState(() => listingType = 'product');
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: storeNameController,
-                  decoration: InputDecoration(
-                    labelText: listingType == 'store' ? 'Mağazanın Adı *' : 'Məhsulun Adı *',
-                    prefixIcon: Icon(listingType == 'store' ? Icons.store : Icons.shopping_bag_outlined),
-                  ),
-                ),
-                if (listingType == 'product') ...[
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: priceController,
-                    decoration: const InputDecoration(
-                      labelText: 'Qiymət (AZN) *',
-                      hintText: 'Məs: 45 AZN',
-                      prefixIcon: Icon(Icons.sell_outlined),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: selectedCat,
-                  decoration: const InputDecoration(
-                    labelText: 'Kateqoriya *',
-                    prefixIcon: Icon(Icons.category),
-                  ),
-                  items: _categories.where((c) => c != 'Hamısı').map((c) {
-                    return DropdownMenuItem(value: c, child: Text(c));
-                  }).toList(),
-                  onChanged: (val) {
-                    if (val != null) setModalState(() => selectedCat = val);
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    labelText: 'Əlaqə Nömrəsi (Zəng / WhatsApp) *',
-                    prefixIcon: Icon(Icons.phone),
-                    hintText: '+994 50 123 45 67',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: addressController,
-                  decoration: const InputDecoration(
-                    labelText: 'Ünvan və ya Şəhər *',
-                    prefixIcon: Icon(Icons.location_on),
-                    hintText: 'Məs. Dərnəgül tikinti bazarı',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: descController,
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    labelText: listingType == 'store' ? 'Təsvir və Satılan Mallar *' : 'Məhsul haqqında məlumat *',
-                    hintText: 'Məhsullar, çatdırılma və şərtlər haqqında qısa məlumat yazın...',
-                  ),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1769D2),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    onPressed: () async {
-                      if (storeNameController.text.trim().isEmpty ||
-                          phoneController.text.trim().isEmpty ||
-                          descController.text.trim().isEmpty ||
-                          (listingType == 'product' && priceController.text.trim().isEmpty)) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Zəhmət olmasa vacib xanaları doldurun!')),
-                        );
-                        return;
-                      }
-
-                      try {
-                        await FirebaseFirestore.instance.collection('market_stores').add({
-                          'title': storeNameController.text.trim(),
-                          'listingType': listingType,
-                          'price': listingType == 'product' ? priceController.text.trim() : '',
-                          'category': selectedCat,
-                          'phone': phoneController.text.trim(),
-                          'address': addressController.text.trim(),
-                          'description': descController.text.trim(),
-                          'userId': user.uid,
-                          'ownerId': user.uid,
-                          'userEmail': user.email,
-                          'rating': 5.0,
-                          'isPromoted': false,
-                          'createdAt': FieldValue.serverTimestamp(),
-                        });
-
-                        if (mounted) {
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                listingType == 'store'
-                                    ? 'Təbriklər! Mağazanız uğurla əlavə edildi.'
-                                    : 'Təbriklər! Elanınız uğurla dərc edildi.',
-                              ),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Xəta: $e'), backgroundColor: Colors.red),
-                          );
-                        }
-                      }
-                    },
-                    child: const Text('Dərc et və Reklam et', style: TextStyle(color: Colors.white, fontSize: 16)),
-                  ),
-                ),
-              ],
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: const [
+            Icon(Icons.storefront_rounded, color: Color(0xFF1769D2), size: 26),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Satıcı Profili Tələb Olunur',
+                style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold),
+              ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text('Alış-Satış & Tikinti Mağazaları', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-        backgroundColor: const Color(0xFF1769D2),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          indicatorWeight: 3,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: const [
-            Tab(icon: Icon(Icons.storefront), text: 'Mağazalar & Satıcılar'),
-            Tab(icon: Icon(Icons.shopping_bag_outlined), text: 'Tikinti Malları & Elanlar'),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFF1769D2),
-        icon: const Icon(Icons.add_business, color: Colors.white),
-        label: const Text('Mağaza Əlavə Et', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        onPressed: _showAddListingDialog,
-      ),
-      body: Column(
-        children: [
-          // 1. Reklam Paneli (Satıcılar üçün çağırış)
-          Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF1E88E5), Color(0xFF1565C0)],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.blue.withOpacity(0.2),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.campaign, color: Colors.white, size: 28),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        'Mağazanızı UstaGo-da Reklam Edin!',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'Tikinti mallarınızı minlərlə usta və müştəriyə birbaşa satın.',
-                        style: TextStyle(color: Colors.white70, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF1565C0),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
-                  onPressed: _showAddListingDialog,
-                  child: const Text('Elan Ver'),
-                ),
-              ],
-            ),
+        content: const Text(
+          'Elan yerləşdirmək üçün Satıcı bölməsinə keçməlisiniz.',
+          style: TextStyle(fontSize: 14, color: Color(0xFF334155), height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Bağla'),
           ),
-
-          // 2. Axtarış Qutusu
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: TextField(
-                controller: _searchController,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  icon: const Icon(Icons.search, color: Color(0xFF64748B), size: 20),
-                  hintText: 'Mağaza, məhsul və ya ünvan axtar...',
-                  hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, size: 18, color: Colors.grey),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() {});
-                          },
-                        )
-                      : null,
-                ),
-              ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1769D2),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-          ),
-
-          // 3. Kateqoriya Seçimi (Horizontal Scroll)
-          SizedBox(
-            height: 38,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              scrollDirection: Axis.horizontal,
-              itemCount: _categories.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final cat = _categories[index];
-                final isSelected = cat == _selectedCategory;
-                return ChoiceChip(
-                  label: Text(
-                    cat,
-                    style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.black87,
-                      fontSize: 12,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+            label: const Text('Satıcı bölməsinə keç'),
+            onPressed: () async {
+              try {
+                await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                  'uid': user.uid,
+                  'email': user.email ?? '',
+                  'role': 'seller',
+                }, SetOptions(merge: true));
+                if (mounted) {
+                  setState(() => _currentUserRole = 'seller');
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Aktiv profil növünüz Satıcı olaraq dəyişdirildi!'),
+                      backgroundColor: Color(0xFF059669),
                     ),
-                  ),
-                  selected: isSelected,
-                  selectedColor: const Color(0xFF1769D2),
-                  backgroundColor: Colors.white,
-                  onSelected: (val) {
-                    setState(() => _selectedCategory = cat);
-                  },
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // 3. TabBar Görünüşü
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildStoresList(),
-                _buildProductsList(),
-              ],
-            ),
+                  );
+                  onAllowed();
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
           ),
         ],
       ),
     );
   }
 
-  // 1-ci Tab: Mağazalar və Satıcılar Siyahısı
-  Widget _buildStoresList() {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _marketStream,
-      builder: (context, snapshot) {
-        List<Map<String, dynamic>> allStores = List.from(_sampleStores);
+  void _showPublishChoiceSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Satıcı Paneli — Nə əlavə etmək istəyirsiniz?',
+                style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+              ),
+              const SizedBox(height: 14),
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: const BorderSide(color: Color(0xFFBFDBFE)),
+                ),
+                tileColor: const Color(0xFFEFF6FF),
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFF1769D2),
+                  child: Icon(Icons.add_business_rounded, color: Colors.white),
+                ),
+                title: const Text('Yeni Mağaza Yarat', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Mağaza adı, loqo, haqqında, ünvan, telefon və WhatsApp'),
+                trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF1769D2)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showStoreFormSheet();
+                },
+              ),
+              const SizedBox(height: 10),
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(color: Colors.orange.shade200),
+                ),
+                tileColor: Colors.orange.shade50,
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFEA580C),
+                  child: Icon(Icons.shopping_bag_rounded, color: Colors.white),
+                ),
+                title: const Text('Məhsul / Tikinti Materialı Elanı Ver', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Məhsul şəkli, qiymət, ölçü vahidi, mağaza və əlaqə'),
+                trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFFEA580C)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showProductFormSheet();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-          final firestoreStores = snapshot.data!.docs.where((d) {
-            final lType = d.data()['listingType']?.toString() ?? 'store';
-            return lType == 'store';
-          }).map((d) {
-            final data = Map<String, dynamic>.from(d.data());
-            data['id'] = d.id;
-            data['icon'] = Icons.store_mall_directory_rounded;
-            data['color'] = const Color(0xFF1769D2);
-            return data;
-          }).toList();
-          allStores = [...firestoreStores, ..._sampleStores];
-        }
+  // ---------------------------------------------------------------------------
+  // BÖLMƏ 1.2: MAĞAZA VƏ MƏHSUL YARATMA / REDAKTƏ / SİLMƏ
+  // ---------------------------------------------------------------------------
+  Future<void> _showStoreFormSheet({Map<String, dynamic>? existingStore}) async {
+    final user = _authService.currentUser;
+    if (user == null) return;
 
-        // Kateqoriya və axtarış üzrə filtrasiya
-        final q = _searchController.text.trim().toLowerCase();
-        final filtered = allStores.where((s) {
-          final catOk = _selectedCategory == 'Hamısı' || s['category'] == _selectedCategory;
-          if (!catOk) return false;
-          if (q.isEmpty) return true;
-          final title = (s['title'] ?? '').toString().toLowerCase();
-          final desc = (s['description'] ?? '').toString().toLowerCase();
-          final addr = (s['address'] ?? '').toString().toLowerCase();
-          return title.contains(q) || desc.contains(q) || addr.contains(q);
-        }).toList();
+    final bool isEdit = existingStore != null && existingStore['id'] != null;
+    final nameCtrl = TextEditingController(text: existingStore?['title']?.toString() ?? '');
+    final phoneCtrl = TextEditingController(text: existingStore?['phone']?.toString() ?? '');
+    final whatsappCtrl = TextEditingController(
+      text: existingStore?['whatsapp']?.toString() ?? existingStore?['phone']?.toString() ?? '',
+    );
+    final addressCtrl = TextEditingController(text: existingStore?['address']?.toString() ?? '');
+    final descCtrl = TextEditingController(text: existingStore?['description']?.toString() ?? '');
 
-        if (filtered.isEmpty) {
-          return const Center(
-            child: Text('Axtarışa və ya kateqoriyaya uyğun mağaza yoxdur.', style: TextStyle(color: Colors.grey)),
+    String selectedCat = existingStore?['category']?.toString() ?? 'Tikinti Materialları';
+    if (!_allListingCategories.contains(selectedCat)) selectedCat = _allListingCategories.first;
+
+    String selectedCity = existingStore?['city']?.toString() ?? 'Bakı';
+    if (!CategoryCityService.defaultCities.contains(selectedCity)) selectedCity = 'Bakı';
+
+    String? logoBase64 = existingStore?['logoBase64']?.toString();
+    bool isSaving = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final Uint8List? logoBytes = _decodeB64(logoBase64);
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              left: 20,
+              right: 20,
+              top: 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        isEdit ? 'Mağazanı Redaktə Et' : 'Yeni Mağaza Yarat',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Mağaza Loqosu Seçimi
+                  Center(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () async {
+                        try {
+                          final picked = await ImagePicker().pickImage(
+                            source: ImageSource.gallery,
+                            maxWidth: 512,
+                            maxHeight: 512,
+                            imageQuality: 70,
+                          );
+                          if (picked != null) {
+                            final bytes = await picked.readAsBytes();
+                            setModalState(() => logoBase64 = base64Encode(bytes));
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Loqo seçilmədi: $e')),
+                            );
+                          }
+                        }
+                      },
+                      child: Container(
+                        width: 110,
+                        height: 110,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFF93C5FD), width: 1.5),
+                          image: logoBytes != null
+                              ? DecorationImage(image: MemoryImage(logoBytes), fit: BoxFit.cover)
+                              : null,
+                        ),
+                        child: logoBytes == null
+                            ? Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Icon(Icons.add_photo_alternate_rounded, color: Color(0xFF1769D2), size: 32),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'Mağaza Loqosu',
+                                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
+                                  ),
+                                ],
+                              )
+                            : Stack(
+                                children: [
+                                  Positioned(
+                                    right: 4,
+                                    bottom: 4,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(color: Color(0xFF1769D2), shape: BoxShape.circle),
+                                      child: const Icon(Icons.edit, color: Colors.white, size: 14),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Mağaza Adı *',
+                      prefixIcon: Icon(Icons.storefront_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: selectedCat,
+                          decoration: const InputDecoration(labelText: 'Kateqoriya *', prefixIcon: Icon(Icons.category)),
+                          items: _allListingCategories.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12.5)))).toList(),
+                          onChanged: (v) {
+                            if (v != null) setModalState(() => selectedCat = v);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: selectedCity,
+                          decoration: const InputDecoration(labelText: 'Şəhər *', prefixIcon: Icon(Icons.location_city)),
+                          items: CategoryCityService.defaultCities
+                              .map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12.5))))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setModalState(() => selectedCity = v);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  TextField(
+                    controller: addressCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Mağaza Ünvanı *',
+                      hintText: 'Məs: Nərimanov r., Dərnəgül bazarı',
+                      prefixIcon: Icon(Icons.location_on_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: phoneCtrl,
+                          keyboardType: TextInputType.phone,
+                          decoration: const InputDecoration(
+                            labelText: 'Telefon Nömrəsi *',
+                            hintText: '+994 50 123 45 67',
+                            prefixIcon: Icon(Icons.phone),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: whatsappCtrl,
+                          keyboardType: TextInputType.phone,
+                          decoration: const InputDecoration(
+                            labelText: 'WhatsApp Nömrəsi *',
+                            hintText: '+994 50 123 45 67',
+                            prefixIcon: Icon(Icons.chat, color: Color(0xFF16A34A)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  TextField(
+                    controller: descCtrl,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Mağaza Haqqında Məlumat *',
+                      hintText: 'Satılan tikinti malları, iş saatları, çatdırılma...',
+                      prefixIcon: Icon(Icons.description_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1769D2),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              if (nameCtrl.text.trim().isEmpty ||
+                                  addressCtrl.text.trim().isEmpty ||
+                                  phoneCtrl.text.trim().isEmpty ||
+                                  descCtrl.text.trim().isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Zəhmət olmasa bütün vacib (*) xanaları doldurun!')),
+                                );
+                                return;
+                              }
+                              setModalState(() => isSaving = true);
+                              final coords = CategoryCityService.resolveArtisanCoordinates(
+                                '$selectedCity, ${addressCtrl.text.trim()}',
+                                user.uid,
+                              );
+                              final wa = whatsappCtrl.text.trim().isNotEmpty
+                                  ? whatsappCtrl.text.trim()
+                                  : phoneCtrl.text.trim();
+                              final fullAddr = addressCtrl.text.trim().toLowerCase().contains(selectedCity.toLowerCase())
+                                  ? addressCtrl.text.trim()
+                                  : '$selectedCity, ${addressCtrl.text.trim()}';
+
+                              final payload = <String, dynamic>{
+                                'listingType': 'store',
+                                'title': nameCtrl.text.trim(),
+                                'category': selectedCat,
+                                'city': selectedCity,
+                                'address': fullAddr,
+                                'phone': phoneCtrl.text.trim(),
+                                'whatsapp': wa,
+                                'description': descCtrl.text.trim(),
+                                'logoBase64': logoBase64 ?? '',
+                                'lat': coords[0],
+                                'lng': coords[1],
+                                'userId': user.uid,
+                                'ownerId': user.uid,
+                                'userEmail': user.email ?? '',
+                                'isVerified': true,
+                                'rating': existingStore?['rating'] ?? 5.0,
+                                'reviewCount': existingStore?['reviewCount'] ?? 0,
+                              };
+                              try {
+                                if (isEdit) {
+                                  await FirebaseFirestore.instance
+                                      .collection('market_stores')
+                                      .doc(existingStore['id'].toString())
+                                      .set(payload, SetOptions(merge: true));
+                                } else {
+                                  payload['createdAt'] = FieldValue.serverTimestamp();
+                                  await FirebaseFirestore.instance.collection('market_stores').add(payload);
+                                }
+                                if (mounted) {
+                                  Navigator.pop(ctx);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(isEdit ? 'Mağaza yeniləndi!' : 'Mağazanız uğurla yaradıldı!'),
+                                      backgroundColor: const Color(0xFF059669),
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                setModalState(() => isSaving = false);
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Xəta: $e'), backgroundColor: Colors.red),
+                                  );
+                                }
+                              }
+                            },
+                      child: isSaving
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : Text(
+                              isEdit ? 'Dəyişiklikləri Yadda Saxla' : 'Mağazanı Yarat',
+                              style: const TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.bold),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showProductFormSheet({Map<String, dynamic>? existingProduct}) async {
+    final user = _authService.currentUser;
+    if (user == null) return;
+
+    // İstifadəçinin mövcud mağazalarını gətir ki, istəsə mağazasına bağlasın
+    List<Map<String, dynamic>> myStores = [];
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('market_stores')
+          .where('ownerId', isEqualTo: user.uid)
+          .get();
+      myStores = snap.docs
+          .where((d) => (d.data()['listingType'] ?? 'store') == 'store')
+          .map((d) => {'id': d.id, ...d.data()})
+          .toList();
+    } catch (_) {}
+
+    if (!mounted) return;
+    final bool isEdit = existingProduct != null && existingProduct['id'] != null;
+    final titleCtrl = TextEditingController(text: existingProduct?['title']?.toString() ?? '');
+    final unitCtrl = TextEditingController(text: existingProduct?['unit']?.toString() ?? '1 ədəd');
+    final rawPrice = (existingProduct?['price']?.toString() ?? '').replaceAll('AZN', '').trim();
+    final priceCtrl = TextEditingController(text: rawPrice);
+    final storeNameCtrl = TextEditingController(
+      text: existingProduct?['store']?.toString() ??
+          (myStores.isNotEmpty ? (myStores.first['title']?.toString() ?? '') : ''),
+    );
+    final phoneCtrl = TextEditingController(
+      text: existingProduct?['phone']?.toString() ??
+          (myStores.isNotEmpty ? (myStores.first['phone']?.toString() ?? '') : ''),
+    );
+    final whatsappCtrl = TextEditingController(
+      text: existingProduct?['whatsapp']?.toString() ??
+          (myStores.isNotEmpty ? (myStores.first['whatsapp']?.toString() ?? '') : ''),
+    );
+    final addressCtrl = TextEditingController(
+      text: existingProduct?['address']?.toString() ??
+          (myStores.isNotEmpty ? (myStores.first['address']?.toString() ?? '') : ''),
+    );
+    final descCtrl = TextEditingController(text: existingProduct?['description']?.toString() ?? '');
+
+    String selectedCat = existingProduct?['category']?.toString() ?? 'Sement';
+    if (!_allListingCategories.contains(selectedCat)) selectedCat = 'Sement';
+
+    String selectedCity = existingProduct?['city']?.toString() ??
+        (myStores.isNotEmpty ? (myStores.first['city']?.toString() ?? 'Bakı') : 'Bakı');
+    if (!CategoryCityService.defaultCities.contains(selectedCity)) selectedCity = 'Bakı';
+
+    String? imageBase64 = existingProduct?['imageBase64']?.toString();
+    bool isSaving = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final Uint8List? imgBytes = _decodeB64(imageBase64);
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              left: 20,
+              right: 20,
+              top: 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        isEdit ? 'Məhsul Elanını Redaktə Et' : 'Yeni Məhsul / Elan Yerləşdir',
+                        style: const TextStyle(fontSize: 17.5, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Məhsul Şəkli
+                  Center(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () async {
+                        try {
+                          final picked = await ImagePicker().pickImage(
+                            source: ImageSource.gallery,
+                            maxWidth: 640,
+                            maxHeight: 640,
+                            imageQuality: 72,
+                          );
+                          if (picked != null) {
+                            final bytes = await picked.readAsBytes();
+                            setModalState(() => imageBase64 = base64Encode(bytes));
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Şəkil seçilmədi: $e')),
+                            );
+                          }
+                        }
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                          image: imgBytes != null
+                              ? DecorationImage(image: MemoryImage(imgBytes), fit: BoxFit.cover)
+                              : null,
+                        ),
+                        child: imgBytes == null
+                            ? Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Icon(Icons.add_a_photo_rounded, color: Color(0xFF1769D2), size: 32),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'Məhsulun Şəklini Əlavə Et',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
+                                  ),
+                                ],
+                              )
+                            : Align(
+                                alignment: Alignment.bottomRight,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black54,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Text('Şəkli dəyiş', style: TextStyle(color: Colors.white, fontSize: 11)),
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  if (myStores.isNotEmpty) ...[
+                    const Text('Mağazanızı seçin (avtomatik doldur):', style: TextStyle(fontSize: 11.5, color: Color(0xFF64748B))),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      height: 34,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: myStores.map((st) {
+                          final stTitle = st['title']?.toString() ?? 'Mağazam';
+                          final picked = storeNameCtrl.text.trim() == stTitle;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: ActionChip(
+                              backgroundColor: picked ? const Color(0xFF1769D2) : const Color(0xFFEFF6FF),
+                              label: Text(
+                                stTitle,
+                                style: TextStyle(fontSize: 11.5, color: picked ? Colors.white : const Color(0xFF1769D2), fontWeight: FontWeight.bold),
+                              ),
+                              onPressed: () {
+                                setModalState(() {
+                                  storeNameCtrl.text = stTitle;
+                                  if ((st['phone'] ?? '').toString().isNotEmpty) phoneCtrl.text = st['phone'].toString();
+                                  if ((st['whatsapp'] ?? '').toString().isNotEmpty) whatsappCtrl.text = st['whatsapp'].toString();
+                                  if ((st['address'] ?? '').toString().isNotEmpty) addressCtrl.text = st['address'].toString();
+                                  if ((st['city'] ?? '').toString().isNotEmpty &&
+                                      CategoryCityService.defaultCities.contains(st['city'].toString())) {
+                                    selectedCity = st['city'].toString();
+                                  }
+                                });
+                              },
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+
+                  TextField(
+                    controller: titleCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Məhsulun Adı *',
+                      hintText: 'Məs: Sement M500, Keyfiyyətli Kərpic',
+                      prefixIcon: Icon(Icons.shopping_bag_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: priceCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(
+                            labelText: 'Qiymət (AZN) *',
+                            hintText: '8.50',
+                            prefixIcon: Icon(Icons.sell_outlined),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: unitCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Ölçü Vahidi *',
+                            hintText: '25 kq kisə / 1 ədəd / 1 ton',
+                            prefixIcon: Icon(Icons.straighten_rounded),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: selectedCat,
+                          decoration: const InputDecoration(labelText: 'Kateqoriya *', prefixIcon: Icon(Icons.category)),
+                          items: _allListingCategories.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12.5)))).toList(),
+                          onChanged: (v) {
+                            if (v != null) setModalState(() => selectedCat = v);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: selectedCity,
+                          decoration: const InputDecoration(labelText: 'Şəhər *', prefixIcon: Icon(Icons.location_city)),
+                          items: CategoryCityService.defaultCities
+                              .map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12.5))))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setModalState(() => selectedCity = v);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  TextField(
+                    controller: storeNameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Mağaza / Satıcı Adı *',
+                      prefixIcon: Icon(Icons.storefront_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: phoneCtrl,
+                          keyboardType: TextInputType.phone,
+                          decoration: const InputDecoration(
+                            labelText: 'Telefon *',
+                            prefixIcon: Icon(Icons.phone),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: whatsappCtrl,
+                          keyboardType: TextInputType.phone,
+                          decoration: const InputDecoration(
+                            labelText: 'WhatsApp',
+                            prefixIcon: Icon(Icons.chat, color: Color(0xFF16A34A)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  TextField(
+                    controller: descCtrl,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Məhsul haqqında məlumat',
+                      hintText: 'Keyfiyyət, marka, çatdırılma şərtləri...',
+                      prefixIcon: Icon(Icons.notes_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1769D2),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              if (titleCtrl.text.trim().isEmpty ||
+                                  priceCtrl.text.trim().isEmpty ||
+                                  phoneCtrl.text.trim().isEmpty ||
+                                  storeNameCtrl.text.trim().isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Məhsul adı, qiymət, mağaza adı və telefon vacibdir!')),
+                                );
+                                return;
+                              }
+                              setModalState(() => isSaving = true);
+                              final formattedPrice = priceCtrl.text.trim().toUpperCase().contains('AZN')
+                                  ? priceCtrl.text.trim()
+                                  : '${priceCtrl.text.trim()} AZN';
+                              final wa = whatsappCtrl.text.trim().isNotEmpty
+                                  ? whatsappCtrl.text.trim()
+                                  : phoneCtrl.text.trim();
+                              final addr = addressCtrl.text.trim().isNotEmpty ? addressCtrl.text.trim() : selectedCity;
+
+                              final payload = <String, dynamic>{
+                                'listingType': 'product',
+                                'title': titleCtrl.text.trim(),
+                                'unit': unitCtrl.text.trim().isNotEmpty ? unitCtrl.text.trim() : '1 ədəd',
+                                'price': formattedPrice,
+                                'category': selectedCat,
+                                'city': selectedCity,
+                                'storeName': storeNameCtrl.text.trim(),
+                                'address': addr,
+                                'phone': phoneCtrl.text.trim(),
+                                'whatsapp': wa,
+                                'description': descCtrl.text.trim(),
+                                'imageBase64': imageBase64 ?? '',
+                                'userId': user.uid,
+                                'ownerId': user.uid,
+                                'userEmail': user.email ?? '',
+                              };
+
+                              try {
+                                if (isEdit) {
+                                  await FirebaseFirestore.instance
+                                      .collection('market_stores')
+                                      .doc(existingProduct['id'].toString())
+                                      .set(payload, SetOptions(merge: true));
+                                } else {
+                                  payload['createdAt'] = FieldValue.serverTimestamp();
+                                  await FirebaseFirestore.instance.collection('market_stores').add(payload);
+                                }
+                                if (mounted) {
+                                  Navigator.pop(ctx);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(isEdit ? 'Elan yeniləndi!' : 'Məhsul elanınız uğurla dərc edildi!'),
+                                      backgroundColor: const Color(0xFF059669),
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                setModalState(() => isSaving = false);
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Xəta: $e'), backgroundColor: Colors.red),
+                                  );
+                                }
+                              }
+                            },
+                      child: isSaving
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : Text(
+                              isEdit ? 'Dəyişiklikləri Yadda Saxla' : 'Elanı Dərc Et',
+                              style: const TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.bold),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _deleteListing(String docId, {bool isStore = false}) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(isStore ? 'Mağazanı sil' : 'Elanı sil'),
+        content: Text(
+          isStore
+              ? 'Bu mağazanı silmək istədiyinizdən əminsiniz?'
+              : 'Bu məhsul elanını silmək istədiyinizdən əminsiniz?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Xeyr')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sil', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      try {
+        await FirebaseFirestore.instance.collection('market_stores').doc(docId).delete();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(isStore ? 'Mağaza silindi.' : 'Elan silindi.'),
+              backgroundColor: const Color(0xFF059669),
+            ),
           );
         }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Silmə xətası: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
 
-        return ListView.builder(
-          padding: const EdgeInsets.only(left: 12, right: 12, bottom: 80, top: 4),
-          itemCount: filtered.length,
-          itemBuilder: (context, index) {
-            final store = filtered[index];
-            return _buildStoreCard(store);
-          },
+  void _showMyStoresAndListingsSheet() {
+    final user = _authService.currentUser;
+    if (user == null) {
+      _checkSellerPermissionAndRun(() {});
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.72,
+        minChildSize: 0.45,
+        maxChildSize: 0.92,
+        expand: false,
+        builder: (context, scrollCtrl) => Column(
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(8)),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 12, 12, 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.store_mall_directory_rounded, color: Color(0xFF1769D2)),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Mağaza və Elanlarım',
+                      style: TextStyle(fontSize: 17.5, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _checkSellerPermissionAndRun(_showPublishChoiceSheet);
+                    },
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Yeni'),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: _marketStream,
+                initialData: _latestMarketSnapshot,
+                builder: (context, snap) {
+                  final docs = (snap.data ?? _latestMarketSnapshot)?.docs ?? [];
+                  final myDocs = docs.where((d) {
+                    final m = d.data();
+                    return m['ownerId'] == user.uid || m['userId'] == user.uid;
+                  }).toList();
+
+                  if (myDocs.isEmpty) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.storefront_outlined, size: 54, color: Colors.grey.shade400),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Hazırda aktiv mağaza və ya elanınız yoxdur',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF334155)),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'Satıcı profili ilə mağaza aça və ya məhsul elanı yerləşdirə bilərsiniz.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF1769D2),
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                _checkSellerPermissionAndRun(_showPublishChoiceSheet);
+                              },
+                              icon: const Icon(Icons.add_business_rounded, size: 18),
+                              label: const Text('Mağaza / Elan Əlavə Et'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    controller: scrollCtrl,
+                    padding: const EdgeInsets.all(14),
+                    itemCount: myDocs.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, idx) {
+                      final d = myDocs[idx];
+                      final data = Map<String, dynamic>.from(d.data());
+                      data['id'] = d.id;
+                      final bool isStore = (data['listingType']?.toString() ?? 'store') == 'store';
+                      final String title = data['title']?.toString() ?? '';
+                      final String subtitle = isStore
+                          ? '${data['category'] ?? ''} • ${data['address'] ?? ''}'
+                          : '${data['price'] ?? ''} (${data['unit'] ?? '1 ədəd'}) • ${data['storeName'] ?? ''}';
+
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              backgroundColor: isStore ? const Color(0xFFEFF6FF) : const Color(0xFFFFEDD5),
+                              child: Icon(
+                                isStore ? Icons.store_rounded : Icons.shopping_bag_rounded,
+                                color: isStore ? const Color(0xFF1769D2) : const Color(0xFFEA580C),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: isStore ? const Color(0xFF1769D2) : const Color(0xFFEA580C),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          isStore ? 'Mağaza' : 'Məhsul',
+                                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          title,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    subtitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Redaktə et',
+                              icon: const Icon(Icons.edit_outlined, color: Color(0xFF1769D2)),
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                if (isStore) {
+                                  _showStoreFormSheet(existingStore: data);
+                                } else {
+                                  _showProductFormSheet(existingProduct: {
+                                    ...data,
+                                    'store': data['storeName'] ?? data['store'] ?? '',
+                                  });
+                                }
+                              },
+                            ),
+                            IconButton(
+                              tooltip: 'Sil',
+                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                              onPressed: () => _deleteListing(d.id, isStore: isStore),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // ƏLAQƏ, XƏRİTƏ VƏ SƏBƏT FUNKSİYALARI
+  // ---------------------------------------------------------------------------
+  Future<void> _makeCall(String phone) async {
+    final cleanPhone = phone.replaceAll(RegExp(r'[^\d+]'), '');
+    final uri = Uri.parse('tel:$cleanPhone');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
+
+  Future<void> _openWhatsApp(String phone, {String? message}) async {
+    var cleanPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
+    if (cleanPhone.startsWith('0')) cleanPhone = '994${cleanPhone.substring(1)}';
+    final encodedMsg = message != null ? '?text=${Uri.encodeComponent(message)}' : '';
+    final uri = Uri.parse('https://wa.me/$cleanPhone$encodedMsg');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  void _openStoreOnMap(Map<String, dynamic> store) {
+    final String title = store['title']?.toString() ?? 'Mağaza';
+    final String addr = store['address']?.toString() ?? (store['city']?.toString() ?? 'Bakı');
+    final double? sLat = store['lat'] is num ? (store['lat'] as num).toDouble() : null;
+    final double? sLng = store['lng'] is num ? (store['lng'] as num).toDouble() : null;
+    final coords = CategoryCityService.resolveArtisanCoordinates(
+      addr,
+      store['id']?.toString() ?? title,
+      lat: sLat,
+      lng: sLng,
+    );
+    final double lat = coords[0];
+    final double lng = coords[1];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.location_on_rounded, color: Color(0xFFDC2626), size: 24),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      Text(addr, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                    ],
+                  ),
+                ),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 220,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: _buildStaticSlippyMapPreview(lat, lng, title),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _openWhatsApp(store['whatsapp']?.toString() ?? store['phone']?.toString() ?? '');
+                    },
+                    icon: const Icon(Icons.chat, color: Color(0xFF16A34A)),
+                    label: const Text('WhatsApp', style: TextStyle(color: Color(0xFF16A34A), fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1769D2),
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      if (widget.onNavigateToMap != null) {
+                        widget.onNavigateToMap!(store['city']?.toString() ?? 'Bakı', lat, lng);
+                      } else {
+                        launchUrl(
+                          Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng'),
+                          mode: LaunchMode.externalApplication,
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.map_rounded),
+                    label: const Text('Böyük Xəritədə Aç', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStaticSlippyMapPreview(double lat, double lng, String label) {
+    const double zoom = 14.0;
+    final int tileZ = zoom.floor();
+    final int nTiles = 1 << tileZ;
+    final double worldPx = 256.0 * math.pow(2.0, zoom).toDouble();
+    final double tileSize = 256.0;
+    final double centerX = ((lng + 180.0) / 360.0) * worldPx;
+    final double rad = lat * math.pi / 180.0;
+    final double s = math.sin(rad);
+    final double centerY = (0.5 - math.log((1.0 + s) / (1.0 - s)) / (4.0 * math.pi)) * worldPx;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double w = constraints.maxWidth;
+        final double h = constraints.maxHeight;
+        final int minTx = ((centerX - w / 2.0) / tileSize).floor().clamp(0, nTiles - 1);
+        final int maxTx = ((centerX + w / 2.0) / tileSize).floor().clamp(0, nTiles - 1);
+        final int minTy = ((centerY - h / 2.0) / tileSize).floor().clamp(0, nTiles - 1);
+        final int maxTy = ((centerY + h / 2.0) / tileSize).floor().clamp(0, nTiles - 1);
+
+        final List<Widget> tiles = [];
+        for (int tx = minTx; tx <= maxTx; tx++) {
+          for (int ty = minTy; ty <= maxTy; ty++) {
+            final int sub = (tx + ty) % 4;
+            tiles.add(
+              Positioned(
+                left: w / 2.0 + (tx * tileSize - centerX),
+                top: h / 2.0 + (ty * tileSize - centerY),
+                width: tileSize + 0.5,
+                height: tileSize + 0.5,
+                child: Image.network(
+                  'https://mt$sub.google.com/vt/lyrs=m&x=$tx&y=$ty&z=$tileZ&hl=az',
+                  fit: BoxFit.fill,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            );
+          }
+        }
+
+        return Stack(
+          children: [
+            Container(color: const Color(0xFFEAF2F8)),
+            ...tiles,
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      label,
+                      style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const Icon(Icons.location_on_rounded, color: Color(0xFFDC2626), size: 36),
+                ],
+              ),
+            ),
+          ],
         );
       },
     );
   }
 
-  Widget _buildStoreCard(Map<String, dynamic> store) {
-    final isPromoted = store['isPromoted'] == true;
-    final String? docId = store['id']?.toString();
-    final currentUser = _authService.currentUser;
-    final bool canDelete = docId != null &&
-        currentUser != null &&
-        (store['ownerId'] == currentUser.uid ||
-            store['userId'] == currentUser.uid ||
-            currentUser.email == 'mirze3838@gmail.com');
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isPromoted ? const Color(0xFF1769D2).withOpacity(0.3) : Colors.grey.shade200,
-          width: isPromoted ? 1.5 : 1,
+  void _addToCart(Map<String, dynamic> product) {
+    final String key = (product['id'] ?? product['sampleId'] ?? product['title']).toString();
+    setState(() {
+      final idx = _cartItems.indexWhere((e) => e['key'] == key);
+      if (idx >= 0) {
+        _cartItems[idx]['qty'] = (_cartItems[idx]['qty'] as int) + 1;
+      } else {
+        _cartItems.add({
+          'key': key,
+          'title': product['title'] ?? '',
+          'price': product['price'] ?? '0 AZN',
+          'unit': product['unit'] ?? '1 ədəd',
+          'store': product['store'] ?? product['storeName'] ?? 'Mağaza',
+          'phone': product['phone'] ?? '',
+          'whatsapp': product['whatsapp'] ?? product['phone'] ?? '',
+          'qty': 1,
+        });
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${product['title']} səbətə əlavə edildi'),
+        backgroundColor: const Color(0xFF1769D2),
+        duration: const Duration(seconds: 2),
+        action: SnackBarAction(
+          label: 'Səbət (${_totalCartCount()})',
+          textColor: Colors.white,
+          onPressed: _showCartSheet,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    );
+  }
+
+  int _totalCartCount() {
+    int sum = 0;
+    for (final item in _cartItems) {
+      sum += (item['qty'] as int? ?? 1);
+    }
+    return sum;
+  }
+
+  double _parseAzn(String priceStr) {
+    final cleaned = priceStr.replaceAll(',', '.').replaceAll(RegExp(r'[^0-9.]'), '');
+    return double.tryParse(cleaned) ?? 0.0;
+  }
+
+  void _showCartSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          double total = 0.0;
+          for (final item in _cartItems) {
+            total += _parseAzn(item['price'].toString()) * (item['qty'] as int? ?? 1);
+          }
+
+          return SizedBox(
+            height: MediaQuery.of(context).size.height * 0.68,
+            child: Column(
               children: [
+                const SizedBox(height: 10),
                 Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: (store['color'] as Color? ?? const Color(0xFF1769D2)).withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    store['icon'] as IconData? ?? Icons.storefront,
-                    color: store['color'] as Color? ?? const Color(0xFF1769D2),
-                    size: 30,
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(8)),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 12, 12, 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.shopping_cart_rounded, color: Color(0xFF1769D2)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Səbətim (${_totalCartCount()} məhsul)',
+                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      if (_cartItems.isNotEmpty)
+                        TextButton(
+                          onPressed: () {
+                            setState(() => _cartItems.clear());
+                            setSheetState(() {});
+                          },
+                          child: const Text('Təmizlə', style: TextStyle(color: Colors.red)),
+                        ),
+                    ],
                   ),
                 ),
+                const Divider(height: 1),
+                Expanded(
+                  child: _cartItems.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'Səbətiniz boşdur. Tikinti mallarını əlavə edə bilərsiniz.',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(14),
+                          itemCount: _cartItems.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 10),
+                          itemBuilder: (context, i) {
+                            final item = _cartItems[i];
+                            final int qty = item['qty'] as int? ?? 1;
+                            return Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(item['title'].toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
+                                        Text(
+                                          '${item['store']} • ${item['unit']}',
+                                          style: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B)),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          item['price'].toString(),
+                                          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Row(
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.remove_circle_outline, color: Colors.grey),
+                                        onPressed: () {
+                                          setState(() {
+                                            if (qty > 1) {
+                                              item['qty'] = qty - 1;
+                                            } else {
+                                              _cartItems.removeAt(i);
+                                            }
+                                          });
+                                          setSheetState(() {});
+                                        },
+                                      ),
+                                      Text('$qty', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                      IconButton(
+                                        icon: const Icon(Icons.add_circle_outline, color: Color(0xFF1769D2)),
+                                        onPressed: () {
+                                          setState(() => item['qty'] = qty + 1);
+                                          setSheetState(() {});
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                ),
+                if (_cartItems.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 10, offset: const Offset(0, -3))],
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Ümumi məbləğ:', style: TextStyle(fontSize: 14, color: Color(0xFF64748B))),
+                            Text(
+                              '${total.toStringAsFixed(2)} AZN',
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 46,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF16A34A),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            icon: const Icon(Icons.chat),
+                            label: const Text('Sifarişi WhatsApp ilə Göndər', style: TextStyle(fontWeight: FontWeight.bold)),
+                            onPressed: () {
+                              final firstPhone = _cartItems.first['whatsapp']?.toString() ??
+                                  _cartItems.first['phone']?.toString() ??
+                                  '+994502345678';
+                              final lines = _cartItems
+                                  .map((e) => '• ${e['title']} x${e['qty']} (${e['price']})')
+                                  .join('\n');
+                              _openWhatsApp(
+                                firstPhone,
+                                message: 'Salam, UstaGo üzərindən sifariş vermək istəyirəm:\n$lines\nCəm: ${total.toStringAsFixed(2)} AZN',
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showFilterSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Filtr Seçimləri', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _selectedCityFilter = 'Hamısı';
+                        _onlyVerifiedStores = false;
+                        _onlyFavorites = false;
+                      });
+                      Navigator.pop(ctx);
+                    },
+                    child: const Text('Sıfırla'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                value: _selectedCityFilter,
+                decoration: const InputDecoration(labelText: 'Şəhər / Rayon', prefixIcon: Icon(Icons.location_on_outlined)),
+                items: ['Hamısı', ...CategoryCityService.defaultCities]
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) {
+                    setSheetState(() => _selectedCityFilter = v);
+                    setState(() {});
+                  }
+                },
+              ),
+              const SizedBox(height: 10),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Yalnız təsdiqlənmiş mağazalar'),
+                value: _onlyVerifiedStores,
+                onChanged: (v) {
+                  setSheetState(() => _onlyVerifiedStores = v);
+                  setState(() {});
+                },
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Yalnız sevimlilər (♥)'),
+                value: _onlyFavorites,
+                onChanged: (v) {
+                  setSheetState(() => _onlyFavorites = v);
+                  setState(() {});
+                },
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1769D2),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Tətbiq Et', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showStoreDetailSheet(Map<String, dynamic> store) {
+    final String title = store['title']?.toString() ?? 'Mağaza';
+    final String desc = store['description']?.toString() ?? '';
+    final String addr = store['address']?.toString() ?? '';
+    final String phone = store['phone']?.toString() ?? '';
+    final String wa = (store['whatsapp']?.toString().isNotEmpty == true) ? store['whatsapp'].toString() : phone;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _buildStoreLogoBox(store, size: 62),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -666,98 +2028,70 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                     children: [
                       Row(
                         children: [
-                          Expanded(
-                            child: Text(
-                              store['title'] ?? '',
-                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                            ),
+                          Flexible(
+                            child: Text(title, style: const TextStyle(fontSize: 17.5, fontWeight: FontWeight.bold)),
                           ),
-                          if (isPromoted)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.amber.shade100,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Text(
-                                'VIP Reklam',
-                                style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          if (canDelete)
-                            IconButton(
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                              tooltip: 'Elanı sil',
-                              onPressed: () => _deleteListing(docId),
-                            ),
+                          const SizedBox(width: 5),
+                          const Icon(Icons.verified, color: Color(0xFF1769D2), size: 18),
                         ],
                       ),
                       const SizedBox(height: 3),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1769D2).withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          store['category'] ?? '',
-                          style: const TextStyle(color: Color(0xFF1769D2), fontSize: 11, fontWeight: FontWeight.w600),
-                        ),
+                      Text(
+                        store['category']?.toString() ?? 'Tikinti Materialları',
+                        style: const TextStyle(fontSize: 12.5, color: Color(0xFF1769D2), fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            Text(
-              store['description'] ?? '',
-              style: TextStyle(color: Colors.grey.shade700, fontSize: 13, height: 1.3),
-            ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
+            Text(desc, style: const TextStyle(fontSize: 13.5, color: Color(0xFF475569), height: 1.45)),
+            const SizedBox(height: 12),
             Row(
               children: [
-                const Icon(Icons.location_on, size: 14, color: Colors.grey),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    store['address'] ?? '',
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
+                const Icon(Icons.location_on_outlined, size: 17, color: Color(0xFF64748B)),
+                const SizedBox(width: 6),
+                Expanded(child: Text(addr, style: const TextStyle(fontSize: 13, color: Color(0xFF334155)))),
               ],
             ),
-            const Divider(height: 20),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(Icons.phone_outlined, size: 17, color: Color(0xFF64748B)),
+                const SizedBox(width: 6),
+                Text(phone, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              ],
+            ),
+            const SizedBox(height: 18),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF25D366),
-                      side: const BorderSide(color: Color(0xFF25D366)),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    icon: const Icon(Icons.chat, size: 18),
-                    label: const Text('WhatsApp', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                    onPressed: () => _openWhatsApp(store['phone'] ?? ''),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _openStoreOnMap(store);
+                    },
+                    icon: const Icon(Icons.location_on, size: 18),
+                    label: const Text('Xəritədə'),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2E7D32),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    icon: const Icon(Icons.phone, size: 18),
-                    label: const Text('Zəng et', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                    onPressed: () => _makeCall(store['phone'] ?? ''),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1769D2), foregroundColor: Colors.white),
+                    onPressed: () => _makeCall(phone),
+                    icon: const Icon(Icons.call, size: 18),
+                    label: const Text('Zəng et'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF16A34A), foregroundColor: Colors.white),
+                    onPressed: () => _openWhatsApp(wa),
+                    icon: const Icon(Icons.chat, size: 18),
+                    label: const Text('WhatsApp'),
                   ),
                 ),
               ],
@@ -768,132 +2102,1156 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
     );
   }
 
-  // 2-ci Tab: Məhsullar və Fərdi Elanlar (Canlı Firestore + Nümunə Məhsullar)
-  Widget _buildProductsList() {
-    final sampleProducts = [
-      {
-        'title': 'Sement Holcim 400 Marka (Topdan)',
-        'price': '7.50 AZN',
-        'store': 'Baku Tikinti Malları',
-        'phone': '+994 50 234 56 78',
-        'category': 'Tikinti Materialları',
-        'icon': Icons.layers_rounded,
-      },
-      {
-        'title': 'Kombi DemirDöküm 24 kW (Zəmanətlə)',
-        'price': '890 AZN',
-        'store': 'Santexnika Dünyası',
-        'phone': '+994 55 987 65 43',
-        'category': 'Santexnika',
-        'icon': Icons.heat_pump_rounded,
-      },
-      {
-        'title': 'Perforator DeWalt D25144K (Original)',
-        'price': '280 AZN',
-        'store': 'Master Tool',
-        'phone': '+994 70 333 22 11',
-        'category': 'Alətlər və Texnika',
-        'icon': Icons.construction_rounded,
-      },
-      {
-        'title': 'Boya Sobsan Emulsiya 20 kg',
-        'price': '48 AZN',
-        'store': 'Rənglər Evi',
-        'phone': '+994 50 678 90 12',
-        'category': 'Boya və Lak',
-        'icon': Icons.format_paint_rounded,
-      },
-    ];
+  // ---------------------------------------------------------------------------
+  // ƏSAS BUILD (REFERANS ŞƏKLƏ 1:1 DİZAYN)
+  // ---------------------------------------------------------------------------
+  @override
+  Widget build(BuildContext context) {
+    final int cartCount = _totalCartCount();
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _marketStream,
-      builder: (context, snapshot) {
-        final List<Map<String, dynamic>> firestoreProducts = [];
-        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-          for (var d in snapshot.data!.docs) {
-            final data = d.data();
-            if (data['listingType']?.toString() == 'product') {
-              firestoreProducts.add({
-                'id': d.id,
-                'ownerId': data['ownerId'] ?? data['userId'],
-                'title': data['title'] ?? '',
-                'price': (data['price']?.toString().isNotEmpty == true) ? data['price'].toString() : 'Razılaşma',
-                'store': data['address']?.toString().isNotEmpty == true ? data['address'].toString() : 'Elan',
-                'phone': data['phone'] ?? '',
-                'category': data['category'] ?? 'Tikinti Materialları',
-                'description': data['description'] ?? '',
-                'icon': Icons.shopping_bag_rounded,
-              });
+    return Scaffold(
+      backgroundColor: const Color(0xFFF3F6FB),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1769D2),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          tooltip: 'Geri',
+          onPressed: () {
+            if (widget.onBackToHome != null) {
+              widget.onBackToHome!();
+            } else if (Navigator.canPop(context)) {
+              Navigator.pop(context);
             }
-          }
-        }
-
-        final allProducts = [...firestoreProducts, ...sampleProducts];
-        final q = _searchController.text.trim().toLowerCase();
-        final filtered = allProducts.where((p) {
-          final catOk = _selectedCategory == 'Hamısı' || p['category'] == _selectedCategory;
-          if (!catOk) return false;
-          if (q.isEmpty) return true;
-          final title = (p['title'] ?? '').toString().toLowerCase();
-          final store = (p['store'] ?? '').toString().toLowerCase();
-          final desc = (p['description'] ?? '').toString().toLowerCase();
-          return title.contains(q) || store.contains(q) || desc.contains(q);
-        }).toList();
-
-        if (filtered.isEmpty) {
-          return const Center(
-            child: Text('Axtarışa və ya kateqoriyaya uyğun məhsul yoxdur.', style: TextStyle(color: Colors.grey)),
-          );
-        }
-
-        final currentUser = _authService.currentUser;
-
-        return ListView.builder(
-          padding: const EdgeInsets.only(left: 12, right: 12, bottom: 80, top: 4),
-          itemCount: filtered.length,
-          itemBuilder: (context, index) {
-            final prod = filtered[index];
-            final String? docId = prod['id']?.toString();
-            final bool canDelete = docId != null &&
-                currentUser != null &&
-                (prod['ownerId'] == currentUser.uid || currentUser.email == 'mirze3838@gmail.com');
-
-            return Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: const Color(0xFF1769D2).withOpacity(0.1),
-                  child: Icon(prod['icon'] as IconData? ?? Icons.inventory_2, color: const Color(0xFF1769D2)),
+          },
+        ),
+        title: const Text(
+          'Alış-Satış & Tikinti Mağazaları',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Mağaza və Elanlarım',
+            icon: const Icon(Icons.inventory_2_outlined),
+            onPressed: _showMyStoresAndListingsSheet,
+          ),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                tooltip: 'Səbətim',
+                icon: const Icon(Icons.shopping_cart_outlined),
+                onPressed: _showCartSheet,
+              ),
+              if (cartCount > 0)
+                Positioned(
+                  right: 6,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(color: Color(0xFFEF4444), shape: BoxShape.circle),
+                    child: Text(
+                      '$cartCount',
+                      style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
-                title: Text(prod['title'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: Text('${prod['store']} • ${prod['category']}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      prod['price'].toString(),
-                      style: const TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold, fontSize: 14),
+            ],
+          ),
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.white,
+          indicatorWeight: 3,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          labelStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+          unselectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          tabs: const [
+            Tab(icon: Icon(Icons.storefront_rounded, size: 22), text: 'Mağazalar & Satıcılar'),
+            Tab(icon: Icon(Icons.shopping_bag_rounded, size: 22), text: 'Tikinti Malları & Elanlar'),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: const Color(0xFF1769D2),
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        icon: Icon(
+          _tabController.index == 0 ? Icons.add_business_rounded : Icons.add_circle_outline_rounded,
+          color: Colors.white,
+          size: 20,
+        ),
+        label: Text(
+          _tabController.index == 0 ? 'Mağaza Əlavə Et' : 'Elan Yerləşdir',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
+        ),
+        onPressed: () {
+          if (_tabController.index == 0) {
+            _checkSellerPermissionAndRun(() => _showStoreFormSheet());
+          } else {
+            _checkSellerPermissionAndRun(() => _showProductFormSheet());
+          }
+        },
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildStoresTab(),
+          _buildProductsTab(),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // TAB 1: MAĞAZALAR & SATICILAR
+  // ---------------------------------------------------------------------------
+  Widget _buildStoresTab() {
+    return CustomScrollView(
+      slivers: [
+        // 1. Reklam Banneri + Axtarış + Kateqoriya Pill-ləri
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+            child: Column(
+              children: [
+                // Göy Promo Banner
+                Container(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF1565C0), Color(0xFF2196F3)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon: const Icon(Icons.phone, color: Color(0xFF2E7D32), size: 20),
-                      tooltip: 'Zəng et',
-                      onPressed: () => _makeCall(prod['phone'].toString()),
-                    ),
-                    if (canDelete)
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                        tooltip: 'Elanı sil',
-                        onPressed: () => _deleteListing(docId),
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF1769D2).withOpacity(0.24),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
                       ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.20),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(Icons.campaign_rounded, color: Colors.white, size: 30),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              'Mağazanızı UstaGo-da Reklam Edin!',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14.5, height: 1.2),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Tikinti mallarınızı minlərlə usta və müştəriyə birbaşa satın.',
+                              style: TextStyle(color: Colors.white70, fontSize: 11.5, height: 1.25),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF1565C0),
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                        ),
+                        onPressed: () => _checkSellerPermissionAndRun(_showPublishChoiceSheet),
+                        child: const Text('Elan Ver', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Axtarış + Filtr Düyməsi
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(26),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: TextField(
+                          controller: _storeSearchController,
+                          onChanged: (_) => setState(() {}),
+                          decoration: InputDecoration(
+                            icon: const Icon(Icons.search_rounded, color: Color(0xFF64748B), size: 20),
+                            hintText: 'Mağaza, məhsul və ya ünvan axtar...',
+                            hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 11),
+                            suffixIcon: _storeSearchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 18, color: Colors.grey),
+                                    onPressed: () {
+                                      _storeSearchController.clear();
+                                      setState(() {});
+                                    },
+                                  )
+                                : null,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Material(
+                      color: Colors.white,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        onTap: _showFilterSheet,
+                        customBorder: const CircleBorder(),
+                        child: Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: const Icon(Icons.tune_rounded, color: Color(0xFF1769D2), size: 20),
+                        ),
+                      ),
+                    ),
                   ],
+                ),
+                const SizedBox(height: 10),
+
+                // Kateqoriya Seçim Pill-ləri
+                SizedBox(
+                  height: 36,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _storeCategories.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final cat = _storeCategories[index];
+                      final isSelected = cat == _selectedStoreCategory;
+                      return ChoiceChip(
+                        label: Text(
+                          cat,
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : const Color(0xFF1E293B),
+                            fontSize: 12,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          ),
+                        ),
+                        selected: isSelected,
+                        showCheckmark: false,
+                        selectedColor: const Color(0xFF1769D2),
+                        backgroundColor: Colors.white,
+                        side: BorderSide(color: isSelected ? const Color(0xFF1769D2) : const Color(0xFFE2E8F0)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        onSelected: (_) => setState(() => _selectedStoreCategory = cat),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // 2. Canlı Firestore + Nümunə Mağazalar Siyahısı
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _marketStream,
+          initialData: _latestMarketSnapshot,
+          builder: (context, snapshot) {
+            final docs = (snapshot.data ?? _latestMarketSnapshot)?.docs ?? [];
+            final firestoreStores = docs.where((d) {
+              final lType = d.data()['listingType']?.toString() ?? 'store';
+              return lType == 'store';
+            }).map((d) {
+              final m = Map<String, dynamic>.from(d.data());
+              m['id'] = d.id;
+              return m;
+            }).toList();
+
+            final List<Map<String, dynamic>> allStores = [...firestoreStores, ..._sampleStores];
+            final q = CategoryCityService.normalizeAz(_storeSearchController.text);
+
+            final filtered = allStores.where((s) {
+              final cat = CategoryCityService.normalizeAz((s['category'] ?? '').toString());
+              final selCat = CategoryCityService.normalizeAz(_selectedStoreCategory);
+              if (_selectedStoreCategory != 'Hamısı' && !cat.contains(selCat) && !selCat.contains(cat)) {
+                return false;
+              }
+              if (_selectedCityFilter != 'Hamısı') {
+                final addr = CategoryCityService.normalizeAz('${s['city'] ?? ''} ${s['address'] ?? ''}');
+                if (!addr.contains(CategoryCityService.normalizeAz(_selectedCityFilter))) return false;
+              }
+              if (_onlyVerifiedStores && s['isVerified'] != true) return false;
+              final favKey = (s['id'] ?? s['sampleId'] ?? s['title']).toString();
+              if (_onlyFavorites && !_favoriteIds.contains(favKey)) return false;
+
+              if (q.isEmpty) return true;
+              final haystack = CategoryCityService.normalizeAz(
+                '${s['title'] ?? ''} ${s['description'] ?? ''} ${s['address'] ?? ''} ${s['city'] ?? ''} ${s['category'] ?? ''}',
+              );
+              return haystack.contains(q);
+            }).toList();
+
+            if (filtered.isEmpty) {
+              return const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(
+                      'Axtarışa və ya filtrə uyğun mağaza tapılmadı.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            return SliverPadding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 92),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, idx) => _buildStoreCard(filtered[idx]),
+                  childCount: filtered.length,
                 ),
               ),
             );
           },
-        );
-      },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStoreLogoBox(Map<String, dynamic> store, {double size = 76}) {
+    final Uint8List? logoBytes = _decodeB64(store['logoBase64']?.toString());
+    if (logoBytes != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Image.memory(logoBytes, width: size, height: size, fit: BoxFit.cover, gaplessPlayback: true),
+      );
+    }
+
+    final Color brandColor = Color(store['brandColorValue'] as int? ?? 0xFF1769D2);
+    final Color accentColor = Color(store['accentColorValue'] as int? ?? 0xFFF59E0B);
+    final String tag = (store['brandTag'] ?? store['title'] ?? 'MAĞAZA').toString();
+    final int iconCode = store['iconCode'] as int? ?? 0;
+
+    return Container(
+      width: size,
+      height: size,
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            iconCode == 0
+                ? Icons.roofing_rounded
+                : (iconCode == 1
+                    ? Icons.apartment_rounded
+                    : (iconCode == 2 ? Icons.domain_rounded : Icons.bolt_rounded)),
+            color: iconCode == 0 ? accentColor : brandColor,
+            size: size * 0.36,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            tag,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: brandColor,
+              fontSize: size * 0.135,
+              fontWeight: FontWeight.w900,
+              height: 1.05,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStoreCard(Map<String, dynamic> store) {
+    final String? docId = store['id']?.toString();
+    final String favKey = (docId ?? store['sampleId'] ?? store['title']).toString();
+    final bool isFav = _favoriteIds.contains(favKey);
+    final currentUser = _authService.currentUser;
+    final bool isOwner = docId != null &&
+        currentUser != null &&
+        (store['ownerId'] == currentUser.uid ||
+            store['userId'] == currentUser.uid ||
+            currentUser.email?.toLowerCase() == 'mirze3838@gmail.com');
+
+    final double ratingVal = (store['rating'] is num) ? (store['rating'] as num).toDouble() : 4.8;
+    final int reviews = (store['reviewCount'] is num) ? (store['reviewCount'] as num).toInt() : 12;
+    final String phone = store['phone']?.toString() ?? '';
+    final String whatsapp = (store['whatsapp']?.toString().isNotEmpty == true) ? store['whatsapp'].toString() : phone;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => _showStoreDetailSheet(store),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 3)),
+          ],
+        ),
+        child: Column(
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildStoreLogoBox(store, size: 78),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              store['title']?.toString() ?? '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                            ),
+                          ),
+                          if (store['isVerified'] != false) ...[
+                            const SizedBox(width: 4),
+                            const Icon(Icons.verified_rounded, color: Color(0xFF1769D2), size: 16),
+                          ],
+                          const Spacer(),
+                          if (isOwner) ...[
+                            InkWell(
+                              onTap: () => _showStoreFormSheet(existingStore: store),
+                              child: const Padding(
+                                padding: EdgeInsets.all(4),
+                                child: Icon(Icons.edit_outlined, size: 18, color: Color(0xFF1769D2)),
+                              ),
+                            ),
+                            InkWell(
+                              onTap: () => _deleteListing(docId, isStore: true),
+                              child: const Padding(
+                                padding: EdgeInsets.all(4),
+                                child: Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                              ),
+                            ),
+                          ],
+                          InkWell(
+                            onTap: () {
+                              setState(() {
+                                if (isFav) {
+                                  _favoriteIds.remove(favKey);
+                                } else {
+                                  _favoriteIds.add(favKey);
+                                }
+                              });
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 4),
+                              child: Icon(
+                                isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                                size: 20,
+                                color: isFav ? const Color(0xFFEF4444) : const Color(0xFF475569),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 15),
+                          const SizedBox(width: 3),
+                          Text(
+                            ratingVal.toStringAsFixed(1),
+                            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '($reviews rəy)',
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              store['description']?.toString() ?? '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12.5, color: Color(0xFF475569)),
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8), size: 20),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_rounded, size: 13.5, color: Color(0xFF94A3B8)),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              store['address']?.toString() ?? '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF0F172A),
+                      side: const BorderSide(color: Color(0xFFCBD5E1)),
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.location_on_rounded, size: 17, color: Color(0xFF334155)),
+                    label: const Text('Xəritədə', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    onPressed: () => _openStoreOnMap(store),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF22C55E),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.chat_rounded, size: 17),
+                    label: const Text('WhatsApp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    onPressed: () => _openWhatsApp(whatsapp),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // TAB 2: TİKİNTİ MALLARI & ELANLAR (2 SÜTUNLU MƏHSUL QRİDİ)
+  // ---------------------------------------------------------------------------
+  Widget _buildProductsTab() {
+    return CustomScrollView(
+      slivers: [
+        // 1. Axtarış + Vizual Kateqoriya Kartları
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(26),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: TextField(
+                          controller: _productSearchController,
+                          onChanged: (_) => setState(() {}),
+                          decoration: InputDecoration(
+                            icon: const Icon(Icons.search_rounded, color: Color(0xFF64748B), size: 20),
+                            hintText: 'Məhsul və ya kateqoriya axtar...',
+                            hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 11),
+                            suffixIcon: _productSearchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 18, color: Colors.grey),
+                                    onPressed: () {
+                                      _productSearchController.clear();
+                                      setState(() {});
+                                    },
+                                  )
+                                : null,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Material(
+                      color: Colors.white,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        onTap: _showFilterSheet,
+                        customBorder: const CircleBorder(),
+                        child: Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: const Icon(Icons.tune_rounded, color: Color(0xFF1769D2), size: 20),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Vizual Kateqoriya İkon Kartları (Hamısı, Sement, Kərpic, Beton, Alətlər...)
+                SizedBox(
+                  height: 76,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _productCategoryCards.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final card = _productCategoryCards[index];
+                      final key = card['key'] as String;
+                      final bool isSelected = _selectedProductCategory == key;
+                      final Color iconColor = card['color'] as Color;
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () => setState(() => _selectedProductCategory = key),
+                        child: Container(
+                          width: 68,
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isSelected ? const Color(0xFF1769D2) : Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isSelected ? const Color(0xFF1769D2) : const Color(0xFFE2E8F0),
+                            ),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 4, offset: const Offset(0, 2)),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                card['icon'] as IconData,
+                                color: isSelected ? Colors.white : iconColor,
+                                size: 24,
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                card['label'] as String,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected ? Colors.white : const Color(0xFF1E293B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // 2. 2 Sütunlu Məhsul Gridi
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _marketStream,
+          initialData: _latestMarketSnapshot,
+          builder: (context, snapshot) {
+            final docs = (snapshot.data ?? _latestMarketSnapshot)?.docs ?? [];
+            final List<Map<String, dynamic>> firestoreProducts = [];
+
+            for (final d in docs) {
+              final data = d.data();
+              if (data['listingType']?.toString() == 'product') {
+                firestoreProducts.add({
+                  'id': d.id,
+                  'ownerId': data['ownerId'] ?? data['userId'],
+                  'userId': data['userId'] ?? data['ownerId'],
+                  'title': data['title'] ?? '',
+                  'unit': (data['unit']?.toString().isNotEmpty == true) ? data['unit'].toString() : '1 ədəd',
+                  'price': (data['price']?.toString().isNotEmpty == true) ? data['price'].toString() : 'Razılaşma',
+                  'store': (data['storeName']?.toString().isNotEmpty == true)
+                      ? data['storeName'].toString()
+                      : (data['address']?.toString().isNotEmpty == true ? data['address'].toString() : 'Mağaza'),
+                  'city': (data['city']?.toString().isNotEmpty == true) ? data['city'].toString() : 'Bakı',
+                  'address': data['address'] ?? '',
+                  'phone': data['phone'] ?? '',
+                  'whatsapp': data['whatsapp'] ?? data['phone'] ?? '',
+                  'category': data['category'] ?? 'Tikinti Materialları',
+                  'description': data['description'] ?? '',
+                  'imageBase64': data['imageBase64'] ?? '',
+                });
+              }
+            }
+
+            final allProducts = [...firestoreProducts, ..._sampleProducts];
+            final q = CategoryCityService.normalizeAz(_productSearchController.text);
+
+            final filtered = allProducts.where((p) {
+              if (_selectedProductCategory != 'Hamısı') {
+                final cat = CategoryCityService.normalizeAz((p['category'] ?? '').toString());
+                final target = CategoryCityService.normalizeAz(_selectedProductCategory);
+                final titleNorm = CategoryCityService.normalizeAz((p['title'] ?? '').toString());
+                final bool matches = cat.contains(target) ||
+                    target.contains(cat) ||
+                    titleNorm.contains(target) ||
+                    (target == 'beton' && (titleNorm.contains('armatur') || cat.contains('tikinti')));
+                if (!matches) return false;
+              }
+              if (_selectedCityFilter != 'Hamısı') {
+                final loc = CategoryCityService.normalizeAz('${p['city'] ?? ''} ${p['address'] ?? ''}');
+                if (!loc.contains(CategoryCityService.normalizeAz(_selectedCityFilter))) return false;
+              }
+              final favKey = (p['id'] ?? p['sampleId'] ?? p['title']).toString();
+              if (_onlyFavorites && !_favoriteIds.contains(favKey)) return false;
+
+              if (q.isEmpty) return true;
+              final hay = CategoryCityService.normalizeAz(
+                '${p['title'] ?? ''} ${p['category'] ?? ''} ${p['store'] ?? ''} ${p['city'] ?? ''} ${p['description'] ?? ''}',
+              );
+              return hay.contains(q);
+            }).toList();
+
+            if (filtered.isEmpty) {
+              return const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(
+                    child: Text('Axtarışa uyğun tikinti materialı tapılmadı.', style: TextStyle(color: Colors.grey)),
+                  ),
+                ),
+              );
+            }
+
+            return SliverPadding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: 0.62,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) => _buildProductGridCard(filtered[index]),
+                  childCount: filtered.length,
+                ),
+              ),
+            );
+          },
+        ),
+
+        // 3. Alt Məlumat Banneri
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 92),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: _showFilterSheet,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(Icons.info_rounded, color: Color(0xFF1769D2), size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Daha çox məhsul görmək üçün filtrdən istifadə edin',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: Color(0xFF334155)),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right_rounded, color: Color(0xFF64748B)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProductVisual(Map<String, dynamic> prod) {
+    final Uint8List? imgBytes = _decodeB64(prod['imageBase64']?.toString());
+    if (imgBytes != null) {
+      return Image.memory(imgBytes, fit: BoxFit.cover, gaplessPlayback: true);
+    }
+
+    final vType = prod['visualType']?.toString() ?? '';
+    final cat = (prod['category'] ?? '').toString().toLowerCase();
+
+    List<Color> colors;
+    IconData icon;
+    String badgeText;
+
+    if (vType == 'cement' || cat.contains('sement')) {
+      colors = const [Color(0xFFFDE68A), Color(0xFFD97706)];
+      icon = Icons.inventory_2_rounded;
+      badgeText = 'M500';
+    } else if (vType == 'brick' || cat.contains('kərpic')) {
+      colors = const [Color(0xFFFDBA74), Color(0xFFC2410C)];
+      icon = Icons.grid_view_rounded;
+      badgeText = 'KƏRPİC';
+    } else if (vType == 'rebar' || cat.contains('beton')) {
+      colors = const [Color(0xFFCBD5E1), Color(0xFF475569)];
+      icon = Icons.view_week_rounded;
+      badgeText = 'ARMATUR';
+    } else if (vType == 'drill' || cat.contains('alət')) {
+      colors = const [Color(0xFFFEF08A), Color(0xFFB45309)];
+      icon = Icons.build_rounded;
+      badgeText = 'PRO ALƏT';
+    } else {
+      colors = const [Color(0xFFDBEAFE), Color(0xFF1769D2)];
+      icon = Icons.shopping_bag_rounded;
+      badgeText = 'TİKİNTİ';
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: Colors.white.withOpacity(0.95)),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.25),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                badgeText,
+                style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold, letterSpacing: 0.6),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProductGridCard(Map<String, dynamic> prod) {
+    final String? docId = prod['id']?.toString();
+    final String favKey = (docId ?? prod['sampleId'] ?? prod['title']).toString();
+    final bool isFav = _favoriteIds.contains(favKey);
+    final currentUser = _authService.currentUser;
+    final bool isOwner = docId != null &&
+        currentUser != null &&
+        (prod['ownerId'] == currentUser.uid ||
+            prod['userId'] == currentUser.uid ||
+            currentUser.email?.toLowerCase() == 'mirze3838@gmail.com');
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () => _showProductDetailSheet(prod),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 7, offset: const Offset(0, 3)),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Şəkil sahəsi
+            Expanded(
+              flex: 5,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                    child: _buildProductVisual(prod),
+                  ),
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          if (isFav) {
+                            _favoriteIds.remove(favKey);
+                          } else {
+                            _favoriteIds.add(favKey);
+                          }
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.92),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                          size: 16,
+                          color: isFav ? const Color(0xFFEF4444) : const Color(0xFF1769D2),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (isOwner)
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      child: Row(
+                        children: [
+                          InkWell(
+                            onTap: () => _showProductFormSheet(existingProduct: prod),
+                            child: Container(
+                              padding: const EdgeInsets.all(4.5),
+                              decoration: BoxDecoration(color: Colors.white.withOpacity(0.92), shape: BoxShape.circle),
+                              child: const Icon(Icons.edit_outlined, size: 14, color: Color(0xFF1769D2)),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          InkWell(
+                            onTap: () => _deleteListing(docId, isStore: false),
+                            child: Container(
+                              padding: const EdgeInsets.all(4.5),
+                              decoration: BoxDecoration(color: Colors.white.withOpacity(0.92), shape: BoxShape.circle),
+                              child: const Icon(Icons.delete_outline, size: 14, color: Colors.redAccent),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // Məlumat sahəsi
+            Expanded(
+              flex: 6,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(9, 8, 9, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      prod['title']?.toString() ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: Color(0xFF0F172A)),
+                    ),
+                    Text(
+                      prod['unit']?.toString() ?? '1 ədəd',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      prod['price']?.toString() ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1769D2)),
+                    ),
+                    const Spacer(),
+                    Row(
+                      children: [
+                        const Icon(Icons.storefront_rounded, size: 11.5, color: Color(0xFF64748B)),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(
+                            prod['store']?.toString() ?? '',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 10.5, color: Color(0xFF64748B)),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.location_on_rounded, size: 11, color: Color(0xFF94A3B8)),
+                        Text(
+                          prod['city']?.toString() ?? 'Bakı',
+                          style: const TextStyle(fontSize: 10.5, color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 32,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1769D2),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.shopping_cart_outlined, size: 14),
+                        label: const Text(
+                          'Səbətə əlavə et',
+                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () => _addToCart(prod),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showProductDetailSheet(Map<String, dynamic> prod) {
+    final String phone = prod['phone']?.toString() ?? '';
+    final String wa = (prod['whatsapp']?.toString().isNotEmpty == true) ? prod['whatsapp'].toString() : phone;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: SizedBox(height: 150, width: double.infinity, child: _buildProductVisual(prod)),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    prod['title']?.toString() ?? '',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Text(
+                  prod['price']?.toString() ?? '',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${prod['unit'] ?? '1 ədəd'} • ${prod['store'] ?? ''} • ${prod['city'] ?? 'Bakı'}',
+              style: const TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
+            ),
+            if ((prod['description'] ?? '').toString().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(prod['description'].toString(), style: const TextStyle(fontSize: 13.5, color: Color(0xFF334155))),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _makeCall(phone);
+                    },
+                    icon: const Icon(Icons.call, size: 17),
+                    label: const Text('Zəng et'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF22C55E), foregroundColor: Colors.white),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _openWhatsApp(wa, message: 'Salam, ${prod['title']} (${prod['price']}) haqqında məlumat almaq istəyirəm.');
+                    },
+                    icon: const Icon(Icons.chat, size: 17),
+                    label: const Text('WhatsApp'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1769D2), foregroundColor: Colors.white),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _addToCart(prod);
+                    },
+                    icon: const Icon(Icons.shopping_cart_outlined, size: 17),
+                    label: const Text('Səbətə at'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

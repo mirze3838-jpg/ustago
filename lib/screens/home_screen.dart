@@ -52,6 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _unreadNotifications = 0;
   int _ustaProfileGalleryTab = 0; // 0: Portfolio, 1: Shorts
   bool _isUstaBioExpanded = false;
+  int _openMyListingsSignal = 0;
   late final ShortsScreen _shortsTab;
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _shortsStream;
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _ustaStream;
@@ -317,7 +318,29 @@ class _HomeScreenState extends State<HomeScreen> {
       case 1:
         return _shortsTab;
       case 2:
-        return const MarketScreen();
+        return MarketScreen(
+          onBackToHome: () => setState(() => _currentIndex = 0),
+          onNavigateToMap: (cityOrAddr, lat, lng) {
+            setState(() {
+              if (cityOrAddr.isNotEmpty) {
+                final reg = cityOrAddr.split(',').first.trim();
+                if (_cities.contains(reg)) {
+                  _selectedCity = reg;
+                }
+              }
+              _selectedVillage = '';
+              if (lat != null && lng != null) {
+                _mapLat = lat;
+                _mapLng = lng;
+                _mapZoom = 14.5;
+              } else {
+                _centerMapOnSelection();
+              }
+              _currentIndex = 3;
+            });
+          },
+          openMyListingsSignal: _openMyListingsSignal,
+        );
       case 3:
         return _buildMapTab();
       case 4:
@@ -4401,6 +4424,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                   return;
                 }
+                final String initialRole = _normalizeRoleKey(userData?['role']?.toString() ?? 'usta');
+                if (initialRole == 'seller' && _normalizeRoleKey(selectedRole) != 'seller') {
+                  final allowed = await _canSwitchFromSellerRole(uid, popParentOnNavigate: true);
+                  if (!allowed) return;
+                }
                 final String fullCity = district.isNotEmpty ? '$selectedCityVal, $district' : selectedCityVal;
                 final coords = CategoryCityService.getCoordinates(selectedCityVal, district);
                 final updatedName = nameController.text.trim();
@@ -4516,6 +4544,329 @@ class _HomeScreenState extends State<HomeScreen> {
             },
             child: const Text('Yadda saxla', style: TextStyle(color: Colors.white)),
           ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _hasActiveSellerListings(String uid) async {
+    try {
+      final byOwner = await FirebaseFirestore.instance
+          .collection('market_stores')
+          .where('ownerId', isEqualTo: uid)
+          .limit(1)
+          .get();
+      if (byOwner.docs.isNotEmpty) return true;
+
+      final byUser = await FirebaseFirestore.instance
+          .collection('market_stores')
+          .where('userId', isEqualTo: uid)
+          .limit(1)
+          .get();
+      if (byUser.docs.isNotEmpty) return true;
+    } catch (_) {}
+    return false;
+  }
+
+  Future<bool> _canSwitchFromSellerRole(
+    String uid, {
+    bool popParentOnNavigate = false,
+  }) async {
+    final hasActive = await _hasActiveSellerListings(uid);
+    if (!hasActive) return true;
+    if (!mounted) return false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706), size: 26),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Aktiv Mağaza / Elan Mövcuddur',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Sizin aktiv mağazanız və ya yerləşdirilmiş elanınız var. Digər profil növünə keçmək üçün əvvəlcə mağazanızı və bütün elanlarınızı silməlisiniz.',
+          style: TextStyle(fontSize: 14, color: Color(0xFF334155), height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Bağla'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1769D2),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            icon: const Icon(Icons.storefront_outlined, size: 18),
+            label: const Text('Mağaza və elanlarıma bax'),
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              if (popParentOnNavigate && mounted && Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              }
+              if (mounted) {
+                setState(() {
+                  _currentIndex = 2;
+                  _openMyListingsSignal++;
+                });
+              }
+            },
+          ),
+        ],
+      ),
+    );
+    return false;
+  }
+
+  String _normalizeRoleKey(String role) {
+    final r = role.trim().toLowerCase();
+    if (r == 'satici' || r == 'satıcı' || r == 'seller') return 'seller';
+    if (r == 'fehle' || r == 'fəhlə' || r == 'worker') return 'worker';
+    if (r == 'musteri' || r == 'müştəri' || r == 'customer') return 'customer';
+    return 'usta';
+  }
+
+  String _roleDisplayName(String roleKey) {
+    switch (_normalizeRoleKey(roleKey)) {
+      case 'seller':
+        return 'Satıcı';
+      case 'worker':
+        return 'Fəhlə';
+      case 'customer':
+        return 'Müştəri';
+      case 'usta':
+      default:
+        return 'Usta';
+    }
+  }
+
+  Future<void> _handleProfileRoleChange(
+    String uid,
+    String currentRole,
+    String newRole,
+  ) async {
+    final normalizedCurrent = _normalizeRoleKey(currentRole);
+    final normalizedTarget = _normalizeRoleKey(newRole);
+    if (normalizedCurrent == normalizedTarget) return;
+
+    if (normalizedCurrent == 'seller' && normalizedTarget != 'seller') {
+      final allowed = await _canSwitchFromSellerRole(uid);
+      if (!allowed) return;
+    }
+
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'role': normalizedTarget,
+      }, SetOptions(merge: true));
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Aktiv profil növünüz "${_roleDisplayName(normalizedTarget)}" olaraq dəyişdirildi.',
+            ),
+            backgroundColor: const Color(0xFF059669),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Profil növü yenilənmədi: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildFourRoleSwitcherCard(String uid, String currentRole) {
+    final activeKey = _normalizeRoleKey(currentRole);
+    final roles = <Map<String, dynamic>>[
+      {
+        'key': 'usta',
+        'label': 'Usta',
+        'icon': Icons.handyman_rounded,
+        'color': const Color(0xFF1769D2),
+      },
+      {
+        'key': 'worker',
+        'label': 'Fəhlə',
+        'icon': Icons.construction_rounded,
+        'color': const Color(0xFFEA580C),
+      },
+      {
+        'key': 'customer',
+        'label': 'Müştəri',
+        'icon': Icons.person_rounded,
+        'color': const Color(0xFF0D9488),
+      },
+      {
+        'key': 'seller',
+        'label': 'Satıcı',
+        'icon': Icons.storefront_rounded,
+        'color': const Color(0xFF7C3AED),
+      },
+    ];
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.swap_horiz_rounded,
+                  color: Color(0xFF1769D2),
+                  size: 19,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Aktiv Profil Növü',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1769D2).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  _roleDisplayName(activeKey),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1769D2),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Elan və mağaza yerləşdirmək üçün Satıcı profili aktiv olmalıdır.',
+            style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+          ),
+          const SizedBox(height: 12),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: 3.1,
+            children: roles.map((item) {
+              final roleKey = item['key'] as String;
+              final label = item['label'] as String;
+              final icon = item['icon'] as IconData;
+              final accent = item['color'] as Color;
+              final isSelected = activeKey == roleKey;
+
+              return Material(
+                color: isSelected ? accent : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _handleProfileRoleChange(uid, currentRole, roleKey),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected ? accent : const Color(0xFFE2E8F0),
+                        width: isSelected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          icon,
+                          size: 18,
+                          color: isSelected ? Colors.white : accent,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          label,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13.5,
+                            color: isSelected ? Colors.white : const Color(0xFF1E293B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          if (activeKey == 'seller') ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF1769D2),
+                  side: const BorderSide(color: Color(0xFFBFDBFE)),
+                  backgroundColor: const Color(0xFFEFF6FF),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+                icon: const Icon(Icons.storefront_outlined, size: 18),
+                label: const Text(
+                  'Mağaza və elanlarımı idarə et',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _currentIndex = 2;
+                    _openMyListingsSignal++;
+                  });
+                },
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -4815,7 +5166,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
             // İnstagram tərzi Portfólio / İşlərim bölməsi
             _buildInstagramGallery(user.uid, displayName, userRole),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+            _buildFourRoleSwitcherCard(user.uid, userRole),
+            const SizedBox(height: 16),
             const Divider(),
 
             ListTile(
@@ -4831,7 +5184,10 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text('Mənim Mağazam / Elanlarım'),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () {
-                setState(() => _currentIndex = 2);
+                setState(() {
+                  _currentIndex = 2;
+                  _openMyListingsSignal++;
+                });
               },
             ),
             const Divider(),
@@ -5558,6 +5914,8 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 12),
           ],
 
+          _buildFourRoleSwitcherCard(user.uid, userRole),
+          const SizedBox(height: 14),
           // 6. Aşağı Menyu (Mağazam / Elanlarım, Bildirişlər, Dəstək, Çıxış et)
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -5589,7 +5947,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: const Text('Mağazam / Elanlarım', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                   trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF1769D2), size: 24),
                   onTap: () {
-                    setState(() => _currentIndex = 2);
+                    setState(() {
+                      _currentIndex = 2;
+                      _openMyListingsSignal++;
+                    });
                   },
                 ),
                 const Divider(height: 1, indent: 16, endIndent: 16, color: Color(0xFFF1F5F9)),
