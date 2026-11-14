@@ -33,6 +33,7 @@ jobs:
           # Keystore-u base64 olaraq saxlayırıq (imza sabitliyi üçün)
           base64 android/app/debug.keystore > /tmp/debug.keystore.b64
           cp android/app/src/main/AndroidManifest.xml /tmp/AndroidManifest.xml || true
+          cp android/app/src/main/kotlin/com/ustago/app/MainActivity.kt /tmp/MainActivity.kt || true
           mkdir -p /tmp/saved_res && cp -r android/app/src/main/res/mipmap* /tmp/saved_res/ || true
           cp -r web /tmp/saved_web || true
           rm -rf android
@@ -55,6 +56,8 @@ jobs:
           class MainActivity: FlutterActivity() {
           }
           EOF
+          # Native GPS/konum MethodChannel kodu olan MainActivity-ni bərpa et
+          if [ -f /tmp/MainActivity.kt ]; then cp /tmp/MainActivity.kt android/app/src/main/kotlin/com/ustago/app/MainActivity.kt; fi
 
           # Paket adini com.ustago.app olaraq teyin et (Firebase ile tam eyni olmalidir)
           sed -i 's/applicationId = ".*"/applicationId = "com.ustago.app"/g' android/app/build.gradle* || true

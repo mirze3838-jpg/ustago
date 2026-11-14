@@ -70,16 +70,20 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
     if (u == t || u.contains(t) || t.contains(u)) return true;
 
     const categoryKeywords = {
-      'tikinti': ['tikinti', 'hörgü', 'suvaq', 'bünövrə', 'dam', 'fəhlə', 'köməkçi'],
+      'tikinti': ['tikinti', 'hörgü', 'suvaq', 'bünövrə', 'dam', 'fəhlə', 'köməkçi', 'fasad', 'beton', 'armatur', 'alçıpan', 'laminat', 'parket', 'izolyasiya'],
       'fəhlə': ['fəhlə', 'fehle', 'köməkçi'],
-      'santexnik': ['santexnik', 'boru', 'kran', 'su təchizatı'],
-      'elektrik': ['elektrik', 'şit', 'naqil', 'işıqlandırma'],
-      'təmir': ['təmir', 'quraşdırma'],
-      'avtomobil': ['avtomobil', 'avto', 'motor', 'dəmirçi'],
-      'mebel': ['mebel', 'quraşdırılması', 'yığılması'],
-      'kondisioner': ['kondisioner', 'soyuducu', 'freon', 'kombi'],
-      'dülgər': ['dülgər', 'dulger', 'qapı', 'taxta'],
+      'santexnik': ['santexnik', 'boru', 'kran', 'su təchizatı', 'su nasosu'],
+      'elektrik': ['elektrik', 'şit', 'naqil', 'işıqlandırma', 'avtoelektrik', 'günəş paneli'],
+      'təmir': ['təmir', 'quraşdırma', 'usta', 'servis'],
+      'avtomobil': ['avtomobil', 'avto', 'motor', 'dəmirçi', 'sürətlər qutusu', 'kuzov', 'təkər', 'diaqnostika'],
+      'mebel': ['mebel', 'quraşdırılması', 'yığılması', 'dülgər'],
+      'kondisioner': ['kondisioner', 'soyuducu', 'freon', 'kombi', 'paltaryuyan', 'qabyuyan'],
+      'dülgər': ['dülgər', 'dulger', 'qapı', 'taxta', 'mebel'],
       'rəngsaz': ['rəngsaz', 'rengsaz', 'malyar', 'oboy', 'boya'],
+      'telefon': ['telefon', 'iphone', 'android', 'ekran', 'sensor', 'planşet'],
+      'elektronika': ['kompüter', 'noutbuk', 'televizor', 'tv', 'monitor', 'printer', 'audio'],
+      'oyun': ['playstation', 'ps4', 'ps5', 'xbox', 'pult', 'konsol'],
+      'məişət': ['soyuducu', 'paltaryuyan', 'qabyuyan', 'mikrodalğalı', 'soba', 'tozsoran', 'kombi'],
     };
 
     for (var entry in categoryKeywords.entries) {
@@ -280,7 +284,8 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
               var matchingArtisans = allDocs.where((doc) {
                 final data = doc.data();
                 final cat = (data['category'] ?? data['trade'] ?? '').toString();
-                return _isMatchingCategory(cat);
+                final specs = (data['specialties'] is List) ? (data['specialties'] as List).join(' ') : '';
+                return _isMatchingCategory(cat) || _isMatchingCategory(specs);
               }).toList();
 
               // Şəhər filtri

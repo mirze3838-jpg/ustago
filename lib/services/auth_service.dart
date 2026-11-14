@@ -24,12 +24,43 @@ class AuthService {
     double? lat,
     double? lng,
     Uint8List? profileImageBytes,
+    // Yeni strukturlaşdırılmış sahələr
+    List<String> specialtyIds = const [],
+    List<String> specialties = const [],
+    List<String> specialtyCategories = const [],
+    List<String> pendingSpecialtyIds = const [],
+    String country = 'Azərbaycan',
+    String? district,
+    String? settlement,
+    String? street,
+    bool gpsPermissionGranted = false,
+    bool locationSharingConsent = false,
+    String? roleNote,
   }) async {
-    // İstifadəçi yaradılır
-    final cred = await _auth.createUserWithEmailAndPassword(
-      email: email.trim(),
-      password: password,
-    );
+    // İstifadəçi yaradılır (Firebase Auth şifrəni təhlükəsiz şəkildə hash-ləyir; şifrə Firestore-a yazılmır)
+    UserCredential cred;
+    try {
+      cred = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+    } on FirebaseAuthException catch (e) {
+      // Əvvəlki cəhddə Auth hesabı yaranıb, amma profil yazılmayıbsa - yarımçıq qeydiyyatı tamamlayırıq.
+      // Tam profil artıq mövcuddursa, təkrar hesab yaradılmır.
+      if (e.code != 'email-already-in-use') rethrow;
+      UserCredential existing;
+      try {
+        existing = await _auth.signInWithEmailAndPassword(email: email.trim(), password: password);
+      } catch (_) {
+        throw e;
+      }
+      final doc = await _db.collection('users').doc(existing.user!.uid).get();
+      if (doc.exists) {
+        await _auth.signOut();
+        rethrow;
+      }
+      cred = existing;
+    }
 
     final uid = cred.user!.uid;
 
@@ -41,6 +72,16 @@ class AuthService {
       } catch (_) {}
     }
 
+    final String cleanCity = (city != null && city.trim().isNotEmpty) ? city.trim() : 'Bakı';
+    final String cleanDistrict = district?.trim() ?? '';
+    final String cleanSettlement = settlement?.trim() ?? '';
+    // Köhnə ekranlarla uyğunluq üçün "Şəhər, Rayon/Qəsəbə" formatlı birləşmiş ünvan
+    final String legacyArea = cleanSettlement.isNotEmpty ? cleanSettlement : cleanDistrict;
+    final String displayCity = legacyArea.isNotEmpty ? '$cleanCity, $legacyArea' : cleanCity;
+
+    // Koordinatlar yalnız istifadəçinin ayrıca razılığı olduqda ictimai profilə yazılır
+    final bool shareCoords = locationSharingConsent && lat != null && lng != null;
+
     // İstifadəçi məlumatları Firestore bazasına yazılır
     await _db.collection('users').doc(uid).set({
       'uid': uid,
@@ -49,9 +90,23 @@ class AuthService {
       'phone': phone?.trim() ?? '',
       'role': role,
       'category': category ?? (role == 'worker' ? 'Fəhlə (Köməkçi işlər)' : 'Tikinti'),
-      'city': (city != null && city.trim().isNotEmpty) ? city.trim() : 'Bakı',
-      if (lat != null) 'lat': lat,
-      if (lng != null) 'lng': lng,
+      'specialtyIds': specialtyIds,
+      'specialties': specialties,
+      'specialtyCategories': specialtyCategories,
+      'pendingSpecialtyIds': pendingSpecialtyIds,
+      'country': country,
+      'city': displayCity,
+      'cityName': cleanCity,
+      'district': cleanDistrict,
+      'settlement': cleanSettlement,
+      'street': street?.trim() ?? '',
+      'gpsPermissionGranted': gpsPermissionGranted,
+      'locationSharingConsent': shareCoords,
+      if (shareCoords) 'latitude': lat,
+      if (shareCoords) 'longitude': lng,
+      if (shareCoords) 'lat': lat,
+      if (shareCoords) 'lng': lng,
+      if (roleNote != null && roleNote.trim().isNotEmpty) 'roleNote': roleNote.trim(),
       'photoBase64': photoBase64 ?? '',
       'isVerified': true,
       'createdAt': FieldValue.serverTimestamp(),

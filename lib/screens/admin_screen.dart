@@ -513,6 +513,85 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         ),
         const SizedBox(height: 24),
 
+        // İstifadəçilərin Təklif Etdiyi Yeni İxtisaslar (Təsdiq Gözləyənlər)
+        StreamBuilder<List<Map<String, dynamic>>>(
+          stream: CategoryCityService.getPendingCustomSpecialtiesStream(),
+          builder: (context, snapshot) {
+            final pending = snapshot.data ?? [];
+            if (pending.isEmpty) return const SizedBox.shrink();
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 24),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.pending_actions_rounded, color: Colors.amber, size: 22),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Təsdiq Gözləyən İxtisaslar (${pending.length})',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.amber.shade900),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'İstifadəçilər qeydiyyat zamanı siyahıda olmayan ixtisas təklif ediblər:',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  ),
+                  const SizedBox(height: 10),
+                  ...pending.map((item) {
+                    final docId = item['id'] as String;
+                    final title = item['title'] ?? '';
+                    final group = item['groupTitle'] ?? 'Digər';
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      child: ListTile(
+                        dense: true,
+                        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text('Kateqoriya: $group', style: const TextStyle(fontSize: 11)),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.check_circle_rounded, color: Colors.green),
+                              tooltip: 'Təsdiqlə',
+                              onPressed: () async {
+                                await CategoryCityService.approveCustomSpecialty(docId);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('"$title" ixtisası təsdiqləndi.')),
+                                  );
+                                }
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                              tooltip: 'Sil',
+                              onPressed: () async {
+                                await CategoryCityService.deleteCustomSpecialty(docId);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            );
+          },
+        ),
+
         // Mövcud Kateqoriyaların Canlı Siyahısı
         const Text(
           'Mövcud Kateqoriyalar',

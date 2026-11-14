@@ -4437,16 +4437,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     ? selectedUstaCategory
                     : (selectedRole == 'worker' ? 'Fəhlə (Köməkçi işlər)' : '');
 
+                final currentConsent = userData?['locationSharingConsent'] == true;
+                final bool shareCoords = currentConsent;
+
                 await FirebaseFirestore.instance.collection('users').doc(uid).set({
                   'fullName': updatedName,
                   'phone': updatedPhone,
                   'role': selectedRole,
                   'category': updatedTrade,
                   'city': fullCity,
-                  'lat': coords[0],
-                  'lng': coords[1],
                   'isWorking': (selectedRole == 'usta' || selectedRole == 'worker') ? isWorkingStatus : false,
                   'bio': selectedRole == 'usta' ? bioController.text.trim() : (userData?['bio'] ?? ''),
+                  if (shareCoords) 'lat': coords[0],
+                  if (shareCoords) 'lng': coords[1],
+                  if (shareCoords) 'latitude': coords[0],
+                  if (shareCoords) 'longitude': coords[1],
                 }, SetOptions(merge: true));
 
                 // İstifadəçinin mövcud bütün Shorts videolarını və postlarını yeni ad və nömrə ilə sinxronlaşdır
@@ -4872,6 +4877,170 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildLocationPrivacyCard(String uid, Map<String, dynamic>? userData) {
+    final bool consent = userData?['locationSharingConsent'] == true;
+    final String city = (userData?['city'] ?? 'Bakı').toString();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: consent ? const Color(0xFFF0FDF4) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: consent ? const Color(0xFF86EFAC) : const Color(0xFFE2E8F0),
+          width: consent ? 1.5 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: consent ? const Color(0xFFDCFCE7) : const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  consent ? Icons.share_location_rounded : Icons.location_off_rounded,
+                  color: consent ? const Color(0xFF059669) : const Color(0xFF64748B),
+                  size: 19,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Konum Paylaşımı Vəziyyəti',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: consent ? const Color(0xFF059669).withOpacity(0.12) : Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  consent ? 'Aktivdir' : 'Deaktivdir',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: consent ? const Color(0xFF059669) : const Color(0xFF64748B),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            consent
+                ? 'Dəqiq konumunuz UstaGo xəritəsində yaxınlıqdakı istifadəçilərə göstərilir. İstənilən vaxt söndürə bilərsiniz.'
+                : 'Konum paylaşımı bağlıdır. Xəritədə dəqiq koordinatınız göstərilmir (yalnız $city rayon/şəhər adı görünür).',
+            style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.4),
+          ),
+          const SizedBox(height: 10),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            value: consent,
+            activeColor: const Color(0xFF059669),
+            title: Text(
+              consent ? 'Konumumu xəritədə paylaş' : 'Konumu gizli saxla',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: consent ? const Color(0xFF059669) : const Color(0xFF334155),
+              ),
+            ),
+            subtitle: Text(
+              consent
+                  ? 'Konumu gizlətmək üçün toxunun'
+                  : 'Xəritədə görünmək üçün icazə verin',
+              style: const TextStyle(fontSize: 11),
+            ),
+            onChanged: (val) async {
+              if (val) {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    title: const Text('Konumu paylaşmaq istəyirsiniz?'),
+                    content: const Text(
+                      'Konumunuz yalnız təsdiq etdikdən sonra ictimai profildə və UstaGo xəritəsində göstəriləcək.',
+                      style: TextStyle(fontSize: 13.5),
+                    ),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İmtina et')),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1769D2),
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Bəli, paylaş'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm != true) return;
+
+                final rawCity = (userData?['city'] ?? 'Bakı').toString();
+                final coords = CategoryCityService.getCoordinates(rawCity);
+
+                await FirebaseFirestore.instance.collection('users').doc(uid).set({
+                  'locationSharingConsent': true,
+                  'lat': coords[0],
+                  'lng': coords[1],
+                  'latitude': coords[0],
+                  'longitude': coords[1],
+                }, SetOptions(merge: true));
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Konum paylaşımı aktivləşdirildi.'),
+                      backgroundColor: Color(0xFF059669),
+                    ),
+                  );
+                }
+              } else {
+                await FirebaseFirestore.instance.collection('users').doc(uid).set({
+                  'locationSharingConsent': false,
+                  'lat': FieldValue.delete(),
+                  'lng': FieldValue.delete(),
+                  'latitude': FieldValue.delete(),
+                  'longitude': FieldValue.delete(),
+                }, SetOptions(merge: true));
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Konum paylaşımı söndürüldü və koordinatlar profildən silindi.'),
+                      backgroundColor: Color(0xFF334155),
+                    ),
+                  );
+                }
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProfileTab() {
     final user = _authService.currentUser;
     final bool isAdmin = _currentUserRole == 'admin';
@@ -5166,6 +5335,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
             // İnstagram tərzi Portfólio / İşlərim bölməsi
             _buildInstagramGallery(user.uid, displayName, userRole),
+            const SizedBox(height: 16),
+            _buildLocationPrivacyCard(user.uid, userData),
             const SizedBox(height: 16),
             _buildFourRoleSwitcherCard(user.uid, userRole),
             const SizedBox(height: 16),
@@ -5914,6 +6085,8 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 12),
           ],
 
+          _buildLocationPrivacyCard(user.uid, userData),
+          const SizedBox(height: 14),
           _buildFourRoleSwitcherCard(user.uid, userRole),
           const SizedBox(height: 14),
           // 6. Aşağı Menyu (Mağazam / Elanlarım, Bildirişlər, Dəstək, Çıxış et)

@@ -374,6 +374,288 @@ class CategoryCityService {
     'Sədərək': ['Heydərabad', 'Sədərək kəndi', 'Dəmirçi'],
   };
 
+  // ===================================================================
+  // ÇOXSEÇİMLİ İXTİSAS KATALOQU (Usta və Fəhlə qeydiyyatı üçün)
+  // Hər ixtisasın sabit ID-si bazada `specialtyIds` siyahısında saxlanılır.
+  // ===================================================================
+  static final List<Map<String, dynamic>> specialtyGroups = [
+    {
+      'id': 'grp_tikinti',
+      'title': 'Tikinti və təmir',
+      'icon': Icons.construction_rounded,
+      'color': const Color(0xFFE65100),
+      'bgColor': const Color(0xFFFBE9E7),
+      'items': <Map<String, String>>[
+        {'id': 'sp_umumi_tikinti', 'title': 'Ümumi tikinti ustası'},
+        {'id': 'sp_santexnik', 'title': 'Santexnik'},
+        {'id': 'sp_elektrik', 'title': 'Elektrik ustası'},
+        {'id': 'sp_kafel', 'title': 'Kafel-metlax ustası'},
+        {'id': 'sp_suvaq', 'title': 'Suvaq ustası'},
+        {'id': 'sp_malyar', 'title': 'Malyar və rəngsaz'},
+        {'id': 'sp_qaynaq', 'title': 'Qaynaq (svarka) ustası'},
+        {'id': 'sp_alcipan', 'title': 'Alçıpan ustası'},
+        {'id': 'sp_dam', 'title': 'Dam örtüyü ustası'},
+        {'id': 'sp_beton', 'title': 'Beton ustası'},
+        {'id': 'sp_armatur', 'title': 'Armatur ustası'},
+        {'id': 'sp_fasad', 'title': 'Fasad ustası'},
+        {'id': 'sp_laminat', 'title': 'Laminat ustası'},
+        {'id': 'sp_parket', 'title': 'Parket ustası'},
+        {'id': 'sp_dulger', 'title': 'Dülgər'},
+        {'id': 'sp_mebel', 'title': 'Mebel ustası'},
+        {'id': 'sp_qapi_pencere', 'title': 'Qapı-pəncərə ustası'},
+        {'id': 'sp_izolyasiya', 'title': 'İzolyasiya ustası'},
+      ],
+    },
+    {
+      'id': 'grp_elektronika',
+      'title': 'Telefon və elektronika',
+      'icon': Icons.smartphone_rounded,
+      'color': const Color(0xFF1565C0),
+      'bgColor': const Color(0xFFE3F2FD),
+      'items': <Map<String, String>>[
+        {'id': 'sp_telefon', 'title': 'Telefon ustası'},
+        {'id': 'sp_iphone', 'title': 'iPhone təmiri'},
+        {'id': 'sp_android', 'title': 'Android telefon təmiri'},
+        {'id': 'sp_ekran_sensor', 'title': 'Telefon ekranı və sensor dəyişimi'},
+        {'id': 'sp_telefon_proqram', 'title': 'Telefon proqram təminatı'},
+        {'id': 'sp_planset', 'title': 'Planşet ustası'},
+        {'id': 'sp_komputer', 'title': 'Kompüter ustası'},
+        {'id': 'sp_noutbuk', 'title': 'Noutbuk ustası'},
+        {'id': 'sp_tv', 'title': 'Televizor (TV) ustası'},
+        {'id': 'sp_monitor', 'title': 'Monitor ustası'},
+        {'id': 'sp_printer', 'title': 'Printer ustası'},
+        {'id': 'sp_audio', 'title': 'Audio və səs avadanlıqları ustası'},
+      ],
+    },
+    {
+      'id': 'grp_konsol',
+      'title': 'Oyun konsolları',
+      'icon': Icons.sports_esports_rounded,
+      'color': const Color(0xFF6A1B9A),
+      'bgColor': const Color(0xFFF3E5F5),
+      'items': <Map<String, String>>[
+        {'id': 'sp_playstation', 'title': 'PlayStation ustası'},
+        {'id': 'sp_ps4', 'title': 'PS4 təmiri'},
+        {'id': 'sp_ps5', 'title': 'PS5 təmiri'},
+        {'id': 'sp_xbox', 'title': 'Xbox ustası'},
+        {'id': 'sp_pult', 'title': 'Oyun pultu təmiri'},
+        {'id': 'sp_konsol_proqram', 'title': 'Oyun konsolu proqram təminatı'},
+      ],
+    },
+    {
+      'id': 'grp_meiset',
+      'title': 'Məişət avadanlıqları',
+      'icon': Icons.kitchen_rounded,
+      'color': const Color(0xFF00838F),
+      'bgColor': const Color(0xFFE0F7FA),
+      'items': <Map<String, String>>[
+        {'id': 'sp_soyuducu', 'title': 'Soyuducu ustası'},
+        {'id': 'sp_paltaryuyan', 'title': 'Paltaryuyan ustası'},
+        {'id': 'sp_qabyuyan', 'title': 'Qabyuyan ustası'},
+        {'id': 'sp_kondisioner', 'title': 'Kondisioner ustası'},
+        {'id': 'sp_kombi', 'title': 'Kombi ustası'},
+        {'id': 'sp_su_qizdirici', 'title': 'Su qızdırıcısı ustası'},
+        {'id': 'sp_mikrodalga', 'title': 'Mikrodalğalı soba ustası'},
+        {'id': 'sp_elektrik_soba', 'title': 'Elektrik sobası ustası'},
+        {'id': 'sp_tozsoran', 'title': 'Tozsoran ustası'},
+      ],
+    },
+    {
+      'id': 'grp_avto',
+      'title': 'Avtomobil təmiri',
+      'icon': Icons.directions_car_filled_rounded,
+      'color': const Color(0xFF0277BD),
+      'bgColor': const Color(0xFFE1F5FE),
+      'items': <Map<String, String>>[
+        {'id': 'sp_avtoelektrik', 'title': 'Avtoelektrik'},
+        {'id': 'sp_motor', 'title': 'Motor ustası'},
+        {'id': 'sp_suretler_qutusu', 'title': 'Sürətlər qutusu ustası'},
+        {'id': 'sp_diaqnostika', 'title': 'Avtomobil diaqnostikası'},
+        {'id': 'sp_avto_rengsaz', 'title': 'Avtomobil rəngsazı'},
+        {'id': 'sp_kuzov', 'title': 'Kuzov ustası'},
+        {'id': 'sp_teker', 'title': 'Təkər ustası'},
+        {'id': 'sp_avto_kondisioner', 'title': 'Avtomobil kondisioneri ustası'},
+        {'id': 'sp_avto_qaynaq', 'title': 'Avtomobil qaynaq ustası'},
+      ],
+    },
+    {
+      'id': 'grp_diger',
+      'title': 'Digər xidmətlər',
+      'icon': Icons.miscellaneous_services_rounded,
+      'color': const Color(0xFF2E7D32),
+      'bgColor': const Color(0xFFE8F5E9),
+      'items': <Map<String, String>>[
+        {'id': 'sp_kilid', 'title': 'Kilid ustası'},
+        {'id': 'sp_suse', 'title': 'Şüşə ustası'},
+        {'id': 'sp_jaluz', 'title': 'Jalüz və pərdə ustası'},
+        {'id': 'sp_mebel_yigilmasi', 'title': 'Mebel yığılması'},
+        {'id': 'sp_kamera', 'title': 'Kamera və müşahidə sistemi ustası'},
+        {'id': 'sp_internet', 'title': 'İnternet və şəbəkə ustası'},
+        {'id': 'sp_gunes_paneli', 'title': 'Günəş paneli ustası'},
+        {'id': 'sp_su_nasosu', 'title': 'Su nasosu ustası'},
+        {'id': 'sp_heyet_bag', 'title': 'Həyət və bağ işləri'},
+      ],
+    },
+  ];
+
+  /// İxtisas ID-si üzrə {id, title, groupId, groupTitle} qaytarır
+  static Map<String, String>? findSpecialtyById(String id) {
+    for (final g in specialtyGroups) {
+      for (final item in (g['items'] as List<Map<String, String>>)) {
+        if (item['id'] == id) {
+          return {
+            'id': id,
+            'title': item['title']!,
+            'groupId': g['id'] as String,
+            'groupTitle': g['title'] as String,
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Seçilmiş ixtisaslardan köhnə tək `category` sahəsi üçün uyğun dəyər çıxarır
+  /// (mövcud axtarış/kateqoriya ekranları pozulmasın deyə).
+  static String legacyCategoryFor(List<String> specialtyIds, List<String> titles) {
+    const map = {
+      'sp_santexnik': 'Santexnik',
+      'sp_elektrik': 'Elektrik',
+      'sp_dulger': 'Dülgər',
+      'sp_malyar': 'Rəngsaz',
+      'sp_mebel': 'Mebel Ustası',
+      'sp_mebel_yigilmasi': 'Mebel Ustası',
+      'sp_kondisioner': 'Kondisioner Ustası',
+    };
+    for (final id in specialtyIds) {
+      if (map.containsKey(id)) return map[id]!;
+    }
+    for (final id in specialtyIds) {
+      final sp = findSpecialtyById(id);
+      if (sp == null) continue;
+      switch (sp['groupId']) {
+        case 'grp_tikinti':
+          return 'Tikinti';
+        case 'grp_avto':
+          return 'Avtomobil Ustası';
+        case 'grp_elektronika':
+        case 'grp_konsol':
+        case 'grp_meiset':
+          return 'Təmir və Quraşdırma';
+      }
+    }
+    if (titles.isNotEmpty) return titles.first;
+    return 'Tikinti';
+  }
+
+  // Bakı şəhərinin 12 inzibati rayonu
+  static const List<String> bakuDistricts = [
+    'Binəqədi',
+    'Xətai',
+    'Xəzər',
+    'Qaradağ',
+    'Nərimanov',
+    'Nəsimi',
+    'Nizami',
+    'Pirallahı',
+    'Sabunçu',
+    'Səbail',
+    'Suraxanı',
+    'Yasamal',
+  ];
+
+  // Bakı rayonlarına aid qəsəbələr, kəndlər və yaşayış massivləri
+  static const Map<String, List<String>> bakuSettlementsByDistrict = {
+    'Binəqədi': [
+      'Binəqədi qəsəbəsi', 'Biləcəri', 'Xocəsən', 'Sulutəpə', 'Rəsulzadə', 'Novxanı',
+      '28 May', 'Masazır yolu', '7-ci mkr', '8-ci mkr', '9-cu mkr', 'Dərnəgül', 'Azadlıq',
+    ],
+    'Xətai': ['Əhmədli', 'Həzi Aslanov', 'Ağ Şəhər', 'Xalqlar Dostluğu', 'Köhnə Günəşli', '8-ci km'],
+    'Xəzər': [
+      'Mərdəkan', 'Şüvəlan', 'Buzovna', 'Şağan', 'Qala', 'Türkan', 'Zirə', 'Binə', 'Dübəndi', 'Gürgan',
+    ],
+    'Qaradağ': [
+      'Lökbatan', 'Qızıldaş', 'Puta', 'Şıxov', 'Sahil', 'Səngəçal', 'Ələt', 'Ümid', 'Müşfiqabad', 'Korgöz', 'Qobustan qəs.',
+    ],
+    'Nərimanov': ['Montin', 'Gənclik', 'Böyükşor', 'Təbriz küçəsi ətrafı'],
+    'Nəsimi': ['20 Yanvar', 'Kubinka', 'Nəsimi bazarı ətrafı', 'Yeni Nəsimi'],
+    'Nizami': ['Keşlə', '8-ci km', 'Qara Qarayev', 'Neftçilər', 'Koroğlu'],
+    'Pirallahı': ['Pirallahı qəsəbəsi', 'Gürgən'],
+    'Sabunçu': [
+      'Bakıxanov', 'Balaxanı', 'Bilgəh', 'Kürdəxanı', 'Maştağa', 'Nardaran', 'Pirşağı',
+      'Ramana', 'Sabunçu qəsəbəsi', 'Savalan', 'Zabrat', 'Yeni Balaxanı',
+    ],
+    'Səbail': ['İçərişəhər', 'Bayıl', 'Badamdar', '20-ci sahə', 'Bibiheybət', 'Səbail qəsəbəsi'],
+    'Suraxanı': [
+      'Qaraçuxur', 'Hövsan', 'Əmircan', 'Bülbülə', 'Zığ', 'Günəşli', 'Yeni Suraxanı', 'Dədə Qorqud', 'Massiv A', 'Yeni Günəşli',
+    ],
+    'Yasamal': ['Yeni Yasamal', 'Elmlər', 'İnşaatçılar', 'Memar Əcəmi', 'Yasamal qəsəbəsi'],
+  };
+
+  static List<String> getSettlementsForBakuDistrict(String district) {
+    final norm = normalizeAz(district);
+    for (final e in bakuSettlementsByDistrict.entries) {
+      if (normalizeAz(e.key) == norm) return e.value;
+    }
+    return const [];
+  }
+
+  // ===================================================================
+  // İSTİFADƏÇİ TƏRƏFİNDƏN TƏKLİF OLUNAN YENİ İXTİSASLAR (Admin təsdiqi ilə)
+  // ===================================================================
+  static String _customSpecialtyDocId(String title) {
+    final base = normalizeAz(title).replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+    return 'csp_${base.replaceAll(RegExp(r'^_+|_+$'), '')}';
+  }
+
+  /// Yeni ixtisas təklifi göndərir. Eyni adlı ixtisas təkrar yaradılmır.
+  /// Qaytarır: yaradılmış/mövcud sənədin ID-si.
+  static Future<String> submitCustomSpecialty({
+    required String title,
+    String groupId = 'grp_diger',
+    String groupTitle = 'Digər xidmətlər',
+    String? submittedBy,
+  }) async {
+    final clean = title.trim();
+    final docId = _customSpecialtyDocId(clean);
+    final ref = _firestore.collection('custom_specialties').doc(docId);
+    final existing = await ref.get();
+    if (!existing.exists) {
+      await ref.set({
+        'title': clean,
+        'groupId': groupId,
+        'groupTitle': groupTitle,
+        'isApproved': false,
+        'submittedBy': submittedBy ?? '',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+    return docId;
+  }
+
+  static Stream<List<Map<String, dynamic>>> _customSpecialtiesStream(bool approved) {
+    return _firestore
+        .collection('custom_specialties')
+        .where('isApproved', isEqualTo: approved)
+        .snapshots()
+        .map((s) => s.docs.map((d) => {...d.data(), 'id': d.id}).toList());
+  }
+
+  static Stream<List<Map<String, dynamic>>> getApprovedCustomSpecialtiesStream() => _customSpecialtiesStream(true);
+
+  static Stream<List<Map<String, dynamic>>> getPendingCustomSpecialtiesStream() => _customSpecialtiesStream(false);
+
+  static Future<void> approveCustomSpecialty(String docId) async {
+    await _firestore.collection('custom_specialties').doc(docId).set({
+      'isApproved': true,
+      'approvedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  static Future<void> deleteCustomSpecialty(String docId) async {
+    await _firestore.collection('custom_specialties').doc(docId).delete();
+  }
+
   /// Azərbaycan dilindəki hərfləri axtarış üçün standartlaşdırır (məs: Maştağa == mastaga)
   static String normalizeAz(String input) {
     return input
