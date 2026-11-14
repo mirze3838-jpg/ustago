@@ -178,6 +178,21 @@ class _ShortsScreenState extends State<ShortsScreen> {
     _activateVideo(index, items);
   }
 
+  void _navigateFromBottomBar(int tabIndex) {
+    for (final c in _controllers.values) {
+      try {
+        if (c.value.isInitialized && c.value.isPlaying) {
+          c.pause();
+        }
+      } catch (_) {}
+    }
+    if (widget.onNavigateTab != null) {
+      widget.onNavigateTab!(tabIndex);
+    } else if (Navigator.canPop(context)) {
+      Navigator.pop(context, tabIndex);
+    }
+  }
+
   Future<void> _toggleMute() async {
     _muted = !_muted;
     for (final controller in _controllers.values) {
@@ -888,8 +903,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
                 });
               }
 
-              final bool hasNavShortcut = Navigator.canPop(context) && widget.onNavigateTab == null;
-              final double bottomNavHeight = hasNavShortcut ? 52.0 : 0.0;
+              final bool hasNavShortcut = Navigator.canPop(context);
+              final double bottomNavHeight = hasNavShortcut ? 56.0 : 0.0;
 
               return PageView.builder(
                 controller: _pageController,
@@ -975,37 +990,29 @@ class _ShortsScreenState extends State<ShortsScreen> {
             ),
           ),
 
-          // Əgər ayrıca səhifə kimi açılıbsa (Navigator.push), ana menyu burada da göstərilir
-          if (Navigator.canPop(context) && widget.onNavigateTab == null)
+          // Aşağı naviqasiya zolağı (Shorts ayrıca səhifə kimi açıldıqda belə görünür)
+          if (hasNavShortcut)
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.85),
-                  border: Border(top: BorderSide(color: Colors.white.withOpacity(0.12), width: 0.5)),
+                  color: Colors.black.withOpacity(0.9),
+                  border: Border(top: BorderSide(color: Colors.white.withOpacity(0.14), width: 0.6)),
                 ),
                 child: SafeArea(
                   top: false,
                   child: SizedBox(
-                    height: 52,
+                    height: 56,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _buildNavShortcut(Icons.home_outlined, 'Ana səhifə', () {
-                          Navigator.pop(context);
-                        }),
+                        _buildNavShortcut(Icons.home_outlined, 'Ana səhifə', () => _navigateFromBottomBar(0)),
                         _buildNavShortcut(Icons.play_circle_fill, 'Shorts', null, isActive: true),
-                        _buildNavShortcut(Icons.storefront_outlined, 'Alış-Satış', () {
-                          Navigator.pop(context, 2);
-                        }),
-                        _buildNavShortcut(Icons.chat_bubble_outline, 'Mesajlar', () {
-                          Navigator.pop(context, 3);
-                        }),
-                        _buildNavShortcut(Icons.person_outline, 'Profil', () {
-                          Navigator.pop(context, 4);
-                        }),
+                        _buildNavShortcut(Icons.storefront_outlined, 'Alış-Satış', () => _navigateFromBottomBar(2)),
+                        _buildNavShortcut(Icons.chat_bubble_outline, 'Mesajlar', () => _navigateFromBottomBar(3)),
+                        _buildNavShortcut(Icons.person_outline, 'Profil', () => _navigateFromBottomBar(4)),
                       ],
                     ),
                   ),
@@ -2057,6 +2064,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
   Widget build(BuildContext context) {
     final c = widget.controller;
     final bool isReady = c != null && c.value.isInitialized;
+    final double sysBottom = MediaQuery.of(context).padding.bottom;
+    final double baseBottom = widget.bottomInset + sysBottom;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -2178,7 +2187,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
           // Sağ tərəfdəki TikTok tipli sosial düymələr
           Positioned(
             right: 10,
-            bottom: widget.bottomInset + 30,
+            bottom: baseBottom + 44,
             child: Builder(
               builder: (context) {
                 final currentUser = FirebaseAuth.instance.currentUser;
@@ -2313,11 +2322,11 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
           ),
 
           // Aşağı sol tərəfdəki usta məlumatı, Açıqlama və Hashtaglar
-          // Menyunun və irəliləmə xəttinin kəskin şəkildə YUXARISINDA yerləşir (Toqquşma sıfırdır)
+          // İrəliləmə xəttinin (36px) tam YUXARISINDA yerləşir — hashtagların üstünə düşmür
           Positioned(
             left: 16,
             right: 86,
-            bottom: widget.bottomInset + 30,
+            bottom: baseBottom + 44,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -2380,17 +2389,13 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
           ),
 
           // TikTok tipli Video Scrubber (İrəli/Geri çəkmə və Vaxt göstəricisi)
-          // Aşağı menyunun düz üstündə, amma hashtagların tam altında, ayrıca səliqəli zolaqda yerləşir
+          // Aşağı menyunun düz üstündə, hashtaglardan ayrıca 36px zolaqda yerləşir
           if (isReady)
             Positioned(
               left: 0,
               right: 0,
-              bottom: widget.bottomInset,
-              child: SafeArea(
-                top: false,
-                bottom: widget.bottomInset == 0,
-                child: _TikTokVideoScrubber(controller: c),
-              ),
+              bottom: baseBottom,
+              child: _TikTokVideoScrubber(controller: c),
             ),
         ],
       ),
@@ -2511,95 +2516,98 @@ class _TikTokVideoScrubberState extends State<_TikTokVideoScrubber> {
           ),
 
         // İrəli/Geri çəkmə zolağı (Interactive Slider)
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onHorizontalDragStart: (details) {
-            setState(() {
-              _isDragging = true;
-            });
-            widget.controller.pause();
-          },
-          onHorizontalDragUpdate: (details) {
-            final box = context.findRenderObject() as RenderBox?;
-            if (box != null) {
-              final localX = details.localPosition.dx;
-              final width = box.size.width;
-              final newPercent = (localX / width).clamp(0.0, 1.0);
-              setState(() {
-                _dragValue = newPercent;
-              });
-              final target = duration * newPercent;
-              widget.controller.seekTo(target);
-            }
-          },
-          onHorizontalDragEnd: (details) {
-            final target = duration * _dragValue;
-            widget.controller.seekTo(target).then((_) {
-              if (mounted) {
-                widget.controller.play();
-                setState(() {
-                  _isDragging = false;
-                });
-              }
-            });
-          },
-          onTapDown: (details) {
-            final box = context.findRenderObject() as RenderBox?;
-            if (box != null) {
-              final localX = details.localPosition.dx;
-              final width = box.size.width;
-              final percent = (localX / width).clamp(0.0, 1.0);
-              final target = duration * percent;
-              widget.controller.seekTo(target);
-            }
-          },
-          child: Container(
-            height: 48,
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            color: Colors.transparent, // Geniş sensor sahəsi
-            alignment: Alignment.bottomCenter,
-            child: Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.centerLeft,
-              children: [
-                // Arxa zolaq (boz)
-                Container(
-                  height: _isDragging ? 5.0 : 2.5,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                // Dolmuş zolaq (TikTok ağ/qırmızı)
-                FractionallySizedBox(
-                  widthFactor: progress,
-                  child: Container(
-                    height: _isDragging ? 5.0 : 2.5,
-                    decoration: BoxDecoration(
-                      color: _isDragging ? Colors.redAccent : Colors.white.withOpacity(0.95),
-                      borderRadius: BorderRadius.circular(2),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final double trackWidth = constraints.maxWidth > 0 ? constraints.maxWidth : 1.0;
+              final double thumbSize = _isDragging ? 16.0 : 10.0;
+              final double maxThumbLeft = (trackWidth - thumbSize).clamp(0.0, trackWidth);
+              final double thumbLeft = ((trackWidth * progress) - (thumbSize / 2)).clamp(0.0, maxThumbLeft);
+
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onHorizontalDragStart: (details) {
+                  setState(() {
+                    _isDragging = true;
+                  });
+                  widget.controller.pause();
+                },
+                onHorizontalDragUpdate: (details) {
+                  final newPercent = (details.localPosition.dx / trackWidth).clamp(0.0, 1.0);
+                  setState(() {
+                    _dragValue = newPercent;
+                  });
+                  final target = duration * newPercent;
+                  widget.controller.seekTo(target);
+                },
+                onHorizontalDragEnd: (details) {
+                  final target = duration * _dragValue;
+                  widget.controller.seekTo(target).then((_) {
+                    if (mounted) {
+                      widget.controller.play();
+                      setState(() {
+                        _isDragging = false;
+                      });
+                    }
+                  });
+                },
+                onTapDown: (details) {
+                  final percent = (details.localPosition.dx / trackWidth).clamp(0.0, 1.0);
+                  final target = duration * percent;
+                  widget.controller.seekTo(target);
+                },
+                child: Container(
+                  height: 36,
+                  color: Colors.transparent,
+                  alignment: Alignment.center,
+                  child: SizedBox(
+                    height: 20,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      alignment: Alignment.centerLeft,
+                      children: [
+                        // Arxa zolaq (boz)
+                        Container(
+                          height: _isDragging ? 6.0 : 3.5,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.35),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        // Dolmuş zolaq (mavi / sürüşdürəndə qırmızı)
+                        FractionallySizedBox(
+                          widthFactor: progress,
+                          child: Container(
+                            height: _isDragging ? 6.0 : 3.5,
+                            decoration: BoxDecoration(
+                              color: _isDragging ? Colors.redAccent : const Color(0xFF38BDF8),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ),
+                        // Həmişə görünən barmaq nöqtəsi (Thumb)
+                        Positioned(
+                          left: thumbLeft,
+                          child: Container(
+                            width: thumbSize,
+                            height: thumbSize,
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(color: Colors.black45, blurRadius: 4),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                // Drag zamanı barmaq altındakı indikator
-                if (_isDragging)
-                  Positioned(
-                    left: (MediaQuery.of(context).size.width * progress) - 7,
-                    child: Container(
-                      width: 14,
-                      height: 14,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(color: Colors.black45, blurRadius: 4),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ],
