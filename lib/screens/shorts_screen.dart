@@ -842,6 +842,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool hasNavShortcut = Navigator.canPop(context);
+    final double bottomNavHeight = hasNavShortcut ? 56.0 : 0.0;
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -902,9 +904,6 @@ class _ShortsScreenState extends State<ShortsScreen> {
                   }
                 });
               }
-
-              final bool hasNavShortcut = Navigator.canPop(context);
-              final double bottomNavHeight = hasNavShortcut ? 56.0 : 0.0;
 
               return PageView.builder(
                 controller: _pageController,
