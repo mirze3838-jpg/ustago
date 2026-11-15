@@ -8,6 +8,7 @@ class TikTokInfo {
   final String canonicalUrl;
   final String? videoId;
   final String embedUrl;
+  final String? directVideoUrl;
   final String? title;
   final String? authorName;
   final String? authorUrl;
@@ -22,6 +23,7 @@ class TikTokInfo {
     required this.canonicalUrl,
     this.videoId,
     required this.embedUrl,
+    this.directVideoUrl,
     this.title,
     this.authorName,
     this.authorUrl,
@@ -39,6 +41,8 @@ class TikTokInfo {
       'canonicalUrl': canonicalUrl,
       'videoId': videoId,
       'embedUrl': embedUrl,
+      'directVideoUrl': directVideoUrl,
+      'videoUrl': directVideoUrl ?? embedUrl,
       'title': title,
       'authorName': authorName,
       'authorUrl': authorUrl,
@@ -153,11 +157,16 @@ class TikTokService {
             ? 'https://www.tiktok.com/player/v1/$finalVideoId?embed_from=oembed&music_info=1&description=1&autoplay=1&muted=0'
             : canonical;
 
+        final directStreamUrl = finalVideoId != null
+            ? 'https://www.tikwm.com/video/media/play/$finalVideoId.mp4'
+            : null;
+
         return TikTokInfo(
           originalUrl: inputUrl,
           canonicalUrl: canonical,
           videoId: finalVideoId,
           embedUrl: embedPlayerUrl,
+          directVideoUrl: directStreamUrl,
           title: title ?? (isProfileOnly ? 'TikTok Profili: $authorName' : 'Usta TikTok Videosu'),
           authorName: authorName,
           authorUrl: authorUrl ?? (username != null ? 'https://www.tiktok.com/$username' : null),
@@ -184,6 +193,7 @@ class TikTokService {
         canonicalUrl: inputUrl,
         videoId: videoId,
         embedUrl: 'https://www.tiktok.com/player/v1/$videoId?embed_from=oembed&music_info=1&description=1&autoplay=1&muted=0',
+        directVideoUrl: 'https://www.tikwm.com/video/media/play/$videoId.mp4',
         title: 'Usta TikTok Videosu',
         authorName: username ?? 'Usta',
         profileUsername: username,

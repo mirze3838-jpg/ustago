@@ -75,13 +75,21 @@ class _ShortsScreenState extends State<ShortsScreen> {
       return;
     }
 
-    final url = items[index]['videoUrl']?.toString().trim() ?? '';
+    final rawUrl = items[index]['videoUrl']?.toString().trim() ?? '';
+    final videoId = items[index]['videoId']?.toString().trim() ?? '';
+    final isTikTok = items[index]['isTikTok'] == true ||
+        rawUrl.contains('tiktok.com') ||
+        (items[index]['tiktokUrl'] != null && items[index]['tiktokUrl'].toString().isNotEmpty);
+
+    String url = rawUrl;
+    if (videoId.isNotEmpty && (url.contains('tiktok.com/player') || url.contains('embed_from=oembed') || url.isEmpty)) {
+      url = 'https://www.tikwm.com/video/media/play/$videoId.mp4';
+    }
+
     if (url.isEmpty) return;
 
-    final isTikTok = items[index]['isTikTok'] == true ||
-        url.contains('tiktok.com') ||
-        (items[index]['tiktokUrl'] != null && items[index]['tiktokUrl'].toString().isNotEmpty);
-    if (isTikTok) return; // TikTok videoları daxili TikTokEmbedView ilə ifa olunur, VideoPlayerController tələb olunmur!
+    final bool useNativePlayer = url.contains('.mp4') || !url.contains('tiktok.com/player');
+    if (isTikTok && !useNativePlayer) return;
 
     final controller = VideoPlayerController.networkUrl(
       Uri.parse(url),
@@ -2124,29 +2132,21 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     final bool isTikTok = widget.data['isTikTok'] == true ||
         (widget.data['videoUrl']?.toString().contains('tiktok.com') ?? false) ||
         (widget.data['tiktokUrl'] != null && widget.data['tiktokUrl'].toString().isNotEmpty);
+    final bool hasNativeController = c != null;
     final double sysBottom = MediaQuery.of(context).padding.bottom;
     final double baseBottom = widget.bottomInset + sysBottom;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: isTikTok ? null : _togglePlay,
+      onTap: hasNativeController ? _togglePlay : null,
       onDoubleTapDown: (details) {
         _toggleLike(forceLike: true, tapPos: details.globalPosition);
       },
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // 0. TIKTOK VƏ YA ADİ VİDEO EKRANI
-          if (isTikTok)
-            TikTokEmbedView(
-              videoId: (widget.data['videoId'] ?? '').toString(),
-              embedUrl: widget.data['embedUrl']?.toString() ?? widget.data['videoUrl']?.toString(),
-              originalUrl: widget.data['tiktokUrl']?.toString() ?? widget.data['videoUrl']?.toString(),
-              title: widget.data['title']?.toString(),
-              authorName: widget.data['artisanName']?.toString(),
-              thumbnailUrl: widget.data['thumbnailUrl']?.toString(),
-            )
-          else ...[
+          // 0. VİDEO EKRANI (NATIVE PLAYER VƏ YA FALLBACK TIKTOK EMBED)
+          if (hasNativeController) ...[
             if (!isReady)
               _buildCoverImage(widget.data),
             if (isReady)
@@ -2158,7 +2158,15 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                   child: VideoPlayer(c),
                 ),
               ),
-          ],
+          ] else if (isTikTok)
+            TikTokEmbedView(
+              videoId: (widget.data['videoId'] ?? '').toString(),
+              embedUrl: widget.data['embedUrl']?.toString() ?? widget.data['videoUrl']?.toString(),
+              originalUrl: widget.data['tiktokUrl']?.toString() ?? widget.data['videoUrl']?.toString(),
+              title: widget.data['title']?.toString(),
+              authorName: widget.data['artisanName']?.toString(),
+              thumbnailUrl: widget.data['thumbnailUrl']?.toString(),
+            ),
 
           // Video buferlənərkən zərif balaca fırlanan çarx (yalnız video ifa olunmursa göstərilir)
           if (isReady && c.value.isBuffering && !c.value.isPlaying)
