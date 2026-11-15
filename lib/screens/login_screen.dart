@@ -72,7 +72,7 @@ class _LoginScreenState extends State<LoginScreen> {
         final errorStr = e.toString();
         String userFriendlyMsg = 'Google ilə daxil olarkən xəta baş verdi: $errorStr';
         if (errorStr.contains('unauthorized-domain')) {
-          userFriendlyMsg = 'Firebase Xətası: mirze3838-jpg.github.io domeni Firebase Console-da "Authorized domains" bölməsinə əlavə edilməlidir.';
+          userFriendlyMsg = 'Firebase Xətası: ustago-app.github.io domeni Firebase Console-da "Authorized domains" bölməsinə əlavə edilməlidir.';
         } else if (errorStr.contains('10') || errorStr.contains('DEVELOPER_ERROR')) {
           userFriendlyMsg = 'Google Xətası 10: Tətbiqin paket adı (com.ustago.app) və ya SHA-1 Firebase-də təsdiqlənməlidir.';
         } else if (errorStr.contains('12500')) {
