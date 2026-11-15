@@ -126,6 +126,38 @@ class _ShortsScreenState extends State<ShortsScreen> {
       try {
         await controller.dispose();
       } catch (_) {}
+
+      // Əgər TikTok videosudursa və URL vaxtı bitib/xəta veribsə, avtomatik təzələyib yenidən aç
+      if (isTikTok) {
+        final targetLink = tiktokUrl.isNotEmpty ? tiktokUrl : (videoId.isNotEmpty ? 'https://www.tiktok.com/@u/video/$videoId' : '');
+        if (targetLink.isNotEmpty) {
+          try {
+            final info = await TikTokService.fetchTikTokInfo(targetLink);
+            final freshUrl = info?.directVideoUrl;
+            if (freshUrl != null && freshUrl.isNotEmpty && freshUrl != url) {
+              items[index]['videoUrl'] = freshUrl;
+              final retryController = VideoPlayerController.networkUrl(
+                Uri.parse(freshUrl),
+                videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+              );
+              _controllers[index] = retryController;
+              await retryController.initialize();
+              await retryController.setLooping(true);
+              await retryController.setVolume(_muted ? 0 : 1.0);
+              if (mounted && index == _currentIndex) {
+                setState(() {});
+              }
+              final docId = items[index]['id']?.toString() ?? '';
+              if (docId.isNotEmpty) {
+                FirebaseFirestore.instance.collection('shorts').doc(docId).update({
+                  'videoUrl': freshUrl,
+                  'directVideoUrl': freshUrl,
+                }).catchError((_) {});
+              }
+            }
+          } catch (_) {}
+        }
+      }
     } finally {
       _initializing.remove(index);
     }
@@ -1571,7 +1603,15 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                 _showReportDialog();
               },
             ),
-            if (isOwnerOrAdmin)
+            if (isOwnerOrAdmin) ...[
+              ListTile(
+                leading: const Icon(Icons.edit_note_rounded, color: Color(0xFF1769D2)),
+                title: const Text('Başlığı Dəyiş', style: TextStyle(color: Color(0xFF1769D2), fontWeight: FontWeight.bold)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showEditTitleDialog();
+                },
+              ),
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red),
                 title: const Text('Videonu Sil', style: TextStyle(color: Colors.red)),
@@ -1580,9 +1620,116 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                   _confirmDeleteVideo();
                 },
               ),
+            ],
             const SizedBox(height: 8),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showEditTitleDialog() {
+    final curTitle = widget.data['title']?.toString() ?? '';
+    final titleCtrl = TextEditingController(text: curTitle);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: const [
+            Icon(Icons.edit_note_rounded, color: Color(0xFF1769D2), size: 26),
+            SizedBox(width: 8),
+            Text('Video Başlığını Dəyiş', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'UstaGo Shorts lentində və profilinizdə görünəcək adı daxil edin:',
+              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: titleCtrl,
+              autofocus: true,
+              maxLines: 2,
+              maxLength: 100,
+              decoration: InputDecoration(
+                hintText: 'Məsələn: Kafel-metlax işləri, Mətbəx mebeli...',
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Ləğv et', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1769D2),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            ),
+            onPressed: () async {
+              final newTitle = titleCtrl.text.trim();
+              if (newTitle.isEmpty) return;
+              Navigator.pop(ctx);
+
+              setState(() {
+                widget.data['title'] = newTitle;
+              });
+
+              final docId = widget.data['id']?.toString() ?? '';
+              if (docId.isNotEmpty) {
+                try {
+                  await FirebaseFirestore.instance.collection('shorts').doc(docId).update({
+                    'title': newTitle,
+                  });
+                } catch (e) {
+                  debugPrint('Shorts title update xətası: $e');
+                }
+              }
+
+              // Həmçinin posts kolleksiyasında da yeniləyək
+              try {
+                final videoUrl = widget.data['videoUrl']?.toString() ?? '';
+                if (videoUrl.isNotEmpty) {
+                  final snap = await FirebaseFirestore.instance
+                      .collection('posts')
+                      .where('userId', isEqualTo: widget.data['userId'])
+                      .where('videoUrl', isEqualTo: videoUrl)
+                      .limit(1)
+                      .get();
+                  for (final d in snap.docs) {
+                    await d.reference.update({'title': newTitle});
+                  }
+                }
+              } catch (_) {}
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Video başlığı uğurla yeniləndi! 🎉'),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            child: const Text('Yadda saxla', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
@@ -2142,6 +2289,10 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
         (widget.data['videoUrl']?.toString().contains('tiktok.com') ?? false) ||
         (widget.data['tiktokUrl'] != null && widget.data['tiktokUrl'].toString().isNotEmpty);
     final bool hasNativeController = c != null;
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final bool isOwnerOrAdmin = currentUser != null &&
+        ((widget.data['userId'] != null && currentUser.uid == widget.data['userId']) ||
+         currentUser.email == 'mirze3838@gmail.com');
     final double sysBottom = MediaQuery.of(context).padding.bottom;
     final double baseBottom = widget.bottomInset + sysBottom;
 
@@ -2480,11 +2631,32 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                   ),
                 ),
                 const SizedBox(height: 5),
-                Text(
-                  widget.data['title'] ?? '',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 13.5),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.data['title'] ?? '',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontSize: 13.5),
+                      ),
+                    ),
+                    if (isOwnerOrAdmin)
+                      GestureDetector(
+                        onTap: _showEditTitleDialog,
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          margin: const EdgeInsets.only(left: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white30, width: 0.8),
+                          ),
+                          child: const Icon(Icons.edit, color: Colors.white, size: 13),
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 4),
                 // Hashtaglar
