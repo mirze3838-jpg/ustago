@@ -77,13 +77,22 @@ class _ShortsScreenState extends State<ShortsScreen> {
 
     final rawUrl = items[index]['videoUrl']?.toString().trim() ?? '';
     final videoId = items[index]['videoId']?.toString().trim() ?? '';
+    final tiktokUrl = items[index]['tiktokUrl']?.toString().trim() ?? '';
     final isTikTok = items[index]['isTikTok'] == true ||
         rawUrl.contains('tiktok.com') ||
-        (items[index]['tiktokUrl'] != null && items[index]['tiktokUrl'].toString().isNotEmpty);
+        tiktokUrl.isNotEmpty;
 
     String url = rawUrl;
-    if (videoId.isNotEmpty && (url.contains('tiktok.com/player') || url.contains('embed_from=oembed') || url.isEmpty)) {
-      url = 'https://www.tikwm.com/video/media/play/$videoId.mp4';
+    if (isTikTok && (url.contains('tiktok.com/player') || url.contains('tikwm.com/video/media/play') || url.isEmpty)) {
+      final targetLink = tiktokUrl.isNotEmpty ? tiktokUrl : (videoId.isNotEmpty ? 'https://www.tiktok.com/@u/video/$videoId' : '');
+      if (targetLink.isNotEmpty) {
+        try {
+          final info = await TikTokService.fetchTikTokInfo(targetLink);
+          if (info?.directVideoUrl != null && info!.directVideoUrl!.isNotEmpty) {
+            url = info.directVideoUrl!;
+          }
+        } catch (_) {}
+      }
     }
 
     if (url.isEmpty) return;

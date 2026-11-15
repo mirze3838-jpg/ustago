@@ -125,20 +125,66 @@ class TikTokService {
     return null;
   }
 
-  /// TikTok oEmbed API vasitəsilə video və ya profil məlumatlarını gətirir
+  /// TikTok API vasitəsilə video və ya profil məlumatlarını və birbaşa MP4 axınını gətirir
   static Future<TikTokInfo?> fetchTikTokInfo(String inputUrl) async {
     try {
       final canonical = await resolveUrl(inputUrl);
+
+      // 1. Birinci TikWM API-dən birbaşa təmiz MP4 axınını və real məlumatları alırıq
+      try {
+        final tikwmUri = Uri.parse(
+          'https://www.tikwm.com/api/?url=${Uri.encodeComponent(canonical)}',
+        );
+        final tikwmRes = await http.get(tikwmUri).timeout(const Duration(seconds: 5));
+        if (tikwmRes.statusCode == 200) {
+          final jsonMap = jsonDecode(utf8.decode(tikwmRes.bodyBytes)) as Map<String, dynamic>;
+          if (jsonMap['code'] == 0 && jsonMap['data'] != null) {
+            final d = jsonMap['data'] as Map<String, dynamic>;
+            final vidId = (d['id'] ?? extractVideoId(canonical))?.toString();
+            final playUrl = (d['play'] ?? d['wmplay'])?.toString();
+            final coverUrl = (d['cover'] ?? d['origin_cover'])?.toString();
+            final videoTitle = d['title']?.toString();
+            final authorObj = d['author'] as Map<String, dynamic>?;
+            final author = authorObj?['nickname']?.toString() ?? authorObj?['unique_id']?.toString() ?? 'Usta';
+            final username = authorObj?['unique_id'] != null
+                ? '@${authorObj!['unique_id']}'
+                : (extractUsername(canonical) ?? '@usta');
+
+            final embedPlayerUrl = vidId != null
+                ? 'https://www.tiktok.com/player/v1/$vidId?embed_from=oembed&music_info=1&description=1&autoplay=1&muted=0'
+                : canonical;
+
+            return TikTokInfo(
+              originalUrl: inputUrl,
+              canonicalUrl: canonical,
+              videoId: vidId,
+              embedUrl: embedPlayerUrl,
+              directVideoUrl: playUrl,
+              title: videoTitle ?? 'Usta TikTok Videosu',
+              authorName: author,
+              authorUrl: 'https://www.tiktok.com/$username',
+              profileUsername: username,
+              thumbnailUrl: coverUrl,
+              isProfile: false,
+              isVideo: true,
+              isValid: true,
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('TikWM birbaşa axın xətası, oEmbed-ə keçilir: $e');
+      }
+
+      // 2. Fallback: TikTok rəsmi oEmbed API
       final videoId = extractVideoId(canonical);
       final username = extractUsername(canonical);
-
       final isProfileOnly = videoId == null && username != null && !canonical.contains('/video/');
 
       final oEmbedUri = Uri.parse(
         'https://www.tiktok.com/oembed?url=${Uri.encodeComponent(canonical)}',
       );
 
-      final res = await http.get(oEmbedUri).timeout(const Duration(seconds: 6));
+      final res = await http.get(oEmbedUri).timeout(const Duration(seconds: 5));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
@@ -157,16 +203,12 @@ class TikTokService {
             ? 'https://www.tiktok.com/player/v1/$finalVideoId?embed_from=oembed&music_info=1&description=1&autoplay=1&muted=0'
             : canonical;
 
-        final directStreamUrl = finalVideoId != null
-            ? 'https://www.tikwm.com/video/media/play/$finalVideoId.mp4'
-            : null;
-
         return TikTokInfo(
           originalUrl: inputUrl,
           canonicalUrl: canonical,
           videoId: finalVideoId,
           embedUrl: embedPlayerUrl,
-          directVideoUrl: directStreamUrl,
+          directVideoUrl: null,
           title: title ?? (isProfileOnly ? 'TikTok Profili: $authorName' : 'Usta TikTok Videosu'),
           authorName: authorName,
           authorUrl: authorUrl ?? (username != null ? 'https://www.tiktok.com/$username' : null),
@@ -177,11 +219,10 @@ class TikTokService {
           isValid: true,
         );
       } else if (res.statusCode == 404 || res.statusCode == 400) {
-        // Video silinib və ya mövcud deyil
         return null;
       }
     } catch (e) {
-      debugPrint('TikTok oEmbed sorğu xətası: $e');
+      debugPrint('TikTok fetch xətası: $e');
     }
 
     // Əgər oEmbed şəbəkə səbəbindən cavab verməsə, amma videoId aşkar olunubsa:
