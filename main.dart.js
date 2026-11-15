@@ -108827,7 +108827,7 @@ g=p
 l=A.a9(g)
 if(n.c!=null){k=J.C(l)
 j="Google il\u0259 daxil olark\u0259n x\u0259ta ba\u015f verdi: "+A.i(k)
-if(J.d8(k,"unauthorized-domain"))j='Firebase X\u0259tas\u0131: mirze3838-jpg.github.io domeni Firebase Console-da "Authorized domains" b\xf6lm\u0259sin\u0259 \u0259lav\u0259 edilm\u0259lidir.'
+if(J.d8(k,"unauthorized-domain"))j='Firebase X\u0259tas\u0131: ustago-app.github.io domeni Firebase Console-da "Authorized domains" b\xf6lm\u0259sin\u0259 \u0259lav\u0259 edilm\u0259lidir.'
 else if(J.d8(k,"10")||J.d8(k,"DEVELOPER_ERROR"))j="Google X\u0259tas\u0131 10: T\u0259tbiqin paket ad\u0131 (com.ustago.app) v\u0259 ya SHA-1 Firebase-d\u0259 t\u0259sdiql\u0259nm\u0259lidir."
 else if(J.d8(k,"12500"))j="Google X\u0259tas\u0131 12500: Firebase Authentication-da Google provayderini aktiv edin."
 else if(J.d8(k,"network")||J.d8(k,"7"))j="\u0130nternet ba\u011flant\u0131n\u0131z\u0131 yoxlay\u0131n."
