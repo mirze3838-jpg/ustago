@@ -32707,7 +32707,7 @@ s=7
 return A.h(A.We(c3),$async$va)
 case 7:n=c5
 p=9
-m=A.dr("https://www.tikwm.com/api/?url="+A.mM(B.fV,n,B.aq,!1),0,null)
+m=A.dr("https://www.tikwm.com/api/?url="+A.mM(B.fV,n,B.aq,!1)+"&hd=1",0,null)
 s=12
 return A.h(A.aVE(m).n6(0,B.k4),$async$va)
 case 12:l=c5
@@ -32717,7 +32717,8 @@ if(J.d(J.K(k,"code"),0)&&J.K(k,"data")!=null){j=b5.a(J.K(k,"data"))
 b5=J.K(j,"id")
 if(b5==null)b5=A.auu(n)
 i=b5==null?null:J.B(b5)
-b5=J.K(j,"play")
+b5=J.K(j,"hdplay")
+if(b5==null)b5=J.K(j,"play")
 if(b5==null)b5=J.K(j,"wmplay")
 h=b5==null?null:J.B(b5)
 b5=J.K(j,"cover")
