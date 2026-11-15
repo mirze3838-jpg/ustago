@@ -2162,9 +2162,17 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
               Container(
                 color: Colors.black,
                 alignment: Alignment.center,
-                child: AspectRatio(
-                  aspectRatio: _correctAspectRatio(c),
-                  child: VideoPlayer(c),
+                child: SizedBox.expand(
+                  child: FittedBox(
+                    fit: (c.value.size.width > 0 && c.value.size.height > 0 && (c.value.size.width / c.value.size.height) <= 1.05)
+                        ? BoxFit.cover
+                        : BoxFit.contain,
+                    child: SizedBox(
+                      width: c.value.size.width > 0 ? c.value.size.width : 1080,
+                      height: c.value.size.height > 0 ? c.value.size.height : 1920,
+                      child: VideoPlayer(c),
+                    ),
+                  ),
                 ),
               ),
           ] else if (isTikTok)

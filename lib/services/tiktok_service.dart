@@ -141,7 +141,7 @@ class TikTokService {
           if (jsonMap['code'] == 0 && jsonMap['data'] != null) {
             final d = jsonMap['data'] as Map<String, dynamic>;
             final vidId = (d['id'] ?? extractVideoId(canonical))?.toString();
-            final playUrl = (d['hdplay'] ?? d['play'] ?? d['wmplay'])?.toString();
+            final playUrl = (d['wmplay'] ?? d['hdplay'] ?? d['play'])?.toString();
             final coverUrl = (d['cover'] ?? d['origin_cover'])?.toString();
             final videoTitle = d['title']?.toString();
             final authorObj = d['author'] as Map<String, dynamic>?;
