@@ -133,7 +133,7 @@ class TikTokService {
       // 1. Birinci TikWM API-dən birbaşa təmiz MP4 axınını və real məlumatları alırıq
       try {
         final tikwmUri = Uri.parse(
-          'https://www.tikwm.com/api/?url=${Uri.encodeComponent(canonical)}',
+          'https://www.tikwm.com/api/?url=${Uri.encodeComponent(canonical)}&hd=1',
         );
         final tikwmRes = await http.get(tikwmUri).timeout(const Duration(seconds: 5));
         if (tikwmRes.statusCode == 200) {
@@ -141,7 +141,7 @@ class TikTokService {
           if (jsonMap['code'] == 0 && jsonMap['data'] != null) {
             final d = jsonMap['data'] as Map<String, dynamic>;
             final vidId = (d['id'] ?? extractVideoId(canonical))?.toString();
-            final playUrl = (d['play'] ?? d['wmplay'])?.toString();
+            final playUrl = (d['hdplay'] ?? d['play'] ?? d['wmplay'])?.toString();
             final coverUrl = (d['cover'] ?? d['origin_cover'])?.toString();
             final videoTitle = d['title']?.toString();
             final authorObj = d['author'] as Map<String, dynamic>?;
