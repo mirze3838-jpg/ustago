@@ -10,6 +10,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import '../services/video_upload_service.dart';
+import '../services/tiktok_service.dart';
 
 /// Seçilmiş fotolar üçün model
 class _PickedPhotoItem {
@@ -80,6 +81,12 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
   final TextEditingController _videoDescController = TextEditingController();
   String _videoCategory = 'Tikinti';
 
+  // TikTok sahələri
+  final TextEditingController _tiktokLinkController = TextEditingController();
+  TikTokInfo? _loadedTikTokInfo;
+  bool _isTikTokChecking = false;
+  String? _tiktokError;
+
   // Yükləmə statusu
   bool _isUploading = false;
   double _uploadProgress = 0.0;
@@ -111,6 +118,7 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
     _photoDescController.dispose();
     _videoTitleController.dispose();
     _videoDescController.dispose();
+    _tiktokLinkController.dispose();
     _disposeVideoController();
     super.dispose();
   }
@@ -454,6 +462,41 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
     return '$m:$s';
   }
 
+  Future<void> _checkAndLoadTikTok() async {
+    final link = _tiktokLinkController.text.trim();
+    if (link.isEmpty) return;
+    setState(() {
+      _isTikTokChecking = true;
+      _tiktokError = null;
+    });
+    try {
+      final info = await TikTokService.fetchTikTokInfo(link);
+      if (info != null && info.isValid) {
+        setState(() {
+          _loadedTikTokInfo = info;
+          _isTikTokChecking = false;
+          _disposeVideoController();
+          _pickedVideo = null;
+          if (_videoTitleController.text.trim().isEmpty && (info.title != null && info.title!.isNotEmpty)) {
+            _videoTitleController.text = info.title!;
+          }
+        });
+      } else {
+        setState(() {
+          _loadedTikTokInfo = null;
+          _isTikTokChecking = false;
+          _tiktokError = 'TikTok videosu tapılmadı və ya link yanlışdır.';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _loadedTikTokInfo = null;
+        _isTikTokChecking = false;
+        _tiktokError = 'Yoxlama zamanı xəta baş verdi: $e';
+      });
+    }
+  }
+
   // --- PAYLAŞMA ƏMƏLİYYATI ---
 
   Future<void> _handleShare() async {
@@ -533,9 +576,94 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
         );
         return;
       }
+
+      // ƏGƏR TIKTOK VİDEOSU SEÇİLİB DİRSƏ: BİRBAŞA BULUD YÜKLƏMƏSİ OLMADAN ƏLAVƏ EDİRİK!
+      if (_loadedTikTokInfo != null) {
+        setState(() => _isUploading = true);
+        try {
+          String currentAuthorName = widget.authorName;
+          String currentPhone = '+994 50 000 00 00';
+          String? uPhoto;
+          try {
+            final uDoc = await FirebaseFirestore.instance.collection('users').doc(widget.uid).get();
+            if (uDoc.exists) {
+              final uData = uDoc.data();
+              uPhoto = uData?['photoBase64'];
+              final fn = uData?['fullName']?.toString().trim();
+              if (fn != null && fn.isNotEmpty) currentAuthorName = fn;
+              final ph = uData?['phone']?.toString().trim();
+              if (ph != null && ph.isNotEmpty) currentPhone = ph;
+            }
+          } catch (_) {}
+
+          final postData = {
+            'userId': widget.uid,
+            'authorName': currentAuthorName,
+            'authorRole': widget.role,
+            'title': title,
+            'description': _videoDescController.text.trim(),
+            'category': _videoCategory,
+            'videoUrl': _loadedTikTokInfo!.embedUrl,
+            'tiktokUrl': _loadedTikTokInfo!.originalUrl,
+            'videoId': _loadedTikTokInfo!.videoId ?? '',
+            'thumbnailUrl': _loadedTikTokInfo!.thumbnailUrl ?? '',
+            'thumbnailBase64': '',
+            'imageBase64': '',
+            'isTikTok': true,
+            'isVideo': true,
+            'isShorts': _isShortsFormat,
+            'phone': currentPhone,
+            'createdAt': FieldValue.serverTimestamp(),
+            'likes': 0,
+          };
+
+          await FirebaseFirestore.instance.collection('posts').add(postData);
+
+          if (_isShortsFormat) {
+            await FirebaseFirestore.instance.collection('shorts').add({
+              'userId': widget.uid,
+              'title': title,
+              'description': _videoDescController.text.trim(),
+              'videoUrl': _loadedTikTokInfo!.embedUrl,
+              'tiktokUrl': _loadedTikTokInfo!.originalUrl,
+              'videoId': _loadedTikTokInfo!.videoId ?? '',
+              'thumbnailUrl': _loadedTikTokInfo!.thumbnailUrl ?? '',
+              'thumbnailBase64': '',
+              'authorPhotoBase64': uPhoto ?? '',
+              'artisanName': currentAuthorName,
+              'trade': _videoCategory,
+              'phone': currentPhone,
+              'isTikTok': true,
+              'likes': 0,
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+          }
+
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('TikTok videonuz uğurla əlavə edildi! 🎉'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+          return;
+        } catch (e) {
+          setState(() => _isUploading = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
+            );
+          }
+          return;
+        }
+      }
+
+      // ƏGƏR QALEREYADAN VİDEODURSA
       if (_pickedVideo == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Zəhmət olmasa qalereyadan video seçin!'), backgroundColor: Colors.orange),
+          const SnackBar(content: Text('Zəhmət olmasa TikTok linki daxil edin və ya qalereyadan video seçin!'), backgroundColor: Colors.orange),
         );
         return;
       }
@@ -1263,14 +1391,164 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_pickedVideo == null) ...[
+        // 1. TIKTOK VİDEO LİNKİ KARTI (Əsas və Tövsiyə Olunan Seçim)
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _loadedTikTokInfo != null ? Colors.green : const Color(0xFFFE2C55).withOpacity(0.5),
+              width: 1.5,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFE2C55),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.music_note, color: Colors.white, size: 14),
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'TikTok Video Linki (Tövsiyə olunur)',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ),
+                  if (_loadedTikTokInfo != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green, width: 1),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.check, color: Colors.green, size: 12),
+                          SizedBox(width: 4),
+                          Text('Seçildi', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'TikTok-dakı işinizin video linkini yapışdırın (serverdə yer tutmur və dərhal açılır):',
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _tiktokLinkController,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: 'https://www.tiktok.com/@.../video/...',
+                        hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                        isDense: true,
+                        filled: true,
+                        fillColor: const Color(0xFF1E293B),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      onSubmitted: (_) => _checkAndLoadTikTok(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFE2C55),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: _isTikTokChecking ? null : _checkAndLoadTikTok,
+                    child: _isTikTokChecking
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Text('Yoxla', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+              if (_tiktokError != null) ...[
+                const SizedBox(height: 8),
+                Text(_tiktokError!, style: const TextStyle(color: Color(0xFFF87171), fontSize: 11)),
+              ],
+              if (_loadedTikTokInfo != null) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.green.shade400, width: 1),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded, color: Colors.green, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _loadedTikTokInfo!.title ?? 'TikTok videosu hazır',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white54, size: 18),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () {
+                          setState(() {
+                            _loadedTikTokInfo = null;
+                            _tiktokLinkController.clear();
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+        Row(
+          children: const [
+            Expanded(child: Divider(color: Color(0xFFE2E8F0))),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10),
+              child: Text('və ya', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+            ),
+            Expanded(child: Divider(color: Color(0xFFE2E8F0))),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        if (_loadedTikTokInfo == null && _pickedVideo == null) ...[
           // Video seçilməyibsə böyük seçim kartı
           InkWell(
             onTap: _pickVideo,
             borderRadius: BorderRadius.circular(16),
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 28),
+              padding: const EdgeInsets.symmetric(vertical: 24),
               decoration: BoxDecoration(
                 color: const Color(0xFFF8FAFC),
                 borderRadius: BorderRadius.circular(16),
@@ -1280,29 +1558,29 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    width: 56,
-                    height: 56,
+                    width: 52,
+                    height: 52,
                     decoration: BoxDecoration(
                       color: primaryBlue.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Icon(Icons.video_library_rounded, size: 30, color: Color(0xFF1265D5)),
+                    child: const Icon(Icons.video_library_rounded, size: 28, color: Color(0xFF1265D5)),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   const Text(
                     'Qalereyadan Video Seçin',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
                   ),
                   const SizedBox(height: 4),
                   const Text(
                     'Shorts və ya portfolio üçün video faylı seçin',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                   ),
                 ],
               ),
             ),
           ),
-        ] else ...[
+        ] else if (_pickedVideo != null) ...[
           // Seçilmiş video önizləməsi (Nümunədəki kimi)
           Container(
             width: double.infinity,

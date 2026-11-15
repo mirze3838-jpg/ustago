@@ -12,6 +12,8 @@ import 'package:http/http.dart' as http;
 import '../services/video_upload_service.dart';
 import '../services/category_city_service.dart';
 import '../services/shorts_social_service.dart';
+import '../services/tiktok_service.dart';
+import '../widgets/tiktok_embed_view.dart';
 
 class ShortsScreen extends StatefulWidget {
   final int initialIndex;
@@ -75,6 +77,11 @@ class _ShortsScreenState extends State<ShortsScreen> {
 
     final url = items[index]['videoUrl']?.toString().trim() ?? '';
     if (url.isEmpty) return;
+
+    final isTikTok = items[index]['isTikTok'] == true ||
+        url.contains('tiktok.com') ||
+        (items[index]['tiktokUrl'] != null && items[index]['tiktokUrl'].toString().isNotEmpty);
+    if (isTikTok) return; // TikTok videoları daxili TikTokEmbedView ilə ifa olunur, VideoPlayerController tələb olunmur!
 
     final controller = VideoPlayerController.networkUrl(
       Uri.parse(url),
@@ -694,9 +701,28 @@ class _ShortsScreenState extends State<ShortsScreen> {
                         });
 
                         String finalVideoUrl = link;
+                        bool isTikTok = TikTokService.isTikTokUrl(link);
+                        TikTokInfo? tkInfo;
+
+                        if (isTikTok) {
+                          setModalState(() {
+                            uploadStatus = 'TikTok videosu yoxlanılır...';
+                          });
+                          tkInfo = await TikTokService.fetchTikTokInfo(link);
+                          if (tkInfo == null || !tkInfo.isValid) {
+                            if (ctx.mounted) setModalState(() => isUploading = false);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('TikTok videosu tapılmadı və ya link yanlışdır!'), backgroundColor: Colors.red),
+                              );
+                            }
+                            return;
+                          }
+                          finalVideoUrl = tkInfo.embedUrl;
+                        }
 
                         // Əgər telefonun qalereyasından video seçilibsə, pulsuz bulud bazasına yükləyirik
-                        if (pickedVideo != null) {
+                        if (pickedVideo != null && !isTikTok) {
                           try {
                             setModalState(() {
                               uploadStatus = 'Video faylı oxunur...';
@@ -772,14 +798,18 @@ class _ShortsScreenState extends State<ShortsScreen> {
                           }
 
                           final String coverBase64 = pickedCoverBytes != null ? base64Encode(pickedCoverBytes!) : '';
+                          final String finalTitle = isTikTok && (tkInfo?.title != null && tkInfo!.title!.isNotEmpty) ? tkInfo!.title! : title;
 
                           // 1. Shorts kolleksiyasına yazırıq
                           await FirebaseFirestore.instance.collection('shorts').add({
                             'userId': uid,
-                            'title': title,
+                            'title': finalTitle,
                             'videoUrl': finalVideoUrl,
+                            'isTikTok': isTikTok,
+                            'tiktokUrl': isTikTok ? link : '',
+                            'videoId': isTikTok ? (tkInfo?.videoId ?? '') : '',
+                            'thumbnailUrl': isTikTok ? (tkInfo?.thumbnailUrl ?? '') : '',
                             'thumbnailBase64': coverBase64,
-                            'thumbnailUrl': '',
                             'authorPhotoBase64': uPhoto ?? '',
                             'artisanName': authorName,
                             'trade': tradeVal,
@@ -795,13 +825,17 @@ class _ShortsScreenState extends State<ShortsScreen> {
                               'authorName': authorName,
                               'phone': authorPhone,
                               'authorRole': 'usta',
-                              'title': title,
+                              'title': finalTitle,
                               'category': tradeVal,
                               'videoUrl': finalVideoUrl,
+                              'isTikTok': isTikTok,
+                              'tiktokUrl': isTikTok ? link : '',
+                              'videoId': isTikTok ? (tkInfo?.videoId ?? '') : '',
+                              'thumbnailUrl': isTikTok ? (tkInfo?.thumbnailUrl ?? '') : '',
                               'imageBase64': coverBase64,
                               'thumbnailBase64': coverBase64,
-                              'thumbnailUrl': '',
                               'isVideo': true,
+                              'isShorts': true,
                               'createdAt': FieldValue.serverTimestamp(),
                               'likes': 0,
                             });
@@ -885,6 +919,10 @@ class _ShortsScreenState extends State<ShortsScreen> {
                     'authorPhotoBase64': data['authorPhotoBase64'],
                     'thumbnailBase64': data['thumbnailBase64'],
                     'thumbnailUrl': data['thumbnailUrl'],
+                    'isTikTok': data['isTikTok'] == true || (data['videoUrl']?.toString().contains('tiktok.com') ?? false),
+                    'tiktokUrl': data['tiktokUrl'],
+                    'videoId': data['videoId'],
+                    'embedUrl': data['embedUrl'],
                   });
                 }
               }
@@ -1100,6 +1138,25 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     _loadAuthorData();
     _attachListener(widget.controller);
     _isPlaying = widget.controller?.value.isPlaying ?? widget.isCurrent;
+
+    // Əgər TikTok videosudursa, TikTok-da silinib-silinmədiyini arxa planda yoxla
+    final bool isTikTok = widget.data['isTikTok'] == true ||
+        (widget.data['videoUrl']?.toString().contains('tiktok.com') ?? false) ||
+        (widget.data['tiktokUrl'] != null && widget.data['tiktokUrl'].toString().isNotEmpty);
+    if (isTikTok) {
+      final rawUrl = widget.data['tiktokUrl']?.toString() ?? widget.data['videoUrl']?.toString() ?? '';
+      if (rawUrl.isNotEmpty) {
+        TikTokService.isVideoStillActive(rawUrl).then((active) {
+          if (!active && mounted) {
+            final docId = widget.data['id']?.toString() ?? '';
+            if (docId.isNotEmpty) {
+              debugPrint('TikTok videosu silinib, UstaGo-dan da təmizlənir: $docId');
+              ShortsSocialService.deleteShortVideoCompletely(docId);
+            }
+          }
+        });
+      }
+    }
   }
 
   void _checkSocialStates() async {
@@ -2064,35 +2121,44 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
   Widget build(BuildContext context) {
     final c = widget.controller;
     final bool isReady = c != null && c.value.isInitialized;
+    final bool isTikTok = widget.data['isTikTok'] == true ||
+        (widget.data['videoUrl']?.toString().contains('tiktok.com') ?? false) ||
+        (widget.data['tiktokUrl'] != null && widget.data['tiktokUrl'].toString().isNotEmpty);
     final double sysBottom = MediaQuery.of(context).padding.bottom;
     final double baseBottom = widget.bottomInset + sysBottom;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: _togglePlay,
+      onTap: isTikTok ? null : _togglePlay,
       onDoubleTapDown: (details) {
         _toggleLike(forceLike: true, tapPos: details.globalPosition);
       },
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // 0. VİDEO AÇILANA QƏDƏR ARXA FONDA BAŞLIQ FOTOSU
-          if (!isReady)
-            _buildCoverImage(widget.data),
-
-          // 1. VİDEO EKRANI - Orijinal proporsiyada (heç bir dartılma, böyüdülmə və ya kəsilmə olmadan, qara boşluqlarla)
-          if (isReady)
-            Container(
-              color: Colors.black,
-              alignment: Alignment.center,
-              child: AspectRatio(
-                // ORIENTATION DÜZƏLİŞİ: Android-də kamera çəkdikləri videoların
-                // rotation metadata-sı c.value.aspectRatio-ya düzgün əks etmir.
-                // c.value.size.height > width olarsa video portrait-dir → nisbəti düzəldirik.
-                aspectRatio: _correctAspectRatio(c),
-                child: VideoPlayer(c),
+          // 0. TIKTOK VƏ YA ADİ VİDEO EKRANI
+          if (isTikTok)
+            TikTokEmbedView(
+              videoId: (widget.data['videoId'] ?? '').toString(),
+              embedUrl: widget.data['embedUrl']?.toString() ?? widget.data['videoUrl']?.toString(),
+              originalUrl: widget.data['tiktokUrl']?.toString() ?? widget.data['videoUrl']?.toString(),
+              title: widget.data['title']?.toString(),
+              authorName: widget.data['artisanName']?.toString(),
+              thumbnailUrl: widget.data['thumbnailUrl']?.toString(),
+            )
+          else ...[
+            if (!isReady)
+              _buildCoverImage(widget.data),
+            if (isReady)
+              Container(
+                color: Colors.black,
+                alignment: Alignment.center,
+                child: AspectRatio(
+                  aspectRatio: _correctAspectRatio(c),
+                  child: VideoPlayer(c),
+                ),
               ),
-            ),
+          ],
 
           // Video buferlənərkən zərif balaca fırlanan çarx (yalnız video ifa olunmursa göstərilir)
           if (isReady && c.value.isBuffering && !c.value.isPlaying)
@@ -2180,6 +2246,32 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                       Text('Səsi Aç', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                     ],
                   ),
+                ),
+              ),
+            ),
+
+          // TikTok Nişanı
+          if (isTikTok)
+            Positioned(
+              top: 50,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFFE2C55), width: 1.5),
+                  boxShadow: [
+                    BoxShadow(color: const Color(0xFFFE2C55).withOpacity(0.4), blurRadius: 8),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.music_note, color: Color(0xFFFE2C55), size: 13),
+                    SizedBox(width: 5),
+                    Text('TikTok', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                  ],
                 ),
               ),
             ),

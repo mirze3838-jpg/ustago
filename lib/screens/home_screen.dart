@@ -25,6 +25,8 @@ import 'market_screen.dart';
 import 'artisan_detail_screen.dart';
 import 'category_artisans_screen.dart';
 import '../widgets/add_post_bottom_sheet.dart';
+import '../services/tiktok_service.dart';
+import '../widgets/tiktok_embed_view.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialTabIndex;
@@ -6636,6 +6638,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   final data = doc.data();
                   final videoUrl = (data['videoUrl'] ?? '').toString();
                   final coverBase64 = data['thumbnailBase64']?.toString();
+                  final isTikTok = data['isTikTok'] == true || videoUrl.contains('tiktok.com');
 
                   return InkWell(
                     onTap: () async {
@@ -6712,6 +6715,27 @@ class _HomeScreenState extends State<HomeScreen> {
                             const Center(
                               child: Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 32),
                             ),
+                            if (isTikTok)
+                              Positioned(
+                                top: 6,
+                                left: 6,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.8),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: const Color(0xFFFE2C55), width: 1),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.music_note, color: Color(0xFFFE2C55), size: 10),
+                                      SizedBox(width: 3),
+                                      Text('TikTok', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             Positioned(
                               bottom: 6,
                               left: 6,
@@ -7183,6 +7207,17 @@ class FullScreenVideoViewerState extends State<FullScreenVideoViewer> {
       return;
     }
 
+    final isTikTok = url.contains('tiktok.com') || url.contains('player/v1/');
+    if (isTikTok) {
+      if (mounted) {
+        setState(() {
+          _isInit = true;
+          _hasError = false;
+        });
+      }
+      return;
+    }
+
     try {
       final uri = Uri.parse(url);
       final controller = VideoPlayerController.networkUrl(uri);
@@ -7317,6 +7352,36 @@ class FullScreenVideoViewerState extends State<FullScreenVideoViewer> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isTikTok = widget.videoUrl.contains('tiktok.com') || widget.videoUrl.contains('player/v1/');
+    if (isTikTok) {
+      final videoId = TikTokService.extractVideoId(widget.videoUrl) ?? '';
+      return Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 16)),
+          actions: [
+            if (widget.isOwner && widget.postId.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                onPressed: _deletePostAndShorts,
+              ),
+          ],
+        ),
+        body: TikTokEmbedView(
+          videoId: videoId,
+          embedUrl: widget.videoUrl,
+          originalUrl: widget.videoUrl,
+          title: widget.title,
+        ),
+      );
+    }
+
     final c = _controller;
     return Scaffold(
       backgroundColor: Colors.black,
