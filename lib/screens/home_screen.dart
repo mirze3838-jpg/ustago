@@ -4153,6 +4153,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final nameController = TextEditingController(text: userData?['fullName'] ?? '');
     final phoneController = TextEditingController(text: userData?['phone'] ?? '');
     final bioController = TextEditingController(text: userData?['bio'] ?? '');
+    final tiktokController = TextEditingController(text: userData?['tiktokHandle'] ?? '');
+    final instagramController = TextEditingController(text: userData?['instagramHandle'] ?? '');
+    final websiteController = TextEditingController(text: userData?['websiteUrl'] ?? userData?['website'] ?? '');
     String selectedRole = userData?['role'] ?? 'usta';
     String selectedUstaCategory = userData?['category'] ?? 'Tikinti';
     bool isWorkingStatus = userData?['isWorking'] == true;
@@ -4329,6 +4332,95 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ],
+
+                const SizedBox(height: 14),
+
+                // Sosial Şəbəkələr və Linklər (Maksimum 3 link: TikTok, Instagram, Veb-sayt)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(Icons.link_rounded, color: Color(0xFF1769D2), size: 18),
+                          SizedBox(width: 6),
+                          Text(
+                            'Sosial Linklər (Maksimum 3 ədəd)',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Linki silmək üçün xananı boşaldın və ya (❌) işarəsinə vurun.',
+                        style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // 1. TikTok
+                      TextField(
+                        controller: tiktokController,
+                        decoration: InputDecoration(
+                          labelText: '1. TikTok Hesabı',
+                          hintText: '@istifadəçi_adı və ya link',
+                          prefixIcon: const Icon(Icons.music_note_rounded, color: Color(0xFFFE2C55), size: 18),
+                          suffixIcon: tiktokController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear_rounded, size: 16),
+                                  onPressed: () => setDialogState(() => tiktokController.clear()),
+                                )
+                              : null,
+                          isDense: true,
+                        ),
+                        onChanged: (_) => setDialogState(() {}),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // 2. Instagram
+                      TextField(
+                        controller: instagramController,
+                        decoration: InputDecoration(
+                          labelText: '2. Instagram Hesabı',
+                          hintText: '@istifadəçi_adı və ya link',
+                          prefixIcon: const Icon(Icons.camera_alt_rounded, color: Color(0xFFE1306C), size: 18),
+                          suffixIcon: instagramController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear_rounded, size: 16),
+                                  onPressed: () => setDialogState(() => instagramController.clear()),
+                                )
+                              : null,
+                          isDense: true,
+                        ),
+                        onChanged: (_) => setDialogState(() {}),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // 3. Veb-sayt / Digər link
+                      TextField(
+                        controller: websiteController,
+                        decoration: InputDecoration(
+                          labelText: '3. Veb-sayt və ya Digər link',
+                          hintText: 'sayt.az, youtube, facebook...',
+                          prefixIcon: const Icon(Icons.language_rounded, color: Color(0xFF1769D2), size: 18),
+                          suffixIcon: websiteController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear_rounded, size: 16),
+                                  onPressed: () => setDialogState(() => websiteController.clear()),
+                                )
+                              : null,
+                          isDense: true,
+                        ),
+                        onChanged: (_) => setDialogState(() {}),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -4363,6 +4455,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ? selectedUstaCategory
                     : (selectedRole == 'worker' ? 'Fəhlə (Köməkçi işlər)' : '');
 
+                final cleanedTikTok = _cleanTikTokHandle(tiktokController.text.trim());
+                final cleanedInsta = _cleanInstagramHandle(instagramController.text.trim());
+                final rawWeb = websiteController.text.trim();
+
                 final currentConsent = userData?['locationSharingConsent'] == true;
                 final bool shareCoords = currentConsent;
 
@@ -4374,6 +4470,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   'city': fullCity,
                   'isWorking': (selectedRole == 'usta' || selectedRole == 'worker') ? isWorkingStatus : false,
                   'bio': selectedRole == 'usta' ? bioController.text.trim() : (userData?['bio'] ?? ''),
+                  'tiktokHandle': cleanedTikTok,
+                  'tiktokConnected': cleanedTikTok.isNotEmpty,
+                  'instagramHandle': cleanedInsta,
+                  'websiteUrl': rawWeb,
                   if (shareCoords) 'lat': coords[0],
                   if (shareCoords) 'lng': coords[1],
                   if (shareCoords) 'latitude': coords[0],
@@ -5389,6 +5489,22 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                   ),
 
+                  // 1.1 Sosial Şəbəkələr və Linklər (TikTok, Instagram, Sayt)
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFFCE7F3), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.link_rounded, color: Color(0xFFDB2777), size: 20),
+                    ),
+                    title: const Text('Sosial Şəbəkələr və Linklər', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('TikTok, Instagram və veb-sayt linklərini idarə et / sil', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showManageSocialLinksDialog(uid, userData);
+                    },
+                  ),
+
                   // 2. Məkan və Konum Seçimi
                   ListTile(
                     leading: Container(
@@ -5811,6 +5927,172 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {}
   }
 
+  /// Instagram istifadəçi adını təmizləyən köməkçi
+  static String _cleanInstagramHandle(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return '';
+    var s = raw.trim();
+    if (s.contains('?')) s = s.split('?').first;
+    s = s.replaceAll(RegExp(r'/+$'), '');
+    if (s.contains('instagram.com/')) {
+      s = s.split('instagram.com/').last;
+    }
+    return s.replaceAll('@', '').trim();
+  }
+
+  /// Xarici veb linkləri açmaq
+  Future<void> _openExternalLink(String rawUrl) async {
+    var url = rawUrl.trim();
+    if (url.isEmpty) return;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://$url';
+    }
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {}
+  }
+
+  /// Instagram Profilinə keçid
+  Future<void> _openInstagramProfile(String handle) async {
+    final clean = _cleanInstagramHandle(handle);
+    if (clean.isEmpty) return;
+    _openExternalLink('https://www.instagram.com/$clean');
+  }
+
+  /// Sosial linkləri (TikTok, Instagram, Veb-sayt) tənzimləmək və ya silmək dialoqu
+  void _showManageSocialLinksDialog(String uid, Map<String, dynamic>? userData) {
+    final tiktokCtrl = TextEditingController(text: userData?['tiktokHandle'] ?? '');
+    final instagramCtrl = TextEditingController(text: userData?['instagramHandle'] ?? '');
+    final websiteCtrl = TextEditingController(text: userData?['websiteUrl'] ?? userData?['website'] ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: const [
+              Icon(Icons.link_rounded, color: Color(0xFF1769D2)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Sosial Linkləri İdarə Et',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Profilinizdə göstərmək üçün 3 link əlavə edə bilərsiniz. Linki silmək üçün xananı təmizləyin və ya (❌) işarəsinə basın.',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.35),
+                ),
+                const SizedBox(height: 14),
+
+                // 1. TikTok
+                TextField(
+                  controller: tiktokCtrl,
+                  decoration: InputDecoration(
+                    labelText: '1. TikTok',
+                    hintText: '@istifadəçi_adı və ya link',
+                    prefixIcon: const Icon(Icons.music_note_rounded, color: Color(0xFFFE2C55), size: 20),
+                    suffixIcon: tiktokCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            onPressed: () => setDlgState(() => tiktokCtrl.clear()),
+                          )
+                        : null,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onChanged: (_) => setDlgState(() {}),
+                ),
+                const SizedBox(height: 12),
+
+                // 2. Instagram
+                TextField(
+                  controller: instagramCtrl,
+                  decoration: InputDecoration(
+                    labelText: '2. Instagram',
+                    hintText: '@istifadəçi_adı və ya link',
+                    prefixIcon: const Icon(Icons.camera_alt_rounded, color: Color(0xFFE1306C), size: 20),
+                    suffixIcon: instagramCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            onPressed: () => setDlgState(() => instagramCtrl.clear()),
+                          )
+                        : null,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onChanged: (_) => setDlgState(() {}),
+                ),
+                const SizedBox(height: 12),
+
+                // 3. Veb-sayt / Digər link
+                TextField(
+                  controller: websiteCtrl,
+                  decoration: InputDecoration(
+                    labelText: '3. Veb-sayt və ya Digər link',
+                    hintText: 'sayt.az, youtube, facebook...',
+                    prefixIcon: const Icon(Icons.language_rounded, color: Color(0xFF1769D2), size: 20),
+                    suffixIcon: websiteCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            onPressed: () => setDlgState(() => websiteCtrl.clear()),
+                          )
+                        : null,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onChanged: (_) => setDlgState(() {}),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Bağla'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1769D2),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () async {
+                final cleanedTikTok = _cleanTikTokHandle(tiktokCtrl.text.trim());
+                final cleanedInsta = _cleanInstagramHandle(instagramCtrl.text.trim());
+                final rawWeb = websiteCtrl.text.trim();
+
+                await FirebaseFirestore.instance.collection('users').doc(uid).set({
+                  'tiktokHandle': cleanedTikTok,
+                  'tiktokConnected': cleanedTikTok.isNotEmpty,
+                  'instagramHandle': cleanedInsta,
+                  'websiteUrl': rawWeb,
+                }, SetOptions(merge: true));
+
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Sosial linklər uğurla yeniləndi!'),
+                      backgroundColor: Color(0xFF10B981),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Yadda Saxla', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Əlaqə modal pəncərəsi (Zəng et / WhatsApp)
   void _showContactModal(BuildContext context, String phone) {
     showModalBottomSheet(
@@ -6011,6 +6293,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final String rawTikTok = (userData?['tiktokHandle'] as String?)?.trim() ?? '';
     final String cleanTikTok = _cleanTikTokHandle(rawTikTok);
     final bool tiktokConnected = userData?['tiktokConnected'] == true;
+    final String rawInsta = (userData?['instagramHandle'] as String?)?.trim() ?? '';
+    final String cleanInstagram = _cleanInstagramHandle(rawInsta);
+    final String websiteUrl = (userData?['websiteUrl'] as String?)?.trim() ?? (userData?['website'] as String?)?.trim() ?? '';
     final bool isWorking = userData?['isWorking'] == true;
 
     return Container(
@@ -6289,36 +6574,107 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 4),
 
-                      // TikTok Linki
-                      InkWell(
-                        onTap: () {
+                      // Sosial Şəbəkə və Linklər (Maksimum 3 ədəd: TikTok, Instagram, Veb-sayt)
+                      Builder(
+                        builder: (context) {
+                          final List<Map<String, dynamic>> activeLinks = [];
                           if (cleanTikTok.isNotEmpty) {
-                            _openTikTokProfile(cleanTikTok);
-                          } else {
-                            _showTikTokSyncDialog(context);
+                            activeLinks.add({
+                              'label': 'tiktok.com/@$cleanTikTok',
+                              'icon': Icons.music_note_rounded,
+                              'color': const Color(0xFFFE2C55),
+                              'onTap': () => _openTikTokProfile(cleanTikTok),
+                            });
                           }
-                        },
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.link_rounded, size: 16, color: Color(0xFF1769D2)),
-                            const SizedBox(width: 4),
-                            Text(
-                              cleanTikTok.isNotEmpty
-                                  ? 'tiktok.com/@$cleanTikTok'
-                                  : 'TikTok hesabını bağla',
-                              style: const TextStyle(
-                                color: Color(0xFF1769D2),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
+                          if (cleanInstagram.isNotEmpty) {
+                            activeLinks.add({
+                              'label': 'instagram.com/$cleanInstagram',
+                              'icon': Icons.camera_alt_rounded,
+                              'color': const Color(0xFFE1306C),
+                              'onTap': () => _openInstagramProfile(cleanInstagram),
+                            });
+                          }
+                          if (websiteUrl.isNotEmpty) {
+                            final cleanWeb = websiteUrl.replaceAll('https://', '').replaceAll('http://', '');
+                            activeLinks.add({
+                              'label': cleanWeb,
+                              'icon': Icons.language_rounded,
+                              'color': const Color(0xFF1769D2),
+                              'onTap': () => _openExternalLink(websiteUrl),
+                            });
+                          }
+
+                          if (activeLinks.isEmpty) {
+                            return InkWell(
+                              onTap: () => _showManageSocialLinksDialog(user.uid, userData),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.add_link_rounded, size: 16, color: Color(0xFF1769D2)),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      '+ Sosial link əlavə et (TikTok, Instagram, Sayt)',
+                                      style: TextStyle(
+                                        color: Color(0xFF1769D2),
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            if (tiktokConnected) ...[
-                              const SizedBox(width: 4),
-                              const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF22C55E)),
+                            );
+                          }
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (final lk in activeLinks)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 3),
+                                  child: InkWell(
+                                    onTap: lk['onTap'] as VoidCallback,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(lk['icon'] as IconData, size: 14, color: lk['color'] as Color),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          lk['label'] as String,
+                                          style: TextStyle(
+                                            color: lk['color'] as Color,
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        const Icon(Icons.arrow_outward_rounded, size: 11, color: Color(0xFF94A3B8)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              InkWell(
+                                onTap: () => _showManageSocialLinksDialog(user.uid, userData),
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 2, bottom: 2),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: const [
+                                      Icon(Icons.edit_outlined, size: 12, color: Color(0xFF64748B)),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Linkləri dəyiş / sil',
+                                        style: TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ],
-                          ],
-                        ),
+                          );
+                        },
                       ),
 
                       // Xidmət Teqləri (Chips)
