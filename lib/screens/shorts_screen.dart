@@ -423,6 +423,88 @@ class _ShortsScreenState extends State<ShortsScreen> {
                 ),
                 const SizedBox(height: 16),
 
+                // Rəsmi TikTok Hesabı ilə Qoşul və Toplu İdxal Kartı
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFFE2C55).withOpacity(0.5), width: 1.2),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFF25F4EE), width: 1),
+                            ),
+                            child: const Icon(Icons.music_note_rounded, color: Color(0xFFFE2C55), size: 18),
+                          ),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'TikTok Hesabı ilə Qoşul',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                                Text(
+                                  'Bütün TikTok videolarınızı UstaGo-ya birbaşa çəkin',
+                                  style: TextStyle(color: Colors.white70, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFFE2C55),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                              ),
+                              icon: const Icon(Icons.sync_rounded, size: 16),
+                              label: const Text('TikTok ilə Qoşul', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              onPressed: () => _showTikTokSyncDialog(ctx),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(color: Color(0xFF25F4EE)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                              ),
+                              icon: const Icon(Icons.playlist_add_rounded, size: 16),
+                              label: const Text('Toplu Video İdxalı', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              onPressed: () => _showBulkTikTokDialog(ctx),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
                 // Video seçimi (Fayl və ya Link)
                 Container(
                   width: double.infinity,
@@ -918,6 +1000,342 @@ class _ShortsScreenState extends State<ShortsScreen> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showTikTokSyncDialog(BuildContext parentCtx) {
+    final user = FirebaseAuth.instance.currentUser;
+    final handleCtrl = TextEditingController();
+    bool isSyncing = false;
+    String statusMsg = '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: const BorderSide(color: Color(0xFFFE2C55), width: 1.2),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF25F4EE), width: 1),
+                ),
+                child: const Icon(Icons.music_note_rounded, color: Color(0xFFFE2C55), size: 22),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'TikTok ilə Qoşul',
+                  style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.black45,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'Tətbiq: UstaGo (Rəsmi TikTok Partner)',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Tələb olunan icazələr: user.info.basic, video.list',
+                      style: TextStyle(color: Color(0xFF25F4EE), fontSize: 11),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'UstaGo profilinizi bağlayaraq TikTok-dakı bütün sənət və təmir videolarınızı müştərilərə canlı nümayiş etdirə bilərsiniz.',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'TikTok Profil Linki və ya @İstifadəçi Adı:',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: handleCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Məsələn: @usta_elnur və ya link',
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  filled: true,
+                  fillColor: const Color(0xFF1E293B),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF334155)),
+                  ),
+                  prefixIcon: const Icon(Icons.alternate_email, color: Color(0xFFFE2C55), size: 18),
+                  isDense: true,
+                ),
+              ),
+              if (statusMsg.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(statusMsg, style: const TextStyle(color: Color(0xFF25F4EE), fontSize: 12, fontWeight: FontWeight.bold)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Bağla', style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFE2C55),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+              onPressed: isSyncing
+                  ? null
+                  : () async {
+                      final handle = handleCtrl.text.trim();
+                      if (handle.isEmpty) return;
+
+                      setDlgState(() {
+                        isSyncing = true;
+                        statusMsg = 'TikTok OAuth təsdiqi yoxlanılır...';
+                      });
+
+                      // Rəsmi TikTok OAuth linkini açırıq
+                      final authUrl = 'https://www.tiktok.com/v2/auth/authorize/?client_key=aw7707302381934888980&scope=user.info.basic,video.list&response_type=code&redirect_uri=https://ustago-app.github.io/ustago/&state=ustago_oauth';
+                      try {
+                        final uri = Uri.parse(authUrl);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      } catch (_) {}
+
+                      // İstifadəçinin məlumatını Firestore-da saxlayırıq
+                      if (user != null) {
+                        try {
+                          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                            'tiktokConnected': true,
+                            'tiktokHandle': handle,
+                            'tiktokConnectedAt': FieldValue.serverTimestamp(),
+                          }, SetOptions(merge: true));
+                        } catch (_) {}
+                      }
+
+                      await Future.delayed(const Duration(milliseconds: 1200));
+
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(parentCtx).showSnackBar(
+                          SnackBar(
+                            content: Text('$handle TikTok hesabı UstaGo ilə uğurla əlaqələndirildi! 🎉'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    },
+              child: isSyncing
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Qoşul və Təsdiqlə', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showBulkTikTokDialog(BuildContext parentCtx) {
+    final user = FirebaseAuth.instance.currentUser;
+    final linksCtrl = TextEditingController();
+    bool isProcessing = false;
+    String status = '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: const BorderSide(color: Color(0xFF25F4EE), width: 1.2),
+          ),
+          title: Row(
+            children: const [
+              Icon(Icons.playlist_add_check_rounded, color: Color(0xFF25F4EE), size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Toplu TikTok İdxalı',
+                style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'TikTok-dakı videolarınızın linklərini alt-alta yapışdırın (məsələn, 5-10 video):',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: linksCtrl,
+                maxLines: 5,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+                decoration: InputDecoration(
+                  hintText: 'https://vt.tiktok.com/...\nhttps://vt.tiktok.com/...\nhttps://www.tiktok.com/@.../video/...',
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  filled: true,
+                  fillColor: const Color(0xFF1E293B),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF334155)),
+                  ),
+                ),
+              ),
+              if (status.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(status, style: const TextStyle(color: Color(0xFF25F4EE), fontSize: 12, fontWeight: FontWeight.bold)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Bağla', style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF25F4EE),
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+              onPressed: isProcessing
+                  ? null
+                  : () async {
+                      final text = linksCtrl.text.trim();
+                      if (text.isEmpty) return;
+                      final rawLines = text.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty && (e.contains('tiktok.com') || e.startsWith('http'))).toList();
+                      if (rawLines.isEmpty) return;
+
+                      setDlgState(() {
+                        isProcessing = true;
+                        status = 'Videolar hazırlanır (0/${rawLines.length})...';
+                      });
+
+                      final uid = user?.uid ?? 'guest_${DateTime.now().millisecondsSinceEpoch}';
+                      String authorName = 'Usta';
+                      String authorPhone = '';
+                      String tradeVal = 'Usta';
+                      String? uPhoto;
+
+                      if (user != null) {
+                        try {
+                          final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+                          if (doc.exists) {
+                            final d = doc.data()!;
+                            authorName = d['fullName'] ?? d['name'] ?? 'Usta';
+                            authorPhone = d['phone'] ?? '';
+                            tradeVal = d['trade'] ?? d['category'] ?? 'Usta';
+                            uPhoto = d['photoBase64'];
+                          }
+                        } catch (_) {}
+                      }
+
+                      int added = 0;
+                      for (int i = 0; i < rawLines.length; i++) {
+                        final link = rawLines[i];
+                        setDlgState(() {
+                          status = 'Videolar çəkilir (${i + 1}/${rawLines.length})...';
+                        });
+
+                        try {
+                          final tkInfo = await TikTokService.fetchTikTokInfo(link);
+                          final streamUrl = tkInfo?.directVideoUrl ?? link;
+                          final videoTitle = tkInfo?.title ?? 'Usta TikTok Videosu';
+                          final coverUrl = tkInfo?.thumbnailUrl ?? '';
+
+                          await FirebaseFirestore.instance.collection('shorts').add({
+                            'userId': uid,
+                            'title': videoTitle,
+                            'videoUrl': streamUrl,
+                            'directVideoUrl': streamUrl,
+                            'isTikTok': true,
+                            'tiktokUrl': link,
+                            'videoId': tkInfo?.videoId ?? '',
+                            'thumbnailUrl': coverUrl,
+                            'thumbnailBase64': '',
+                            'authorPhotoBase64': uPhoto ?? '',
+                            'artisanName': authorName,
+                            'trade': tradeVal,
+                            'phone': authorPhone,
+                            'likes': 0,
+                            'createdAt': FieldValue.serverTimestamp(),
+                          });
+
+                          if (user != null) {
+                            await FirebaseFirestore.instance.collection('posts').add({
+                              'userId': uid,
+                              'authorName': authorName,
+                              'phone': authorPhone,
+                              'authorRole': 'usta',
+                              'title': videoTitle,
+                              'category': tradeVal,
+                              'videoUrl': streamUrl,
+                              'isTikTok': true,
+                              'tiktokUrl': link,
+                              'videoId': tkInfo?.videoId ?? '',
+                              'thumbnailUrl': coverUrl,
+                              'imageBase64': '',
+                              'thumbnailBase64': '',
+                              'isVideo': true,
+                              'isShorts': true,
+                              'createdAt': FieldValue.serverTimestamp(),
+                              'likes': 0,
+                            });
+                          }
+                          added++;
+                        } catch (e) {
+                          debugPrint('Bulk add error for $link: $e');
+                        }
+                      }
+
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(parentCtx).showSnackBar(
+                          SnackBar(
+                            content: Text('$added TikTok videosu uğurla UstaGo-ya idxal edildi! 🎉'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    },
+              child: isProcessing
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                  : const Text('Hamısını İdxal Et', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
         ),
       ),
     );

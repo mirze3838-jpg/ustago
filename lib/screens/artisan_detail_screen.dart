@@ -509,6 +509,35 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                     ),
                   ],
                 ),
+                if ((widget.artisanData['tiktokHandle'] != null && widget.artisanData['tiktokHandle'].toString().isNotEmpty) ||
+                    (widget.artisanData['tiktokUrl'] != null && widget.artisanData['tiktokUrl'].toString().isNotEmpty))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          final tUrl = widget.artisanData['tiktokUrl'] ??
+                              'https://www.tiktok.com/${widget.artisanData['tiktokHandle'] ?? ''}';
+                          try {
+                            launchUrl(Uri.parse(tUrl.toString()), mode: LaunchMode.externalApplication);
+                          } catch (_) {}
+                        },
+                        icon: const Icon(Icons.music_note, color: Color(0xFFFE2C55), size: 18),
+                        label: Text(
+                          widget.artisanData['tiktokHandle'] != null
+                              ? 'TikTok: ${widget.artisanData['tiktokHandle']}'
+                              : 'TikTok Profilinə Bax',
+                          style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFFFE2C55), width: 1.2),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
