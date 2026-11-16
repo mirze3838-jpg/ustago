@@ -6106,6 +6106,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final String rawTikTok = (userData?['tiktokHandle'] as String?)?.trim() ?? '';
     final String cleanTikTok = _cleanTikTokHandle(rawTikTok);
     final bool tiktokConnected = userData?['tiktokConnected'] == true;
+    final bool isWorking = userData?['isWorking'] == true;
 
     return Container(
       color: Colors.white,
