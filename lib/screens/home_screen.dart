@@ -5719,6 +5719,977 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// İnstaqram Sağ Yuxarı 3 Nöqtə (⋮) menyusu — Bütün ayarlar və idarəetmə funksiyaları
+  void _showProfileOptionsMenu(String uid, Map<String, dynamic>? userData, bool isAdmin, String userRole) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setMenuState) {
+          final bool isWorking = userData?['isWorking'] == true;
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Sürükləmə xətti (Handle)
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+
+                  // Başlıq
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    child: Row(
+                      children: const [
+                        Icon(Icons.settings_suggest_rounded, color: Color(0xFF1769D2), size: 22),
+                        SizedBox(width: 8),
+                        Text(
+                          'Profil Parametrləri və İdarəetmə',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Divider(height: 1),
+
+                  // 1. Profili Redaktə Et
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.edit_outlined, color: Color(0xFF1769D2), size: 20),
+                    ),
+                    title: const Text('Profili Redaktə Et', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('Ad, soyad, əlaqə nömrəsi, peşə və bio məlumatları', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showEditProfileDialog(uid, userData);
+                    },
+                  ),
+
+                  // 1.1 Sosial Şəbəkələr və Linklər (TikTok, Instagram, Sayt)
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFFCE7F3), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.link_rounded, color: Color(0xFFDB2777), size: 20),
+                    ),
+                    title: const Text('Sosial Şəbəkələr və Linklər', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('TikTok, Instagram və veb-sayt linklərini idarə et / sil', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showManageSocialLinksDialog(uid, userData);
+                    },
+                  ),
+
+                  // 1.2 Profili Paylaş (WhatsApp, Telegram, Sistem Paylaşımı)
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.share_rounded, color: Color(0xFF1769D2), size: 20),
+                    ),
+                    title: const Text('Profili Paylaş', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('WhatsApp, Telegram və digər tətbiqlərdə birbaşa paylaş', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      final name = (userData?['fullName'] ?? 'UstaGo Ustası').toString();
+                      final phone = (userData?['phone'] ?? '').toString();
+                      final category = (userData?['category'] ?? userData?['trade'] ?? '').toString();
+                      _shareUserProfile(name, phone, category);
+                    },
+                  ),
+
+                  // 2. Məkan və Konum Seçimi
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.location_on_outlined, color: Color(0xFFD97706), size: 20),
+                    ),
+                    title: const Text('Məkan və Konum', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('Xəritədə xidmət göstərdiyiniz ərazini təyin edin', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showLocationPickerModal(uid, userData);
+                    },
+                  ),
+
+                  // 3. Aktivlik Statusu (Online / Məşğulam Switch)
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isWorking ? const Color(0xFFFEE2E2) : const Color(0xFFDCFCE7),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        isWorking ? Icons.do_not_disturb_on_rounded : Icons.check_circle_rounded,
+                        color: isWorking ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      isWorking ? 'Status: Hal-hazırda məşğulam' : 'Status: Online (Sərbəstəm)',
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                    ),
+                    subtitle: Text(
+                      isWorking ? 'Müştərilər profilinizdə məşğul olduğunuzu görəcək' : 'Yeni sifarişləri qəbul etməyə hazırsınız',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    trailing: Switch(
+                      value: !isWorking,
+                      activeColor: const Color(0xFF16A34A),
+                      onChanged: (val) async {
+                        final newStatus = !val;
+                        await FirebaseFirestore.instance.collection('users').doc(uid).set({
+                          'isWorking': newStatus,
+                        }, SetOptions(merge: true));
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(newStatus
+                                  ? 'Status "Hal-hazırda məşğulam" olaraq dəyişdirildi!'
+                                  : 'Status "Online (Sərbəstəm)" olaraq dəyişdirildi!'),
+                              backgroundColor: newStatus ? Colors.orange : Colors.green,
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ),
+
+                  // 4. Profil Növü (Rol Dəyiş: Usta, Müştəri, Satıcı)
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFF3E8FF), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.swap_horiz_rounded, color: Color(0xFF9333EA), size: 20),
+                    ),
+                    title: const Text('Profil Növü (Rol)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: Text('Hazırda: ${userRole == 'usta' ? 'Usta' : (userRole == 'seller' ? 'Satıcı' : 'Müştəri')}', style: const TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showRoleSwitcherModal(uid, userRole);
+                    },
+                  ),
+
+                  // 5. Bildirişlər
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.notifications_none_rounded, color: Color(0xFF1769D2), size: 20),
+                    ),
+                    title: const Text('Bildirişlər', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('Sistem və sifariş bildirişləri', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showNotificationsSheet();
+                    },
+                  ),
+
+                  // 6. Mağazamı İdarə Et
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFF5F3FF), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.storefront_rounded, color: Color(0xFF8B5CF6), size: 20),
+                    ),
+                    title: const Text('Mağazamı İdarə Et', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('Mağazanızı açın, məhsullarınızı vitrinə qoyun və idarə edin', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showUserStoreModal(context, uid, userData?['fullName'] ?? '', isOwner: true, userPhone: userData?['phone']?.toString(), userAddress: userData?['city']?.toString());
+                    },
+                  ),
+
+                  // 6.1 Elanlarımı İdarə Et
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFFFF7ED), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.campaign_rounded, color: Color(0xFFEA580C), size: 20),
+                    ),
+                    title: const Text('Elanlarımı İdarə Et', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('Fərdi alış-satış elanlarınızı yerləşdirin, redaktə edin və ya silin', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showUserListingsModal(context, uid, userData?['fullName'] ?? '', isOwner: true, userPhone: userData?['phone']?.toString(), userAddress: userData?['city']?.toString());
+                    },
+                  ),
+
+                  // 7. Kömək və Dəstək
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.headset_mic_outlined, color: Color(0xFF64748B), size: 20),
+                    ),
+                    title: const Text('Kömək və Dəstək', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('Texniki dəstək və qaynar xətt', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showHelpSupportSheet();
+                    },
+                  ),
+
+                  const Divider(height: 1),
+
+                  // 8. Hesabdan Çıxış
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFFFF1F2), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.logout_rounded, color: Color(0xFFEF4444), size: 20),
+                    ),
+                    title: const Text('Hesabdan Çıxış', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFFEF4444))),
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (dCtx) => AlertDialog(
+                          title: const Text('Çıxış təsdiqi'),
+                          content: const Text('Hesabınızdan çıxmaq istədiyinizə əminsiniz?'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Xeyr')),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
+                              onPressed: () => Navigator.pop(dCtx, true),
+                              child: const Text('Bəli, çıx', style: TextStyle(color: Colors.white)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        await _authService.signOut();
+                        if (mounted) {
+                          setState(() => _currentUserRole = null);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Hesabdan çıxış edildi.')),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Məkan / Konum seçimi modal pəncərəsi
+  void _showLocationPickerModal(String uid, Map<String, dynamic>? userData) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+              ),
+              _buildLocationPrivacyCard(uid, userData),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Rol Dəyişmə modal pəncərəsi
+  void _showRoleSwitcherModal(String uid, String currentRole) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+              ),
+              _buildFourRoleSwitcherCard(uid, currentRole),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// TikTok Hesabı ilə Qoşulma dialoqu
+  void _showTikTokSyncDialog(BuildContext parentCtx) {
+    final user = FirebaseAuth.instance.currentUser;
+    final handleCtrl = TextEditingController();
+    bool isSyncing = false;
+    String statusMsg = '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: const BorderSide(color: Color(0xFFFE2C55), width: 1.2),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF25F4EE), width: 1),
+                ),
+                child: const Icon(Icons.music_note_rounded, color: Color(0xFFFE2C55), size: 22),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'TikTok ilə Qoşul',
+                  style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.black45,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'Tətbiq: UstaGo (Rəsmi TikTok Partner)',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Tələb olunan icazələr: user.info.basic, video.list',
+                      style: TextStyle(color: Color(0xFF25F4EE), fontSize: 11),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'UstaGo profilinizi bağlayaraq TikTok-dakı bütün sənət və təmir videolarınızı müştərilərə canlı nümayiş etdirə bilərsiniz.',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'TikTok Profil Linki və ya @İstifadəçi Adı:',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: handleCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: '@usta_eli və ya tiktok.com/@usta_eli',
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  prefixIcon: const Icon(Icons.alternate_email, color: Color(0xFFFE2C55), size: 18),
+                  filled: true,
+                  fillColor: const Color(0xFF1E293B),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF334155)),
+                  ),
+                ),
+              ),
+              if (statusMsg.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  statusMsg,
+                  style: const TextStyle(color: Color(0xFF25F4EE), fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Bağla', style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFE2C55),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+              onPressed: isSyncing
+                  ? null
+                  : () async {
+                      final handle = handleCtrl.text.trim();
+                      if (handle.isEmpty) return;
+
+                      setDlgState(() {
+                        isSyncing = true;
+                        statusMsg = 'TikTok OAuth təsdiqi yoxlanılır...';
+                      });
+
+                      // Rəsmi TikTok OAuth linkini açırıq
+                      final authUrl =
+                          'https://www.tiktok.com/v2/auth/authorize/?client_key=aw7707302381934888980&scope=user.info.basic,video.list&response_type=code&redirect_uri=https://ustago-app.github.io/ustago/&state=ustago_oauth';
+                      try {
+                        final uri = Uri.parse(authUrl);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      } catch (_) {}
+
+                      // İstifadəçinin məlumatını Firestore-da saxlayırıq
+                      if (user != null) {
+                        try {
+                          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                            'tiktokConnected': true,
+                            'tiktokHandle': _cleanTikTokHandle(handle),
+                            'tiktokConnectedAt': FieldValue.serverTimestamp(),
+                          }, SetOptions(merge: true));
+                        } catch (_) {}
+                      }
+
+                      await Future.delayed(const Duration(milliseconds: 1200));
+
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(parentCtx).showSnackBar(
+                          SnackBar(
+                            content: Text('${_cleanTikTokHandle(handle)} TikTok hesabı UstaGo ilə uğurla əlaqələndirildi! 🎉'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    },
+              child: isSyncing
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Qoşul və Təsdiqlə', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// TikTok istifadəçi adını təmizləyən köməkçi (linkləri və artıq işarələri silir)
+  static String _cleanTikTokHandle(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return '';
+    var s = raw.trim();
+    if (s.contains('?')) s = s.split('?').first;
+    s = s.replaceAll(RegExp(r'/+$'), '');
+    if (s.contains('/@')) {
+      s = s.split('/@').last;
+    } else if (s.contains('tiktok.com/')) {
+      s = s.split('tiktok.com/').last;
+    }
+    return s.replaceAll('@', '').trim();
+  }
+
+  /// TikTok Profilinə keçid
+  Future<void> _openTikTokProfile(String handle) async {
+    final cleanHandle = _cleanTikTokHandle(handle);
+    final url = 'https://www.tiktok.com/@$cleanHandle';
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {}
+  }
+
+  /// Instagram istifadəçi adını təmizləyən köməkçi
+  static String _cleanInstagramHandle(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return '';
+    var s = raw.trim();
+    if (s.contains('?')) s = s.split('?').first;
+    s = s.replaceAll(RegExp(r'/+$'), '');
+    if (s.contains('instagram.com/')) {
+      s = s.split('instagram.com/').last;
+    }
+    return s.replaceAll('@', '').trim();
+  }
+
+  /// Xarici veb linkləri açmaq
+  Future<void> _openExternalLink(String rawUrl) async {
+    var url = rawUrl.trim();
+    if (url.isEmpty) return;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://$url';
+    }
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {}
+  }
+
+  /// Instagram Profilinə keçid
+  Future<void> _openInstagramProfile(String handle) async {
+    final clean = _cleanInstagramHandle(handle);
+    if (clean.isEmpty) return;
+    _openExternalLink('https://www.instagram.com/$clean');
+  }
+
+  /// Profili Paylaşmaq (WhatsApp, Telegram, Sistem Paylaşımı)
+  Future<void> _shareUserProfile(String displayName, String? phone, String? category) async {
+    final buffer = StringBuffer();
+    buffer.writeln('🛠️ UstaGo Peşəkar Usta Profili: $displayName');
+    if (category != null && category.trim().isNotEmpty) {
+      buffer.writeln('📋 Xidmət Sahəsi: $category');
+    }
+    if (phone != null && phone.trim().isNotEmpty) {
+      buffer.writeln('📞 Əlaqə: $phone');
+    }
+    buffer.writeln('🌐 Platforma: https://ustago-app.github.io/ustago/');
+    buffer.writeln('Peşəkar ustaları UstaGo-da dərhal tapın və əlaqə saxlayın!');
+
+    final text = buffer.toString();
+    try {
+      await Share.share(
+        text,
+        subject: 'UstaGo Profil: $displayName',
+      );
+    } catch (_) {
+      Clipboard.setData(ClipboardData(text: text));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profil məlumatları kopyalandı!'), backgroundColor: Color(0xFF1769D2)),
+        );
+      }
+    }
+  }
+
+  /// Sosial linkləri (TikTok, Instagram, Veb-sayt) tənzimləmək və ya silmək dialoqu
+  void _showManageSocialLinksDialog(String uid, Map<String, dynamic>? userData) {
+    final tiktokCtrl = TextEditingController(text: userData?['tiktokHandle'] ?? '');
+    final instagramCtrl = TextEditingController(text: userData?['instagramHandle'] ?? '');
+    final websiteCtrl = TextEditingController(text: userData?['websiteUrl'] ?? userData?['website'] ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: const [
+              Icon(Icons.link_rounded, color: Color(0xFF1769D2)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Sosial Linkləri İdarə Et',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Profilinizdə göstərmək üçün 3 link əlavə edə bilərsiniz. Linki silmək üçün xananı təmizləyin və ya (❌) işarəsinə basın.',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.35),
+                ),
+                const SizedBox(height: 14),
+
+                // 1. TikTok
+                TextField(
+                  controller: tiktokCtrl,
+                  decoration: InputDecoration(
+                    labelText: '1. TikTok',
+                    hintText: '@istifadəçi_adı və ya link',
+                    prefixIcon: const Icon(Icons.music_note_rounded, color: Color(0xFFFE2C55), size: 20),
+                    suffixIcon: tiktokCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            onPressed: () => setDlgState(() => tiktokCtrl.clear()),
+                          )
+                        : null,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onChanged: (_) => setDlgState(() {}),
+                ),
+                const SizedBox(height: 12),
+
+                // 2. Instagram
+                TextField(
+                  controller: instagramCtrl,
+                  decoration: InputDecoration(
+                    labelText: '2. Instagram',
+                    hintText: '@istifadəçi_adı və ya link',
+                    prefixIcon: const Icon(Icons.camera_alt_rounded, color: Color(0xFFE1306C), size: 20),
+                    suffixIcon: instagramCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            onPressed: () => setDlgState(() => instagramCtrl.clear()),
+                          )
+                        : null,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onChanged: (_) => setDlgState(() {}),
+                ),
+                const SizedBox(height: 12),
+
+                // 3. Veb-sayt / Digər link
+                TextField(
+                  controller: websiteCtrl,
+                  decoration: InputDecoration(
+                    labelText: '3. Veb-sayt və ya Digər link',
+                    hintText: 'sayt.az, youtube, facebook...',
+                    prefixIcon: const Icon(Icons.language_rounded, color: Color(0xFF1769D2), size: 20),
+                    suffixIcon: websiteCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            onPressed: () => setDlgState(() => websiteCtrl.clear()),
+                          )
+                        : null,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onChanged: (_) => setDlgState(() {}),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Bağla'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1769D2),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () async {
+                final cleanedTikTok = _cleanTikTokHandle(tiktokCtrl.text.trim());
+                final cleanedInsta = _cleanInstagramHandle(instagramCtrl.text.trim());
+                final rawWeb = websiteCtrl.text.trim();
+
+                await FirebaseFirestore.instance.collection('users').doc(uid).set({
+                  'tiktokHandle': cleanedTikTok,
+                  'tiktokConnected': cleanedTikTok.isNotEmpty,
+                  'instagramHandle': cleanedInsta,
+                  'websiteUrl': rawWeb,
+                }, SetOptions(merge: true));
+
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Sosial linklər uğurla yeniləndi!'),
+                      backgroundColor: Color(0xFF10B981),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Yadda Saxla', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Əlaqə modal pəncərəsi (Zəng et / WhatsApp)
+  void _showContactModal(BuildContext context, String phone) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                phone.isNotEmpty ? phone : 'Nömrə qeyd olunmayıb',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1769D2),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.phone_rounded),
+                      label: const Text('Zəng Et', style: TextStyle(fontWeight: FontWeight.bold)),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _makeCall(phone);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF22C55E),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.chat_bubble_rounded),
+                      label: const Text('WhatsApp', style: TextStyle(fontWeight: FontWeight.bold)),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _openWhatsApp(phone);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Xidmətlər modal pəncərəsi (Ustanın seçdiyi bütün ixtisaslar)
+  void _showServicesModal(BuildContext context, String category, Map<String, dynamic>? userData) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.handyman_rounded, color: Color(0xFF1769D2), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Xidmət Sahələri və İxtisaslar',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Ustanın təklif etdiyi peşəkar fəaliyyət sahələri',
+                          style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _buildServiceChips(category, userData),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: const BorderSide(color: Color(0xFF1769D2), width: 1.2),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Icon(Icons.edit_rounded, size: 16, color: Color(0xFF1769D2)),
+                  label: const Text(
+                    'İxtisasları Dəyişdir (Maksimum 4)',
+                    style: TextStyle(color: Color(0xFF1769D2), fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    final user = FirebaseAuth.instance.currentUser;
+                    if (user != null) {
+                      _showEditProfileDialog(user.uid, userData);
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// UstaGo brendinə uyğun Statistika Sütunu (İşlərim, Video İşlər, Reytinq)
+  Widget _buildUstaStatItem({
+    required String count,
+    required String label,
+    IconData? icon,
+    Color? iconColor,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 15, color: iconColor ?? const Color(0xFF1769D2)),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              count,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Color(0xFF64748B),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Dairəvi Bölmələr (UstaGo Highlights / Xidmətlər, Əlaqə, Məkan, TikTok)
+  Widget _buildHighlightCircle({
+    required IconData icon,
+    required Color iconColor,
+    required Color bgColor,
+    Color? borderColor,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    final ringColor = borderColor ?? iconColor.withOpacity(0.4);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(40),
+      child: Container(
+        width: 76,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(2.5),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: ringColor, width: 1.8),
+              ),
+              child: Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: iconColor, size: 22),
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 11,
+                color: Color(0xFF334155),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Yeni İnstaqram Stilində Premium Usta Profil Səhifəsi (İstifadəçinin tələbinə tam uyğun)
   Widget _buildModernUstaProfile(
     User user,
