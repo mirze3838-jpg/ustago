@@ -12,6 +12,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import '../services/auth_service.dart';
 import '../services/video_upload_service.dart';
@@ -5505,6 +5506,25 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                   ),
 
+                  // 1.2 Profili Paylaş (WhatsApp, Telegram, Sistem Paylaşımı)
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.share_rounded, color: Color(0xFF1769D2), size: 20),
+                    ),
+                    title: const Text('Profili Paylaş', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('WhatsApp, Telegram və digər tətbiqlərdə birbaşa paylaş', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      final name = (userData?['fullName'] ?? 'UstaGo Ustası').toString();
+                      final phone = (userData?['phone'] ?? '').toString();
+                      final category = (userData?['category'] ?? userData?['trade'] ?? '').toString();
+                      _shareUserProfile(name, phone, category);
+                    },
+                  ),
+
                   // 2. Məkan və Konum Seçimi
                   ListTile(
                     leading: Container(
@@ -5959,6 +5979,35 @@ class _HomeScreenState extends State<HomeScreen> {
     final clean = _cleanInstagramHandle(handle);
     if (clean.isEmpty) return;
     _openExternalLink('https://www.instagram.com/$clean');
+  }
+
+  /// Profili Paylaşmaq (WhatsApp, Telegram, Sistem Paylaşımı)
+  Future<void> _shareUserProfile(String displayName, String? phone, String? category) async {
+    final buffer = StringBuffer();
+    buffer.writeln('🛠️ UstaGo Peşəkar Usta Profili: $displayName');
+    if (category != null && category.trim().isNotEmpty) {
+      buffer.writeln('📋 Xidmət Sahəsi: $category');
+    }
+    if (phone != null && phone.trim().isNotEmpty) {
+      buffer.writeln('📞 Əlaqə: $phone');
+    }
+    buffer.writeln('🌐 Platforma: https://ustago-app.github.io/ustago/');
+    buffer.writeln('Peşəkar ustaları UstaGo-da dərhal tapın və əlaqə saxlayın!');
+
+    final text = buffer.toString();
+    try {
+      await Share.share(
+        text,
+        subject: 'UstaGo Profil: $displayName',
+      );
+    } catch (_) {
+      Clipboard.setData(ClipboardData(text: text));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profil məlumatları kopyalandı!'), backgroundColor: Color(0xFF1769D2)),
+        );
+      }
+    }
   }
 
   /// Sosial linkləri (TikTok, Instagram, Veb-sayt) tənzimləmək və ya silmək dialoqu
@@ -6676,94 +6725,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         },
                       ),
-
-                      // Xidmət Teqləri (Chips)
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: _buildServiceChips(category, userData),
-                      ),
                     ],
                   ),
                 ),
 
-                // Fəaliyyət Düymələri (UstaGo Quick Action Buttons)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  child: Row(
-                    children: [
-                      // 1. Profili Redaktə Et
-                      Expanded(
-                        child: SizedBox(
-                          height: 38,
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFEFF6FF),
-                              foregroundColor: const Color(0xFF1769D2),
-                              elevation: 0,
-                              side: const BorderSide(color: Color(0xFFBFDBFE), width: 1.2),
-                              padding: EdgeInsets.zero,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            icon: const Icon(Icons.edit_note_rounded, size: 18, color: Color(0xFF1769D2)),
-                            label: const Text('Profili Redaktə', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
-                            onPressed: () => _showEditProfileDialog(user.uid, userData),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-
-                      // 2. TikTok ilə Qoşul
-                      Expanded(
-                        child: SizedBox(
-                          height: 38,
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0F172A),
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            icon: const Icon(Icons.music_note_rounded, color: Color(0xFFFE2C55), size: 16),
-                            label: Text(
-                              tiktokConnected && cleanTikTok.isNotEmpty ? 'TikTok: @$cleanTikTok' : 'TikTok İlə Qoşul',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                            onPressed: () => _showTikTokSyncDialog(context),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-
-                      // 3. Paylaş
-                      SizedBox(
-                        height: 38,
-                        width: 42,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFF8FAFC),
-                            foregroundColor: const Color(0xFF334155),
-                            elevation: 0,
-                            side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
-                            padding: EdgeInsets.zero,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          onPressed: () {
-                            Clipboard.setData(ClipboardData(text: 'UstaGo Profil: $displayName ($phone)'));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('$displayName profil linki kopyalandı!'), backgroundColor: const Color(0xFF1769D2)),
-                            );
-                          },
-                          child: const Icon(Icons.share_rounded, size: 18, color: Color(0xFF475569)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                const SizedBox(height: 10),
 
                 // Dairəvi Hekayələr (UstaGo Highlights / Önə Çıxarılanlar)
                 SizedBox(
