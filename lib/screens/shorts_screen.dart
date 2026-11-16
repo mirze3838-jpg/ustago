@@ -505,226 +505,31 @@ class _ShortsScreenState extends State<ShortsScreen> {
                   ),
                 ),
 
-                // Video seçimi (Fayl və ya Link)
+                // Tək TikTok Video Linki
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: Colors.blue.shade100),
                   ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (pickedVideo != null) ...[
-                        Row(
-                          children: [
-                            const Icon(Icons.check_circle, color: Colors.green, size: 22),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Video seçildi: ${pickedVideo!.name}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                              onPressed: () {
-                                setModalState(() {
-                                  pickedVideo = null;
-                                  pickedVideoBytes = null;
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                      ] else ...[
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1769D2),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          icon: const Icon(Icons.video_file_outlined),
-                          label: const Text('Qalereyadan Video Seç'),
-                          onPressed: () async {
-                            try {
-                              // KRİTİK: Qalereya açılmadan BÜTÜN video controller-ları dispose edirik.
-                              // Sadəcə pause etmək kifayət deyil — video decoder-lar + GPU teksturaları
-                              // RAM-da qalır (100-300MB). Android LMK bu yükü görüb Flutter prosesini
-                              // kill edir → istifadəçiyə "tətbiq bağlandı" kimi görünür.
-                              await _disposeAllControllers();
-                              try {
-                                PaintingBinding.instance.imageCache.clear();
-                                PaintingBinding.instance.imageCache.clearLiveImages();
-                              } catch (_) {}
-                              await Future.delayed(const Duration(milliseconds: 180));
-
-                              final picker = ImagePicker();
-                              XFile? video;
-                              try {
-                                video = await picker.pickVideo(
-                                  source: ImageSource.gallery,
-                                );
-                              } catch (e) {
-                                debugPrint('pickVideo xətası: $e');
-                                // Qalereya bağlandıqdan sonra cari videonu yenidən başladırıq
-                                _reactivateAfterGallery();
-                                if (ctx.mounted) {
-                                  setModalState(() {});
-                                }
-                                return;
-                              }
-
-                              // Qalereya bağlandı — cari videonu yenidən aktivləşdir
-                              _reactivateAfterGallery();
-
-                              if (video == null) {
-                                // İstifadəçi seçim etmədi — normal hal
-                                return;
-                              }
-
-                              // Fayl ölçüsünü yoxlayırıq (content:// URI üçün try-catch)
-                              int length = 0;
-                              try {
-                                length = await video.length();
-                              } catch (e) {
-                                debugPrint('video.length() xətası (content URI?): $e');
-                                // Ölçü oxuna bilmirsə, birbaşa qəbul edirik — upload zamanı yoxlanacaq
-                              }
-
-                              if (length > 150 * 1024 * 1024) {
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Video həcmi 150MB-dan çox olmamalıdır!')),
-                                  );
-                                }
-                                return;
-                              }
-
-                              // ctx.mounted yoxlaması — dialog bağlanıbsa setModalState çağırılmır
-                              if (ctx.mounted) {
-                                setModalState(() {
-                                  pickedVideo = video;
-                                  pickedVideoBytes = null;
-                                });
-                              }
-                            } catch (e) {
-                              debugPrint('Video pick error: $e');
-                              _reactivateAfterGallery();
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Qalereyadan seçim zamanı xəta: $e')),
-                                );
-                              }
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 8),
-                        const Text('və ya', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: linkController,
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            hintText: 'Video linki daxil edin (MP4, YouTube və s.)',
-                            prefixIcon: Icon(Icons.link, size: 20),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Videonun Üz Qabığı Şəkli (Thumbnail / Başlıq fotosu)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 46,
-                        height: 46,
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: pickedCoverBytes != null
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.memory(pickedCoverBytes!, fit: BoxFit.cover),
-                              )
-                            : const Icon(Icons.video_library_rounded, color: Color(0xFF1769D2)),
+                      const Text(
+                        'və ya Tək TikTok Video Linki ilə əlavə et:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A)),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text(
-                                  pickedCoverBytes != null ? 'Xüsusi şəkil seçildi' : 'Başlıq Şəkli (Kover)',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                ),
-                                const SizedBox(width: 6),
-                                if (pickedCoverBytes == null)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade50,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Text('Videonun öz kadrı', style: TextStyle(color: Color(0xFF1769D2), fontSize: 10, fontWeight: FontWeight.bold)),
-                                  ),
-                              ],
-                            ),
-                            Text(
-                              pickedCoverBytes != null
-                                  ? pickedCover!.name
-                                  : 'Videonun öz daxilindən avtomatik kadr çıxarılır',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Colors.grey, fontSize: 11),
-                            ),
-                          ],
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: linkController,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          hintText: 'https://www.tiktok.com/@.../video/...',
+                          prefixIcon: Icon(Icons.link, size: 20, color: Color(0xFFFE2C55)),
+                          border: OutlineInputBorder(),
                         ),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          try {
-                            // Şəkil seçimi üçün controller-ları dispose etmək lazım deyil
-                            // (şəkil picker çox az RAM istifadə edir), sadəcə pause edirik
-                            for (var c in _controllers.values.toList()) {
-                              try { c.pause(); } catch (_) {}
-                            }
-                            final picker = ImagePicker();
-                            final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
-                            if (img != null) {
-                              final rawBytes = await img.readAsBytes();
-                              // Firestore 1MB limit üçün şəkli sıxışdırırıq
-                              final compressed = await _compressCoverImage(rawBytes);
-                              if (ctx.mounted) {
-                                setModalState(() {
-                                  pickedCover = img;
-                                  pickedCoverBytes = compressed;
-                                });
-                              }
-                            }
-                          } catch (e) {
-                            debugPrint('Cover pick error: $e');
-                          }
-                        },
-                        child: Text(pickedCoverBytes != null ? 'Dəyiş' : 'Seç'),
                       ),
                     ],
                   ),
@@ -819,9 +624,9 @@ class _ShortsScreenState extends State<ShortsScreen> {
                           return;
                         }
 
-                        if (pickedVideo == null && link.isEmpty) {
+                        if (link.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Zəhmət olmasa video seçin və ya link daxil edin!')),
+                            const SnackBar(content: Text('Zəhmət olmasa TikTok video linki daxil edin və ya yuxarıdakı TikTok ilə Qoşul düyməsindən istifadə edin!')),
                           );
                           return;
                         }

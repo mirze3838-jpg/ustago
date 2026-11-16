@@ -4056,9 +4056,7 @@ class _HomeScreenState extends State<HomeScreen> {
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 3,
-                crossAxisSpacing: 6,
-                mainAxisSpacing: 6,
-                childAspectRatio: 1.0,
+                crossAxisSpacing: 2, mainAxisSpacing: 2, childAspectRatio: 1.0,
               ),
               itemCount: docs.length,
               itemBuilder: (context, index) {
@@ -5417,7 +5415,666 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Yeni Premium Usta Profil Səhifəsi (Təqdim olunmuş dizayn şəklinə 1:1 uyğun)
+  /// İnstaqram Sağ Yuxarı 3 Nöqtə (⋮) menyusu — Bütün ayarlar və idarəetmə funksiyaları
+  void _showProfileOptionsMenu(String uid, Map<String, dynamic>? userData, bool isAdmin, String userRole) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setMenuState) {
+          final bool isWorking = userData?['isWorking'] == true;
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Sürükləmə xətti (Handle)
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+
+                  // Başlıq
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    child: Row(
+                      children: const [
+                        Icon(Icons.settings_suggest_rounded, color: Color(0xFF1769D2), size: 22),
+                        SizedBox(width: 8),
+                        Text(
+                          'Profil Parametrləri və İdarəetmə',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Divider(height: 1),
+
+                  // 1. Profili Redaktə Et
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.edit_outlined, color: Color(0xFF1769D2), size: 20),
+                    ),
+                    title: const Text('Profili Redaktə Et', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('Ad, soyad, əlaqə nömrəsi, peşə və bio məlumatları', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showEditProfileDialog(uid, userData);
+                    },
+                  ),
+
+                  // 2. Məkan və Konum Seçimi
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.location_on_outlined, color: Color(0xFFD97706), size: 20),
+                    ),
+                    title: const Text('Məkan və Konum', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('Xəritədə xidmət göstərdiyiniz ərazini təyin edin', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showLocationPickerModal(uid, userData);
+                    },
+                  ),
+
+                  // 3. Aktivlik Statusu (Online / Məşğulam Switch)
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isWorking ? const Color(0xFFFEE2E2) : const Color(0xFFDCFCE7),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        isWorking ? Icons.do_not_disturb_on_rounded : Icons.check_circle_rounded,
+                        color: isWorking ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      isWorking ? 'Status: Hal-hazırda məşğulam' : 'Status: Online (Sərbəstəm)',
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                    ),
+                    subtitle: Text(
+                      isWorking ? 'Müştərilər profilinizdə məşğul olduğunuzu görəcək' : 'Yeni sifarişləri qəbul etməyə hazırsınız',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    trailing: Switch(
+                      value: !isWorking,
+                      activeColor: const Color(0xFF16A34A),
+                      onChanged: (val) async {
+                        final newStatus = !val;
+                        await FirebaseFirestore.instance.collection('users').doc(uid).set({
+                          'isWorking': newStatus,
+                        }, SetOptions(merge: true));
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(newStatus
+                                  ? 'Status "Hal-hazırda məşğulam" olaraq dəyişdirildi!'
+                                  : 'Status "Online (Sərbəstəm)" olaraq dəyişdirildi!'),
+                              backgroundColor: newStatus ? Colors.orange : Colors.green,
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ),
+
+                  // 4. Profil Növü (Rol Dəyiş: Usta, Müştəri, Satıcı)
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFF3E8FF), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.swap_horiz_rounded, color: Color(0xFF9333EA), size: 20),
+                    ),
+                    title: const Text('Profil Növü (Rol)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: Text('Hazırda: ${userRole == 'usta' ? 'Usta' : (userRole == 'seller' ? 'Satıcı' : 'Müştəri')}', style: const TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showRoleSwitcherModal(uid, userRole);
+                    },
+                  ),
+
+                  // 5. Bildirişlər
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.notifications_none_rounded, color: Color(0xFF1769D2), size: 20),
+                    ),
+                    title: const Text('Bildirişlər', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('Sistem və sifariş bildirişləri', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showNotificationsSheet();
+                    },
+                  ),
+
+                  // 6. Mağazam / Elanlarım
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFCCFBF1), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.storefront_outlined, color: Color(0xFF0D9488), size: 20),
+                    ),
+                    title: const Text('Mağazam / Elanlarım', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('Alış-satış bölməsindəki elanlarınız', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      setState(() {
+                        _currentIndex = 2;
+                        _openMyListingsSignal++;
+                      });
+                    },
+                  ),
+
+                  // Admin Paneli (yalnız adminlər üçün)
+                  if (isAdmin || (userData?['role'] == 'admin'))
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(10)),
+                        child: const Icon(Icons.security, color: Colors.amber, size: 20),
+                      ),
+                      title: const Text('Admin İdarəetmə Paneli', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                      subtitle: const Text('Ustaları təsdiqlə və sistemi idarə et', style: TextStyle(fontSize: 12)),
+                      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.amber),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminScreen()));
+                      },
+                    ),
+
+                  // 7. Kömək və Dəstək
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.headset_mic_outlined, color: Color(0xFF64748B), size: 20),
+                    ),
+                    title: const Text('Kömək və Dəstək', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('Texniki dəstək və qaynar xətt', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showHelpSupportSheet();
+                    },
+                  ),
+
+                  const Divider(height: 1),
+
+                  // 8. Hesabdan Çıxış
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFFFF1F2), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.logout_rounded, color: Color(0xFFEF4444), size: 20),
+                    ),
+                    title: const Text('Hesabdan Çıxış', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFFEF4444))),
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (dCtx) => AlertDialog(
+                          title: const Text('Çıxış təsdiqi'),
+                          content: const Text('Hesabınızdan çıxmaq istədiyinizə əminsiniz?'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Xeyr')),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
+                              onPressed: () => Navigator.pop(dCtx, true),
+                              child: const Text('Bəli, çıx', style: TextStyle(color: Colors.white)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        await _authService.signOut();
+                        if (mounted) {
+                          setState(() => _currentUserRole = null);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Hesabdan çıxış edildi.')),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Məkan / Konum seçimi modal pəncərəsi
+  void _showLocationPickerModal(String uid, Map<String, dynamic>? userData) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+              ),
+              _buildLocationPrivacyCard(uid, userData),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Rol Dəyişmə modal pəncərəsi
+  void _showRoleSwitcherModal(String uid, String currentRole) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+              ),
+              _buildFourRoleSwitcherCard(uid, currentRole),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// TikTok Hesabı ilə Qoşulma dialoqu
+  void _showTikTokSyncDialog(BuildContext parentCtx) {
+    final user = FirebaseAuth.instance.currentUser;
+    final handleCtrl = TextEditingController();
+    bool isSyncing = false;
+    String statusMsg = '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: const BorderSide(color: Color(0xFFFE2C55), width: 1.2),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF25F4EE), width: 1),
+                ),
+                child: const Icon(Icons.music_note_rounded, color: Color(0xFFFE2C55), size: 22),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'TikTok ilə Qoşul',
+                  style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.black45,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'Tətbiq: UstaGo (Rəsmi TikTok Partner)',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Tələb olunan icazələr: user.info.basic, video.list',
+                      style: TextStyle(color: Color(0xFF25F4EE), fontSize: 11),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'UstaGo profilinizi bağlayaraq TikTok-dakı bütün sənət və təmir videolarınızı müştərilərə canlı nümayiş etdirə bilərsiniz.',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'TikTok Profil Linki və ya @İstifadəçi Adı:',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: handleCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: '@usta_eli və ya tiktok.com/@usta_eli',
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  prefixIcon: const Icon(Icons.alternate_email, color: Color(0xFFFE2C55), size: 18),
+                  filled: true,
+                  fillColor: const Color(0xFF1E293B),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF334155)),
+                  ),
+                ),
+              ),
+              if (statusMsg.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  statusMsg,
+                  style: const TextStyle(color: Color(0xFF25F4EE), fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Bağla', style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFE2C55),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+              onPressed: isSyncing
+                  ? null
+                  : () async {
+                      final handle = handleCtrl.text.trim();
+                      if (handle.isEmpty) return;
+
+                      setDlgState(() {
+                        isSyncing = true;
+                        statusMsg = 'TikTok OAuth təsdiqi yoxlanılır...';
+                      });
+
+                      // Rəsmi TikTok OAuth linkini açırıq
+                      final authUrl =
+                          'https://www.tiktok.com/v2/auth/authorize/?client_key=aw7707302381934888980&scope=user.info.basic,video.list&response_type=code&redirect_uri=https://ustago-app.github.io/ustago/&state=ustago_oauth';
+                      try {
+                        final uri = Uri.parse(authUrl);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      } catch (_) {}
+
+                      // İstifadəçinin məlumatını Firestore-da saxlayırıq
+                      if (user != null) {
+                        try {
+                          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                            'tiktokConnected': true,
+                            'tiktokHandle': handle,
+                            'tiktokConnectedAt': FieldValue.serverTimestamp(),
+                          }, SetOptions(merge: true));
+                        } catch (_) {}
+                      }
+
+                      await Future.delayed(const Duration(milliseconds: 1200));
+
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(parentCtx).showSnackBar(
+                          SnackBar(
+                            content: Text('$handle TikTok hesabı UstaGo ilə uğurla əlaqələndirildi! 🎉'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    },
+              child: isSyncing
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Qoşul və Təsdiqlə', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// TikTok Profilinə keçid
+  Future<void> _openTikTokProfile(String handle) async {
+    final cleanHandle = handle.replaceAll('@', '').trim();
+    final url = 'https://www.tiktok.com/@$cleanHandle';
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {}
+  }
+
+  /// Əlaqə modal pəncərəsi (Zəng et / WhatsApp)
+  void _showContactModal(BuildContext context, String phone) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                phone.isNotEmpty ? phone : 'Nömrə qeyd olunmayıb',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1769D2),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.phone_rounded),
+                      label: const Text('Zəng Et', style: TextStyle(fontWeight: FontWeight.bold)),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _makeCall(phone);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF22C55E),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.chat_bubble_rounded),
+                      label: const Text('WhatsApp', style: TextStyle(fontWeight: FontWeight.bold)),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _openWhatsApp(phone);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Xidmətlər modal pəncərəsi
+  void _showServicesModal(BuildContext context, String category, Map<String, dynamic>? userData) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Xidmət Sahələri və Bacarıqlar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _buildServiceChips(category, userData),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// İnstaqram stilində Statistika Sütunu (12 | göndəri)
+  Widget _buildInstagramStatItem(String count, String label) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          count,
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF0F172A),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            color: Color(0xFF475569),
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Dairəvi Hekayələr (Instagram Highlights / Önə Çıxarılanlar)
+  Widget _buildHighlightCircle({
+    required IconData icon,
+    required Color iconColor,
+    required Color bgColor,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(40),
+      child: Container(
+        width: 74,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(2.5),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
+              ),
+              child: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: iconColor, size: 24),
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 11,
+                color: Color(0xFF334155),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Yeni İnstaqram Stilində Premium Usta Profil Səhifəsi (İstifadəçinin tələbinə tam uyğun)
   Widget _buildModernUstaProfile(
     User user,
     Map<String, dynamic>? userData,
@@ -5428,816 +6085,463 @@ class _HomeScreenState extends State<HomeScreen> {
   ) {
     final String phone = (userData?['phone'] ?? user.phoneNumber ?? '').toString().trim();
     final String category = (userData?['category'] ?? userData?['trade'] ?? 'Tikinti və Təmir').toString();
-    final String rating = (userData?['rating'] != null) ? userData!['rating'].toString() : 'Yeni';
-    final String reviewCount = (userData?['reviewCount'] != null) ? userData!['reviewCount'].toString() : '0';
-    final bool isWorking = userData?['isWorking'] == true;
+    final String rating = (userData?['rating'] != null) ? userData!['rating'].toString() : '5.0';
     final String bio = (userData?['bio'] != null && (userData!['bio'] as String).trim().isNotEmpty)
         ? userData!['bio'] as String
         : 'Keyfiyyətli və peşəkar təmir xidməti. Təcrübə: 10+ il. Hər növ tikinti və təmir işləri.';
-    final String? coverBase64 = userData?['coverBase64'] as String?;
-    final String? coverUrl = userData?['coverUrl'] as String?;
+    final String? tiktokHandle = (userData?['tiktokHandle'] as String?)?.trim();
+    final bool tiktokConnected = userData?['tiktokConnected'] == true;
 
     return Container(
-      color: const Color(0xFFF8FAFC),
-      child: ListView(
-        padding: EdgeInsets.zero,
+      color: Colors.white,
+      child: Column(
         children: [
-          // 1. Profilin Yuxarı Hissəsi: Geniş Cover Şəkli + Dalğalı Keçid + Ortada Dairəvi Avatar
-          SizedBox(
-            height: 255,
-            child: Stack(
-              clipBehavior: Clip.none,
+          // 1. Üst Başlıq (Instagram Top Bar: @istifadəçi_adı + Təsdiq Nişanı + Sağda 3 Nöqtə)
+          SafeArea(
+            bottom: false,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9), width: 0.8)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Sol: Geri qayıtmaq və ya Kilid/Brend
+                  if (Navigator.canPop(context))
+                    InkWell(
+                      onTap: () => Navigator.pop(context),
+                      child: const Padding(
+                        padding: EdgeInsets.all(4),
+                        child: Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Color(0xFF0F172A)),
+                      ),
+                    )
+                  else
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.lock_outline_rounded, size: 16, color: Color(0xFF0F172A)),
+                        SizedBox(width: 4),
+                      ],
+                    ),
+
+                  // Orta: @istifadəçi_adı (Instagram stili)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        (tiktokHandle != null && tiktokHandle.isNotEmpty)
+                            ? (tiktokHandle.startsWith('@') ? tiktokHandle : '@$tiktokHandle')
+                            : '@${displayName.toLowerCase().replaceAll(' ', '_')}',
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A),
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.verified, color: Color(0xFF1769D2), size: 17),
+                    ],
+                  ),
+
+                  // Sağ: Bütün ayarlar və idarəetmə üçün 3 Nöqtə (⋮)
+                  IconButton(
+                    icon: const Icon(Icons.more_vert_rounded, color: Color(0xFF0F172A), size: 24),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Parametrlər və İdarəetmə',
+                    onPressed: () => _showProfileOptionsMenu(user.uid, userData, isAdmin, userRole),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // 2. Əsas Profil Məzmunu (Instagram stili axıcı siyahı)
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
               children: [
-                // Dalğalı Örtük Şəkli (Cover Photo with Curved Wave Bottom)
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: 205,
-                  child: ClipPath(
-                    clipper: _CoverWaveClipper(),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Builder(
-                          builder: (context) {
-                            final cBytes = _decodeB64(coverBase64);
-                            if (cBytes != null) {
-                              return Image.memory(cBytes, fit: BoxFit.cover, gaplessPlayback: true);
-                            }
-                            if (coverUrl != null && coverUrl.isNotEmpty) {
-                              return Image.network(coverUrl, fit: BoxFit.cover);
-                            }
-                            // Dizayn şəklinə uyğun müasir tikinti və villa örtük şəkli
-                            return Image.network(
-                              'https://images.unsplash.com/photo-1541888946425-d0fbb18f15f7?q=80&w=1200&auto=format&fit=crop',
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                decoration: const BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [Color(0xFF1E3A8A), Color(0xFF1769D2)],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                ),
-                                child: const Center(
-                                  child: Icon(Icons.home_repair_service_rounded, size: 64, color: Colors.white24),
-                                ),
+                const SizedBox(height: 8),
+
+                // Yuxarı Sətir: Dairəvi Avatar (Instagram Ring) + 3 Göstərici Sütunu
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      // Avatar (Instagram gradient halqası ilə)
+                      Stack(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(2.8),
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: [
+                                  Color(0xFFFBAA47),
+                                  Color(0xFFD91A46),
+                                  Color(0xFFA60F93),
+                                ],
+                                begin: Alignment.bottomLeft,
+                                end: Alignment.topRight,
                               ),
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                              child: CircleAvatar(
+                                radius: 40,
+                                backgroundColor: const Color(0xFFEFF6FF),
+                                backgroundImage: avatarImage,
+                                child: avatarImage == null
+                                    ? const Icon(Icons.person, size: 42, color: Color(0xFF1769D2))
+                                    : null,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 2,
+                            right: 2,
+                            child: InkWell(
+                              onTap: () => _showPhotoPicker(user.uid),
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1769D2),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2),
+                                ),
+                                child: const Icon(Icons.add, color: Colors.white, size: 14),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 16),
+
+                      // 3 Göstərici: Göndəri (İşlər) • Video (TikTok) • Reytinq
+                      Expanded(
+                        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                          stream: FirebaseFirestore.instance
+                              .collection('posts')
+                              .where('userId', isEqualTo: user.uid)
+                              .snapshots(),
+                          builder: (context, postSnap) {
+                            final postCount = postSnap.data?.docs.where((d) => d.data()['isVideo'] != true).length ?? 0;
+                            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                              stream: FirebaseFirestore.instance
+                                  .collection('shorts')
+                                  .where('userId', isEqualTo: user.uid)
+                                  .snapshots(),
+                              builder: (context, shortSnap) {
+                                final shortCount = shortSnap.data?.docs.length ?? 0;
+                                return Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                  children: [
+                                    _buildInstagramStatItem('$postCount', 'göndəri'),
+                                    _buildInstagramStatItem('$shortCount', 'video'),
+                                    _buildInstagramStatItem(rating.startsWith('★') ? rating : '★ $rating', 'reytinq'),
+                                  ],
+                                );
+                              },
                             );
                           },
                         ),
-                        // Şəkil üzərində zərif qaralma örtüyü (düymələrin aydın görünməsi üçün)
-                        Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.black.withOpacity(0.4),
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Yuxarı Düymələr: Geri Qayıt (<), Paylaş və Ətraflı (...)
-                Positioned(
-                  top: MediaQuery.of(context).padding.top + 8,
-                  left: 16,
-                  right: 16,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Geri düyməsi
-                      InkWell(
-                        onTap: () {
-                          if (Navigator.canPop(context)) {
-                            Navigator.pop(context);
-                          } else {
-                            setState(() => _currentIndex = 0);
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(24),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.35),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
-                        ),
-                      ),
-                      // Sağ düymələr: Paylaş və Ətraflı Seçimlər
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          InkWell(
-                            onTap: () {
-                              Clipboard.setData(ClipboardData(text: phone));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('$displayName profil məlumatları kopyalandı!'),
-                                  backgroundColor: const Color(0xFF1769D2),
-                                ),
-                              );
-                            },
-                            borderRadius: BorderRadius.circular(24),
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.35),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.share_outlined, color: Colors.white, size: 18),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          InkWell(
-                            onTap: () => _showEditProfileDialog(user.uid, userData),
-                            borderRadius: BorderRadius.circular(24),
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.35),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.more_horiz_rounded, color: Colors.white, size: 20),
-                            ),
-                          ),
-                        ],
                       ),
                     ],
                   ),
                 ),
 
-                // Ortada Dairəvi Profil Fotosu (Ağ haşiyəli və Təsdiqlənmiş Mavi Nişanlı)
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 4),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.12),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: InkWell(
-                            onTap: () => _showPhotoPicker(user.uid),
-                            borderRadius: BorderRadius.circular(54),
-                            child: CircleAvatar(
-                              radius: 50,
-                              backgroundColor: const Color(0xFF1769D2).withOpacity(0.12),
-                              backgroundImage: avatarImage,
-                              child: avatarImage == null
-                                  ? const Icon(Icons.person, size: 52, color: Color(0xFF1769D2))
-                                  : null,
-                            ),
-                          ),
-                        ),
-                        // Avatarın sağ aşağı küncündə mavi təsdiq nişanı
-                        Positioned(
-                          bottom: 2,
-                          right: 2,
-                          child: Container(
-                            padding: const EdgeInsets.all(3.5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1769D2),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2.5),
-                            ),
-                            child: const Icon(Icons.check, color: Colors.white, size: 13),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
-          // 2. Ustanın Adı və Mavi Təsdiq Nişanı
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Text(
-                  displayName,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
-                    letterSpacing: -0.3,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 6),
-              const Icon(Icons.verified, color: Color(0xFF1769D2), size: 20),
-            ],
-          ),
-          const SizedBox(height: 3),
-
-          // Peşə və Fəaliyyət Sahəsi
-          Center(
-            child: Text(
-              'Usta • $category',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF475569),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Reytinq və Təsdiqlənmiş Usta Göstəricisi
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 20),
-              const SizedBox(width: 4),
-              Text(
-                rating,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: Color(0xFF0F172A),
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '($reviewCount rəy)',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF64748B),
-                ),
-              ),
-              Container(
-                height: 14,
-                width: 1,
-                color: const Color(0xFFCBD5E1),
-                margin: const EdgeInsets.symmetric(horizontal: 14),
-              ),
-              const Icon(Icons.verified_user_rounded, color: Color(0xFF1769D2), size: 17),
-              const SizedBox(width: 5),
-              const Text(
-                'Təsdiqlənmiş usta',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1E293B),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 14),
-
-          // 3. Əlaqə Kartı (Telefon Nömrəsi, Status, Zəng et və Mesaj yaz düymələri)
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                // Telefon nömrəsi və Online/Oflayn statusu
-                InkWell(
-                  onTap: () => _makeCall(phone),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Row(
+                // Bio və Məlumat Sətri (Usta Haqqında, Peşə, Linklər)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF22C55E),
-                          shape: BoxShape.circle,
+                      // Ad və Soyad
+                      Text(
+                        displayName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: Color(0xFF0F172A),
                         ),
-                        child: const Icon(Icons.phone_rounded, color: Colors.white, size: 22),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      const SizedBox(height: 2),
+
+                      // Peşə / İxtisas (Boz rəngdə kateqoriya)
+                      Text(
+                        category,
+                        style: const TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+
+                      // Bio mətni (Daha çox / Daha az ilə)
+                      Text(
+                        bio,
+                        maxLines: _isUstaBioExpanded ? null : 3,
+                        overflow: _isUstaBioExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13, color: Color(0xFF334155), height: 1.35),
+                      ),
+                      InkWell(
+                        onTap: () => setState(() => _isUstaBioExpanded = !_isUstaBioExpanded),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Text(
+                            _isUstaBioExpanded ? 'Daha az' : 'Daha çox',
+                            style: const TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+
+                      // TikTok Linki
+                      InkWell(
+                        onTap: () {
+                          if (tiktokHandle != null && tiktokHandle.isNotEmpty) {
+                            _openTikTokProfile(tiktokHandle);
+                          } else {
+                            _showTikTokSyncDialog(context);
+                          }
+                        },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
+                            const Icon(Icons.link_rounded, size: 16, color: Color(0xFF1769D2)),
+                            const SizedBox(width: 4),
                             Text(
-                              phone.isNotEmpty ? phone : 'Nömrə qeyd olunmayıb',
+                              (tiktokHandle != null && tiktokHandle.isNotEmpty)
+                                  ? 'tiktok.com/${tiktokHandle.startsWith('@') ? tiktokHandle : '@$tiktokHandle'}'
+                                  : 'TikTok hesabını bağla',
                               style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF0F172A),
+                                color: Color(0xFF1769D2),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            InkWell(
-                              onTap: () async {
-                                final newStatus = !isWorking;
-                                await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-                                  'isWorking': newStatus,
-                                }, SetOptions(merge: true));
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(newStatus
-                                          ? 'Status "Hal-hazırda məşğulam" olaraq dəyişdirildi!'
-                                          : 'Status "Online (Sərbəstəm)" olaraq dəyişdirildi!'),
-                                      backgroundColor: newStatus ? Colors.orange : Colors.green,
-                                    ),
-                                  );
-                                }
-                              },
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    isWorking ? 'Məşğul ' : 'Online ',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: isWorking ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      color: isWorking ? const Color(0xFFDC2626) : const Color(0xFF22C55E),
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    '(Dəyiş)',
-                                    style: TextStyle(fontSize: 10, color: Colors.blue.shade700, decoration: TextDecoration.underline),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            if (tiktokConnected) ...[
+                              const SizedBox(width: 4),
+                              const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF22C55E)),
+                            ],
                           ],
                         ),
                       ),
-                      const Icon(Icons.chevron_right_rounded, color: Color(0xFF1769D2), size: 26),
+
+                      // Xidmət Teqləri (Chips)
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: _buildServiceChips(category, userData),
+                      ),
                     ],
                   ),
                 ),
 
-                const SizedBox(height: 14),
-
-                // Zəng et və Mesaj yaz düymələri
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _makeCall(phone),
-                        icon: const Icon(Icons.phone_in_talk_rounded, size: 18),
-                        label: const Text('Zəng et', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1769D2),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _openWhatsApp(phone),
-                        icon: const Icon(Icons.chat_bubble_rounded, size: 18, color: Color(0xFF1769D2)),
-                        label: const Text('Mesaj yaz', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1769D2))),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFEFF6FF),
-                          foregroundColor: const Color(0xFF1769D2),
-                          elevation: 0,
-                          side: const BorderSide(color: Color(0xFFBFDBFE)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // 4. Usta Haqqında Kartı
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEFF6FF),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.person_rounded, color: Color(0xFF1769D2), size: 18),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Usta Haqqında',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                    const Spacer(),
-                    InkWell(
-                      onTap: () {
-                        setState(() {
-                          _isUstaBioExpanded = !_isUstaBioExpanded;
-                        });
-                      },
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _isUstaBioExpanded ? 'Daha az' : 'Daha çox',
-                            style: const TextStyle(
-                              color: Color(0xFF1769D2),
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Icon(
-                            _isUstaBioExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                            color: const Color(0xFF1769D2),
-                            size: 18,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    InkWell(
-                      onTap: () => _showEditBioDialog(
-                        user.uid,
-                        userData?['bio'] ?? '',
-                        'Keyfiyyətli və peşəkar təmir xidməti. Təcrübə: 10+ il. Hər növ tikinti və təmir işləri.',
-                      ),
-                      child: const Icon(Icons.edit_outlined, size: 16, color: Color(0xFF64748B)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  bio,
-                  maxLines: _isUstaBioExpanded ? null : 2,
-                  overflow: _isUstaBioExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF475569),
-                    fontSize: 13,
-                    height: 1.45,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                // Xidmət sahələri (Tags / Chips)
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _buildServiceChips(category, userData),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          // 5. Portfolio və Shorts Bölməsi (İki Ayrı Seçim: "Gördüyüm İşlər" & "Videolarım")
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                // Tab 0: Gördüyüm İşlər (Portfolio)
-                Expanded(
-                  child: InkWell(
-                    onTap: () => setState(() => _ustaProfileGalleryTab = 0),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _ustaProfileGalleryTab == 0 ? const Color(0xFFEFF6FF) : Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
-                        border: _ustaProfileGalleryTab == 0
-                            ? Border.all(color: const Color(0xFFBFDBFE), width: 1.2)
-                            : null,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.grid_view_rounded,
-                            size: 20,
-                            color: _ustaProfileGalleryTab == 0 ? const Color(0xFF1769D2) : const Color(0xFF64748B),
-                          ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              'Gördüyüm İşlər\n(Portfolio)',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: _ustaProfileGalleryTab == 0 ? FontWeight.bold : FontWeight.w500,
-                                color: _ustaProfileGalleryTab == 0 ? const Color(0xFF1769D2) : const Color(0xFF64748B),
-                                height: 1.15,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                // Tab 1: Videolarım (Shorts)
-                Expanded(
-                  child: InkWell(
-                    onTap: () => setState(() => _ustaProfileGalleryTab = 1),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _ustaProfileGalleryTab == 1 ? const Color(0xFFEFF6FF) : Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
-                        border: _ustaProfileGalleryTab == 1
-                            ? Border.all(color: const Color(0xFFBFDBFE), width: 1.2)
-                            : null,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.play_arrow_rounded,
-                            size: 22,
-                            color: _ustaProfileGalleryTab == 1 ? const Color(0xFF1769D2) : const Color(0xFF64748B),
-                          ),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              'Videolarım\n(Shorts)',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: _ustaProfileGalleryTab == 1 ? FontWeight.bold : FontWeight.w500,
-                                color: _ustaProfileGalleryTab == 1 ? const Color(0xFF1769D2) : const Color(0xFF64748B),
-                                height: 1.15,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // Seçilmiş Tab-a Uyğun 3 Sütunlu Grid Kontenti
-          if (_ustaProfileGalleryTab == 0)
-            _buildUstaPortfolioGrid(user.uid, displayName, userRole)
-          else
-            _buildUstaShortsGrid(user.uid, displayName, userRole),
-
-          const SizedBox(height: 14),
-
-          // Admin İdarəetmə Paneli (Əgər sistem administratorudursa)
-          if (isAdmin || (user.email != null && user.email!.toLowerCase() == 'mirze3838@gmail.com') || (userData?['role'] == 'admin')) ...[
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.amber.shade300),
-              ),
-              child: ListTile(
-                leading: const Icon(Icons.security, color: Colors.amber, size: 26),
-                title: const Text('Admin İdarəetmə Paneli', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('Ustaları təsdiqlə və sistemi idarə et'),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.amber),
-                onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminScreen()));
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          _buildLocationPrivacyCard(user.uid, userData),
-          const SizedBox(height: 14),
-          _buildFourRoleSwitcherCard(user.uid, userRole),
-          const SizedBox(height: 14),
-          // 6. Aşağı Menyu (Mağazam / Elanlarım, Bildirişlər, Dəstək, Çıxış et)
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                // Mağazam / Elanlarım
-                ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.storefront_outlined, color: Color(0xFF1769D2), size: 20),
-                  ),
-                  title: const Text('Mağazam / Elanlarım', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                  trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF1769D2), size: 24),
-                  onTap: () {
-                    setState(() {
-                      _currentIndex = 2;
-                      _openMyListingsSignal++;
-                    });
-                  },
-                ),
-                const Divider(height: 1, indent: 16, endIndent: 16, color: Color(0xFFF1F5F9)),
-
-                // Bildirişlər
-                ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.notifications_none_rounded, color: Color(0xFF1769D2), size: 20),
-                  ),
-                  title: const Text('Bildirişlər', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
+                // Fəaliyyət Düymələri (Instagram Action Buttons)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(
                     children: [
-                      if (_unreadNotifications > 0) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFEF4444),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            '$_unreadNotifications',
-                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                      // 1. Profili Redaktə Et
+                      Expanded(
+                        child: SizedBox(
+                          height: 36,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFE2E8F0),
+                              foregroundColor: const Color(0xFF0F172A),
+                              elevation: 0,
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: () => _showEditProfileDialog(user.uid, userData),
+                            child: const Text('Profili Redaktə Et', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                           ),
                         ),
-                        const SizedBox(width: 6),
-                      ],
-                      const Icon(Icons.chevron_right_rounded, color: Color(0xFF1769D2), size: 24),
-                    ],
-                  ),
-                  onTap: _showNotificationsSheet,
-                ),
-                const Divider(height: 1, indent: 16, endIndent: 16, color: Color(0xFFF1F5F9)),
+                      ),
+                      const SizedBox(width: 8),
 
-                // Dəstək
-                ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.headset_mic_outlined, color: Color(0xFF1769D2), size: 20),
-                  ),
-                  title: const Text('Dəstək', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                  trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF1769D2), size: 24),
-                  onTap: _showHelpSupportSheet,
-                ),
-              ],
-            ),
-          ),
+                      // 2. TikTok ilə Qoşul
+                      Expanded(
+                        child: SizedBox(
+                          height: 36,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0F172A),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            icon: const Icon(Icons.music_note_rounded, color: Color(0xFFFE2C55), size: 16),
+                            label: Text(
+                              tiktokConnected ? 'TikTok: @${tiktokHandle ?? 'Usta'}' : 'TikTok ilə Qoşul',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: () => _showTikTokSyncDialog(context),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
 
-          const SizedBox(height: 10),
-
-          // Çıxış et Kartı (Yumşaq qırmızı zəminli)
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF1F2),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFFFE4E6)),
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-              leading: const Icon(Icons.logout_rounded, color: Color(0xFFEF4444)),
-              title: const Text(
-                'Çıxış et',
-                style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold, fontSize: 15),
-              ),
-              onTap: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    title: const Text('Çıxış təsdiqi'),
-                    content: const Text('Hesabınızdan çıxmaq istədiyinizə əminsiniz?'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Xeyr')),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('Bəli, çıx', style: TextStyle(color: Colors.white)),
+                      // 3. Paylaş
+                      SizedBox(
+                        height: 36,
+                        width: 40,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE2E8F0),
+                            foregroundColor: const Color(0xFF0F172A),
+                            elevation: 0,
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: 'UstaGo Profil: $displayName ($phone)'));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('$displayName profil linki kopyalandı!'), backgroundColor: const Color(0xFF1769D2)),
+                            );
+                          },
+                          child: const Icon(Icons.share_outlined, size: 16),
+                        ),
                       ),
                     ],
                   ),
-                );
-                if (confirm == true) {
-                  await _authService.signOut();
-                  if (mounted) {
-                    setState(() => _currentUserRole = null);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Hesabdan çıxış edildi.')),
-                    );
-                  }
-                }
-              },
+                ),
+
+                // Dairəvi Hekayələr (Instagram Highlights / Önə Çıxarılanlar)
+                SizedBox(
+                  height: 92,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    children: [
+                      _buildHighlightCircle(
+                        icon: Icons.music_note_rounded,
+                        iconColor: const Color(0xFFFE2C55),
+                        bgColor: Colors.black,
+                        label: 'Rəsmi TikTok',
+                        onTap: () {
+                          if (tiktokHandle != null && tiktokHandle.isNotEmpty) {
+                            _openTikTokProfile(tiktokHandle);
+                          } else {
+                            _showTikTokSyncDialog(context);
+                          }
+                        },
+                      ),
+                      _buildHighlightCircle(
+                        icon: Icons.handyman_rounded,
+                        iconColor: const Color(0xFF1769D2),
+                        bgColor: const Color(0xFFEFF6FF),
+                        label: 'Xidmətlər',
+                        onTap: () => _showServicesModal(context, category, userData),
+                      ),
+                      _buildHighlightCircle(
+                        icon: Icons.phone_in_talk_rounded,
+                        iconColor: const Color(0xFF22C55E),
+                        bgColor: const Color(0xFFF0FDF4),
+                        label: 'Əlaqə',
+                        onTap: () => _showContactModal(context, phone),
+                      ),
+                      _buildHighlightCircle(
+                        icon: Icons.location_on_rounded,
+                        iconColor: const Color(0xFFF59E0B),
+                        bgColor: const Color(0xFFFEF3C7),
+                        label: 'Məkan',
+                        onTap: () => _showLocationPickerModal(user.uid, userData),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 6),
+
+                // Instagram Tab Bar (▦ Şəkillər / ▷ Videolar)
+                Container(
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      top: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
+                      bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      // Tab 0: ▦ Şəkillər
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setState(() => _ustaProfileGalleryTab = 0),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: _ustaProfileGalleryTab == 0 ? Colors.black : Colors.transparent,
+                                  width: 1.5,
+                                ),
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.grid_on_rounded,
+                              color: _ustaProfileGalleryTab == 0 ? Colors.black : const Color(0xFF94A3B8),
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Tab 1: ▷ Videolar (Reels / TikTok)
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setState(() => _ustaProfileGalleryTab = 1),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: _ustaProfileGalleryTab == 1 ? Colors.black : Colors.transparent,
+                                  width: 1.5,
+                                ),
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.video_library_outlined,
+                              color: _ustaProfileGalleryTab == 1 ? Colors.black : const Color(0xFF94A3B8),
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 4),
+
+                // Tab Kontenti
+                if (_ustaProfileGalleryTab == 0)
+                  _buildUstaPortfolioGrid(user.uid, displayName, userRole)
+                else
+                  _buildUstaShortsGrid(user.uid, displayName, userRole),
+
+                const SizedBox(height: 30),
+              ],
             ),
           ),
-
-          const SizedBox(height: 30),
         ],
       ),
     );
   }
-
   /// Ustanın ixtisasına uyğun peşəkar xidmət teqləri (şəkildəki kimi zərif mavi həb formalı)
   List<Widget> _buildServiceChips(String category, Map<String, dynamic>? userData) {
     List<Map<String, dynamic>> skills;
@@ -6434,9 +6738,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
-                  crossAxisSpacing: 6,
-                  mainAxisSpacing: 6,
-                  childAspectRatio: 1.0,
+                  crossAxisSpacing: 2, mainAxisSpacing: 2, childAspectRatio: 1.0,
                 ),
                 itemCount: photoDocs.length,
                 itemBuilder: (context, index) {
@@ -6556,7 +6858,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (docs.isEmpty) {
           return Container(
             margin: const EdgeInsets.symmetric(horizontal: 16),
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
@@ -6564,27 +6866,38 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: Column(
               children: [
-                const Icon(Icons.video_collection_outlined, size: 40, color: Color(0xFF94A3B8)),
-                const SizedBox(height: 8),
-                const Text(
-                  'Hələlik heç bir Shorts video yoxdur',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
+                Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFFFE2C55), width: 2),
+                  ),
+                  child: const Icon(Icons.music_note_rounded, color: Color(0xFFFE2C55), size: 28),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 12),
                 const Text(
-                  'Qısa videolarınızı yükləyərək iş prosesinizi canlı göstərin və müştəriləri cəlb edin!',
+                  'TikTok Videoları',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A)),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Videolar yalnız TikTok ilə qoşulduqdan sonra profilinizdə nümayiş olunur.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1769D2),
+                    backgroundColor: const Color(0xFFFE2C55),
+                    foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                   ),
-                  icon: const Icon(Icons.video_call_rounded, color: Colors.white, size: 18),
-                  label: const Text('İlk Videonu Paylaş', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                  onPressed: () => _showAddPostDialog(uid, authorName, role, initialTab: 1, lockTab: true),
+                  icon: const Icon(Icons.sync_rounded, size: 16),
+                  label: const Text('TikTok ilə Qoşul', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  onPressed: () => _showTikTokSyncDialog(context),
                 ),
               ],
             ),
@@ -6628,9 +6941,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 0.72,
+                  crossAxisSpacing: 2, mainAxisSpacing: 2, childAspectRatio: 0.65,
                 ),
                 itemCount: docs.length,
                 itemBuilder: (context, index) {
