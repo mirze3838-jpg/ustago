@@ -6201,7 +6201,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
                     onTap: () {
                       Navigator.pop(ctx);
-                      _showUserStoreModal(context, uid, userData?['fullName'] ?? '', isOwner: true);
+                      _showUserStoreModal(context, uid, userData?['fullName'] ?? '', isOwner: true, userPhone: userData?['phone']?.toString(), userAddress: userData?['city']?.toString());
                     },
                   ),
 
@@ -6217,7 +6217,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
                     onTap: () {
                       Navigator.pop(ctx);
-                      _showUserListingsModal(context, uid, userData?['fullName'] ?? '', isOwner: true);
+                      _showUserListingsModal(context, uid, userData?['fullName'] ?? '', isOwner: true, userPhone: userData?['phone']?.toString(), userAddress: userData?['city']?.toString());
                     },
                   ),
 
@@ -7444,7 +7444,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         bgColor: const Color(0xFFF5F3FF),
                         borderColor: const Color(0xFF8B5CF6),
                         label: 'Mağaza',
-                        onTap: () => _showUserStoreModal(context, user.uid, displayName, isOwner: true),
+                        onTap: () => _showUserStoreModal(context, user.uid, displayName, isOwner: true, userPhone: userData?['phone']?.toString(), userAddress: userData?['city']?.toString()),
                       ),
                       _buildHighlightCircle(
                         icon: Icons.campaign_rounded,
@@ -7452,7 +7452,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         bgColor: const Color(0xFFFFF7ED),
                         borderColor: const Color(0xFFEA580C),
                         label: 'Elanlar',
-                        onTap: () => _showUserListingsModal(context, user.uid, displayName, isOwner: true),
+                        onTap: () => _showUserListingsModal(context, user.uid, displayName, isOwner: true, userPhone: userData?['phone']?.toString(), userAddress: userData?['city']?.toString()),
                       ),
                     ],
                   ),
@@ -7568,24 +7568,31 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// İstifadəçinin mağaza profilini və məhsullarını göstərən modal
-  void _showUserStoreModal(BuildContext context, String targetUid, String authorName, {bool isOwner = false}) {
+  void _showUserStoreModal(
+    BuildContext rootContext,
+    String targetUid,
+    String authorName, {
+    bool isOwner = false,
+    String? userPhone,
+    String? userAddress,
+  }) {
     showModalBottomSheet(
-      context: context,
+      context: rootContext,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => DraggableScrollableSheet(
+      builder: (modalCtx) => DraggableScrollableSheet(
         initialChildSize: 0.75,
         minChildSize: 0.45,
         maxChildSize: 0.92,
         expand: false,
-        builder: (context, scrollCtrl) => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        builder: (sheetCtx, scrollCtrl) => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: FirebaseFirestore.instance
               .collection('market_stores')
               .snapshots(),
-          builder: (context, snapshot) {
+          builder: (streamCtx, snapshot) {
             final allDocs = snapshot.data?.docs ?? [];
             final userDocs = allDocs.where((d) {
               final data = d.data();
@@ -7640,15 +7647,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (isOwner && hasStore)
                         TextButton.icon(
                           onPressed: () {
-                            Navigator.pop(ctx);
-                            MarketScreen.showProductFormSheet(context);
+                            MarketScreen.showProductFormSheet(
+                              rootContext,
+                              defaultPhone: userPhone,
+                              defaultAddress: userAddress,
+                            );
                           },
                           icon: const Icon(Icons.add, size: 17, color: Color(0xFF1769D2)),
                           label: const Text('+ Məhsul', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Color(0xFF1769D2))),
                         ),
                       IconButton(
                         icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 22),
-                        onPressed: () => Navigator.pop(ctx),
+                        onPressed: () => Navigator.pop(modalCtx),
                       ),
                     ],
                   ),
@@ -7709,8 +7719,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                   icon: const Icon(Icons.add_business_rounded, size: 18),
                                   label: const Text('Mağaza Aç və Məhsul Yerləşdir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
                                   onPressed: () {
-                                    Navigator.pop(ctx);
-                                    MarketScreen.showStoreFormSheet(context);
+                                    MarketScreen.showStoreFormSheet(
+                                      rootContext,
+                                      defaultPhone: userPhone,
+                                      defaultAddress: userAddress,
+                                    );
                                   },
                                 ),
                               ],
@@ -7765,8 +7778,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                       icon: const Icon(Icons.edit_outlined, color: Color(0xFF8B5CF6), size: 20),
                                       tooltip: 'Mağazanı Redaktə Et',
                                       onPressed: () {
-                                        Navigator.pop(ctx);
-                                        MarketScreen.showStoreFormSheet(context, existingStore: {'id': storeId, ...storeData!});
+                                        MarketScreen.showStoreFormSheet(
+                                          rootContext,
+                                          existingStore: {'id': storeId, ...storeData!},
+                                          defaultPhone: userPhone,
+                                          defaultAddress: userAddress,
+                                        );
                                       },
                                     ),
                                 ],
@@ -7794,8 +7811,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             if (isOwner)
                               InkWell(
                                 onTap: () {
-                                  Navigator.pop(ctx);
-                                  MarketScreen.showProductFormSheet(context);
+                                  MarketScreen.showProductFormSheet(
+                                    rootContext,
+                                    defaultPhone: userPhone,
+                                    defaultAddress: userAddress,
+                                  );
                                 },
                                 child: const Text(
                                   '+ Məhsul Əlavə Et',
@@ -7827,8 +7847,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                     const SizedBox(height: 10),
                                     TextButton.icon(
                                       onPressed: () {
-                                        Navigator.pop(ctx);
-                                        MarketScreen.showProductFormSheet(context);
+                                        MarketScreen.showProductFormSheet(
+                                          rootContext,
+                                          defaultPhone: userPhone,
+                                          defaultAddress: userAddress,
+                                        );
                                       },
                                       icon: const Icon(Icons.add, size: 16),
                                       label: const Text('İlk Məhsulunu Əlavə Et'),
@@ -7896,15 +7919,21 @@ class _HomeScreenState extends State<HomeScreen> {
                                         IconButton(
                                           icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF1769D2)),
                                           onPressed: () {
-                                            Navigator.pop(ctx);
-                                            MarketScreen.showProductFormSheet(context, existingProduct: {'id': pDoc.id, ...pData});
+                                            MarketScreen.showProductFormSheet(
+                                              rootContext,
+                                              existingProduct: {'id': pDoc.id, ...pData},
+                                              defaultPhone: userPhone,
+                                              defaultAddress: userAddress,
+                                            );
                                           },
                                         ),
                                         IconButton(
                                           icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
                                           onPressed: () async {
                                             await FirebaseFirestore.instance.collection('market_stores').doc(pDoc.id).delete();
-                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Məhsul silindi.')));
+                                            if (rootContext.mounted) {
+                                              ScaffoldMessenger.of(rootContext).showSnackBar(const SnackBar(content: Text('Məhsul silindi.')));
+                                            }
                                           },
                                         ),
                                       ],
@@ -7926,24 +7955,31 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// İstifadəçinin fərdi alış-satış elanlarını göstərən modal
-  void _showUserListingsModal(BuildContext context, String targetUid, String authorName, {bool isOwner = false}) {
+  void _showUserListingsModal(
+    BuildContext rootContext,
+    String targetUid,
+    String authorName, {
+    bool isOwner = false,
+    String? userPhone,
+    String? userAddress,
+  }) {
     showModalBottomSheet(
-      context: context,
+      context: rootContext,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => DraggableScrollableSheet(
+      builder: (modalCtx) => DraggableScrollableSheet(
         initialChildSize: 0.75,
         minChildSize: 0.45,
         maxChildSize: 0.92,
         expand: false,
-        builder: (context, scrollCtrl) => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        builder: (sheetCtx, scrollCtrl) => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: FirebaseFirestore.instance
               .collection('market_stores')
               .snapshots(),
-          builder: (context, snapshot) {
+          builder: (streamCtx, snapshot) {
             final allDocs = snapshot.data?.docs ?? [];
             final listings = allDocs.where((d) {
               final data = d.data();
@@ -7993,15 +8029,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (isOwner)
                         TextButton.icon(
                           onPressed: () {
-                            Navigator.pop(ctx);
-                            MarketScreen.showProductFormSheet(context);
+                            MarketScreen.showProductFormSheet(
+                              rootContext,
+                              defaultPhone: userPhone,
+                              defaultAddress: userAddress,
+                            );
                           },
                           icon: const Icon(Icons.add, size: 17, color: Color(0xFFEA580C)),
                           label: const Text('+ Yeni Elan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Color(0xFFEA580C))),
                         ),
                       IconButton(
                         icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 22),
-                        onPressed: () => Navigator.pop(ctx),
+                        onPressed: () => Navigator.pop(modalCtx),
                       ),
                     ],
                   ),
@@ -8054,8 +8093,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                     icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
                                     label: const Text('Yeni Elan Yerləşdir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
                                     onPressed: () {
-                                      Navigator.pop(ctx);
-                                      MarketScreen.showProductFormSheet(context);
+                                      MarketScreen.showProductFormSheet(
+                                        rootContext,
+                                        defaultPhone: userPhone,
+                                        defaultAddress: userAddress,
+                                      );
                                     },
                                   ),
                                 ],
@@ -8141,15 +8183,21 @@ class _HomeScreenState extends State<HomeScreen> {
                                         IconButton(
                                           icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF1769D2)),
                                           onPressed: () {
-                                            Navigator.pop(ctx);
-                                            MarketScreen.showProductFormSheet(context, existingProduct: {'id': doc.id, ...data});
+                                            MarketScreen.showProductFormSheet(
+                                              rootContext,
+                                              existingProduct: {'id': doc.id, ...data},
+                                              defaultPhone: userPhone,
+                                              defaultAddress: userAddress,
+                                            );
                                           },
                                         ),
                                         IconButton(
                                           icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
                                           onPressed: () async {
                                             await FirebaseFirestore.instance.collection('market_stores').doc(doc.id).delete();
-                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Elan silindi.')));
+                                            if (rootContext.mounted) {
+                                              ScaffoldMessenger.of(rootContext).showSnackBar(const SnackBar(content: Text('Elan silindi.')));
+                                            }
                                           },
                                         ),
                                       ],
@@ -8167,7 +8215,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
   /// Vahid Qalereya (Foto və Videolar birgə, İnstagram üslubunda)
   Widget _buildUstaUnifiedGrid(String uid, String authorName, String role) {
     // Köhnə test fotoşəkillərini Firestore-dan təmizləyirik (istifadəçi tələbi)

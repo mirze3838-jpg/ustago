@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
@@ -41,22 +42,53 @@ class MarketScreen extends StatefulWidget {
 
   static Uint8List? decodeB64(String? b64) => _MarketScreenState._decodeB64(b64);
 
-  static Future<void> showStoreFormSheet(BuildContext context, {Map<String, dynamic>? existingStore}) async {
-    final user = AuthService().currentUser;
+  static Future<void> showStoreFormSheet(
+    BuildContext context, {
+    Map<String, dynamic>? existingStore,
+    String? defaultPhone,
+    String? defaultAddress,
+  }) async {
+    final user = AuthService().currentUser ?? FirebaseAuth.instance.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mağaza açmaq üçün əvvəlcə daxil olmalısınız.')),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Mağaza açmaq üçün əvvəlcə daxil olmalısınız.')),
+        );
+      }
       return;
     }
 
     final bool isEdit = existingStore != null && existingStore['id'] != null;
-    final nameCtrl = TextEditingController(text: existingStore?['title']?.toString() ?? '');
-    final phoneCtrl = TextEditingController(text: existingStore?['phone']?.toString() ?? '');
+
+    String initialTitle = existingStore?['title']?.toString() ?? '';
+    String initialPhone = existingStore?['phone']?.toString() ?? defaultPhone ?? '';
+    String initialAddress = existingStore?['address']?.toString() ?? defaultAddress ?? '';
+
+    if (initialTitle.isEmpty || initialPhone.isEmpty || initialAddress.isEmpty) {
+      try {
+        final uDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        final uData = uDoc.data();
+        if (uData != null) {
+          if (initialTitle.isEmpty) {
+            final fName = (uData['fullName'] ?? '').toString().trim();
+            if (fName.isNotEmpty) initialTitle = '$fName Mağazası';
+          }
+          if (initialPhone.isEmpty) initialPhone = (uData['phone'] ?? '').toString();
+          if (initialAddress.isEmpty) {
+            final city = (uData['city'] ?? '').toString();
+            final dist = (uData['district'] ?? '').toString();
+            initialAddress = dist.isNotEmpty ? '$city, $dist' : city;
+          }
+        }
+      } catch (_) {}
+    }
+
+    final nameCtrl = TextEditingController(text: initialTitle);
+    final phoneCtrl = TextEditingController(text: initialPhone);
     final whatsappCtrl = TextEditingController(
-      text: existingStore?['whatsapp']?.toString() ?? existingStore?['phone']?.toString() ?? '',
+      text: existingStore?['whatsapp']?.toString() ?? initialPhone,
     );
-    final addressCtrl = TextEditingController(text: existingStore?['address']?.toString() ?? '');
+    final addressCtrl = TextEditingController(text: initialAddress);
     final descCtrl = TextEditingController(text: existingStore?['description']?.toString() ?? '');
 
     String selectedCat = existingStore?['category']?.toString() ?? 'Tikinti Materialları';
@@ -67,6 +99,8 @@ class MarketScreen extends StatefulWidget {
 
     String? logoBase64 = existingStore?['logoBase64']?.toString();
     bool isSaving = false;
+
+    if (!context.mounted) return;
 
     await showModalBottomSheet(
       context: context,
@@ -92,7 +126,7 @@ class MarketScreen extends StatefulWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        isEdit ? 'Mağazanı Redaktə Et' : 'Yeni Mağaza Yarat',
+                        isEdit ? 'Mağazanı Redaktə Et' : 'Yeni Mağaza Aç',
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
@@ -102,7 +136,7 @@ class MarketScreen extends StatefulWidget {
 
                   Center(
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(50),
                       onTap: () async {
                         try {
                           final picked = await ImagePicker().pickImage(
@@ -122,22 +156,19 @@ class MarketScreen extends StatefulWidget {
                         }
                       },
                       child: Container(
-                        width: 86,
-                        height: 86,
+                        width: 90,
+                        height: 90,
                         decoration: BoxDecoration(
                           color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(16),
+                          shape: BoxShape.circle,
                           border: Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
                         ),
                         child: logoBytes != null
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(14),
-                                child: Image.memory(logoBytes, fit: BoxFit.cover),
-                              )
+                            ? ClipOval(child: Image.memory(logoBytes, fit: BoxFit.cover, width: 90, height: 90))
                             : Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: const [
-                                  Icon(Icons.add_a_photo_outlined, size: 28, color: Color(0xFF1769D2)),
+                                  Icon(Icons.add_a_photo_outlined, size: 28, color: Color(0xFF8B5CF6)),
                                   SizedBox(height: 4),
                                   Text('Loqo', style: TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
                                 ],
@@ -151,7 +182,8 @@ class MarketScreen extends StatefulWidget {
                     controller: nameCtrl,
                     decoration: InputDecoration(
                       labelText: 'Mağazanın Adı *',
-                      prefixIcon: const Icon(Icons.store_rounded, color: Color(0xFF1769D2)),
+                      hintText: 'Məs: Nurlan Tikinti Malları',
+                      prefixIcon: const Icon(Icons.storefront_rounded, color: Color(0xFF8B5CF6)),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
@@ -210,7 +242,7 @@ class MarketScreen extends StatefulWidget {
                     decoration: InputDecoration(
                       labelText: 'WhatsApp Nömrəsi',
                       hintText: '+994 50 123 45 67',
-                      prefixIcon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF25D366)),
+                      prefixIcon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF059669)),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
@@ -219,8 +251,8 @@ class MarketScreen extends StatefulWidget {
                   TextField(
                     controller: addressCtrl,
                     decoration: InputDecoration(
-                      labelText: 'Dəqiq Ünvan / Filial *',
-                      hintText: 'Məs: Dərnəgül Baksol yolu, Sıra 4, Mağaza 12',
+                      labelText: 'Dəqiq Ünvan *',
+                      hintText: 'Məs: Dərnəgül Tikinti Bazarı, Sıra 3, Mağaza 12',
                       prefixIcon: const Icon(Icons.location_on_outlined, color: Color(0xFFEA580C)),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
@@ -232,7 +264,7 @@ class MarketScreen extends StatefulWidget {
                     maxLines: 3,
                     decoration: InputDecoration(
                       labelText: 'Mağaza Haqqında Qısa Məlumat',
-                      hintText: 'Tikinti materialları, çatdırılma xidməti və xüsusi endirimlər haqqında qeydlər...',
+                      hintText: 'Tikinti materialları, topdan və pərakəndə satış, çatdırılma xidməti...',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
@@ -243,7 +275,7 @@ class MarketScreen extends StatefulWidget {
                     height: 48,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1769D2),
+                        backgroundColor: const Color(0xFF8B5CF6),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       onPressed: isSaving
@@ -252,6 +284,7 @@ class MarketScreen extends StatefulWidget {
                               final name = nameCtrl.text.trim();
                               final phone = phoneCtrl.text.trim();
                               final address = addressCtrl.text.trim();
+
                               if (name.isEmpty || phone.isEmpty || address.isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
@@ -266,19 +299,18 @@ class MarketScreen extends StatefulWidget {
                               final payload = <String, dynamic>{
                                 'listingType': 'store',
                                 'title': name,
+                                'category': selectedCat,
+                                'city': selectedCity,
                                 'phone': phone,
                                 'whatsapp': whatsappCtrl.text.trim().isNotEmpty ? whatsappCtrl.text.trim() : phone,
                                 'address': address,
-                                'city': selectedCity,
-                                'category': selectedCat,
                                 'description': descCtrl.text.trim(),
                                 'logoBase64': logoBase64,
                                 'ownerId': user.uid,
+                                'userId': user.uid,
                                 'userEmail': user.email ?? '',
-                                'isVerified': existingStore?['isVerified'] ?? false,
-                                'rating': existingStore?['rating'] ?? 5.0,
-                                'reviewCount': existingStore?['reviewCount'] ?? 0,
                               };
+
                               try {
                                 if (isEdit) {
                                   await FirebaseFirestore.instance
@@ -292,7 +324,7 @@ class MarketScreen extends StatefulWidget {
                                 Navigator.pop(ctx);
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text(isEdit ? 'Mağaza yeniləndi!' : 'Mağazanız uğurla yaradıldı!'),
+                                    content: Text(isEdit ? 'Mağaza yeniləndi!' : 'Təbriklər! Mağazanız uğurla açıldı!'),
                                     backgroundColor: const Color(0xFF059669),
                                   ),
                                 );
@@ -310,7 +342,7 @@ class MarketScreen extends StatefulWidget {
                               child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                             )
                           : Text(
-                              isEdit ? 'Dəyişiklikləri Yadda Saxla' : 'Mağazanı Yarat',
+                              isEdit ? 'Dəyişiklikləri Yadda Saxla' : 'Mağazanı Aç',
                               style: const TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.bold),
                             ),
                     ),
@@ -324,23 +356,31 @@ class MarketScreen extends StatefulWidget {
     );
   }
 
-  static Future<void> showProductFormSheet(BuildContext context, {Map<String, dynamic>? existingProduct}) async {
-    final user = AuthService().currentUser;
+  static Future<void> showProductFormSheet(
+    BuildContext context, {
+    Map<String, dynamic>? existingProduct,
+    String? defaultPhone,
+    String? defaultAddress,
+  }) async {
+    final user = AuthService().currentUser ?? FirebaseAuth.instance.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Elan yerləşdirmək üçün əvvəlcə daxil olmalısınız.')),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Elan yerləşdirmək üçün əvvəlcə daxil olmalısınız.')),
+        );
+      }
       return;
     }
 
     List<Map<String, dynamic>> myStores = [];
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('market_stores')
-          .where('ownerId', isEqualTo: user.uid)
-          .get();
+      final snap = await FirebaseFirestore.instance.collection('market_stores').get();
       myStores = snap.docs
-          .where((d) => (d.data()['listingType'] ?? 'store') == 'store')
+          .where((d) {
+            final data = d.data();
+            final isOwner = data['ownerId'] == user.uid || data['userId'] == user.uid;
+            return isOwner && (data['listingType'] ?? 'store') == 'store';
+          })
           .map((d) => {'id': d.id, ...d.data()})
           .toList();
     } catch (_) {}
@@ -354,18 +394,33 @@ class MarketScreen extends StatefulWidget {
       text: existingProduct?['store']?.toString() ??
           (myStores.isNotEmpty ? (myStores.first['title']?.toString() ?? '') : ''),
     );
-    final phoneCtrl = TextEditingController(
-      text: existingProduct?['phone']?.toString() ??
-          (myStores.isNotEmpty ? (myStores.first['phone']?.toString() ?? '') : ''),
-    );
+
+    String initialPhone = existingProduct?['phone']?.toString() ??
+        (myStores.isNotEmpty ? (myStores.first['phone']?.toString() ?? '') : (defaultPhone ?? ''));
+    String initialAddress = existingProduct?['address']?.toString() ??
+        (myStores.isNotEmpty ? (myStores.first['address']?.toString() ?? '') : (defaultAddress ?? ''));
+
+    if (initialPhone.isEmpty || initialAddress.isEmpty) {
+      try {
+        final uDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        final uData = uDoc.data();
+        if (uData != null) {
+          if (initialPhone.isEmpty) initialPhone = (uData['phone'] ?? '').toString();
+          if (initialAddress.isEmpty) {
+            final city = (uData['city'] ?? '').toString();
+            final dist = (uData['district'] ?? '').toString();
+            initialAddress = dist.isNotEmpty ? '$city, $dist' : city;
+          }
+        }
+      } catch (_) {}
+    }
+
+    final phoneCtrl = TextEditingController(text: initialPhone);
     final whatsappCtrl = TextEditingController(
       text: existingProduct?['whatsapp']?.toString() ??
-          (myStores.isNotEmpty ? (myStores.first['whatsapp']?.toString() ?? '') : ''),
+          (myStores.isNotEmpty ? (myStores.first['whatsapp']?.toString() ?? initialPhone) : initialPhone),
     );
-    final addressCtrl = TextEditingController(
-      text: existingProduct?['address']?.toString() ??
-          (myStores.isNotEmpty ? (myStores.first['address']?.toString() ?? '') : ''),
-    );
+    final addressCtrl = TextEditingController(text: initialAddress);
     final descCtrl = TextEditingController(text: existingProduct?['description']?.toString() ?? '');
 
     String selectedCat = existingProduct?['category']?.toString() ?? 'Sement';
@@ -377,6 +432,8 @@ class MarketScreen extends StatefulWidget {
 
     String? imageBase64 = existingProduct?['imageBase64']?.toString();
     bool isSaving = false;
+
+    if (!context.mounted) return;
 
     await showModalBottomSheet(
       context: context,
@@ -614,6 +671,7 @@ class MarketScreen extends StatefulWidget {
                               final price = priceCtrl.text.trim();
                               final phone = phoneCtrl.text.trim();
                               final address = addressCtrl.text.trim();
+
                               if (title.isEmpty || price.isEmpty || phone.isEmpty || address.isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
@@ -639,6 +697,7 @@ class MarketScreen extends StatefulWidget {
                                 'description': descCtrl.text.trim(),
                                 'imageBase64': imageBase64,
                                 'ownerId': user.uid,
+                                'userId': user.uid,
                                 'userEmail': user.email ?? '',
                               };
 
@@ -686,7 +745,6 @@ class MarketScreen extends StatefulWidget {
       ),
     );
   }
-
   @override
   State<MarketScreen> createState() => _MarketScreenState();
 }
