@@ -22,6 +22,671 @@ class MarketScreen extends StatefulWidget {
     this.openMyListingsSignal = 0,
   });
 
+  static const List<String> allListingCategories = [
+    'Sement',
+    'Kafel & Metlax',
+    'Boya & Malyar',
+    'Santexnika',
+    'Elektrik & Kabel',
+    'Mebel Materialları',
+    'Dəmir & Armatur',
+    'Taxta & Laminat',
+    'Dam Örtükləri',
+    'Alçıpan & Profil',
+    'İzolyasiya',
+    'Qapı & Pəncərə',
+    'Alətlər & Texnika',
+    'Digər Tikinti Malları',
+  ];
+
+  static Uint8List? decodeB64(String? b64) => _MarketScreenState._decodeB64(b64);
+
+  static Future<void> showStoreFormSheet(BuildContext context, {Map<String, dynamic>? existingStore}) async {
+    final user = AuthService().currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mağaza açmaq üçün əvvəlcə daxil olmalısınız.')),
+      );
+      return;
+    }
+
+    final bool isEdit = existingStore != null && existingStore['id'] != null;
+    final nameCtrl = TextEditingController(text: existingStore?['title']?.toString() ?? '');
+    final phoneCtrl = TextEditingController(text: existingStore?['phone']?.toString() ?? '');
+    final whatsappCtrl = TextEditingController(
+      text: existingStore?['whatsapp']?.toString() ?? existingStore?['phone']?.toString() ?? '',
+    );
+    final addressCtrl = TextEditingController(text: existingStore?['address']?.toString() ?? '');
+    final descCtrl = TextEditingController(text: existingStore?['description']?.toString() ?? '');
+
+    String selectedCat = existingStore?['category']?.toString() ?? 'Tikinti Materialları';
+    if (!allListingCategories.contains(selectedCat)) selectedCat = allListingCategories.first;
+
+    String selectedCity = existingStore?['city']?.toString() ?? 'Bakı';
+    if (!CategoryCityService.defaultCities.contains(selectedCity)) selectedCity = 'Bakı';
+
+    String? logoBase64 = existingStore?['logoBase64']?.toString();
+    bool isSaving = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final Uint8List? logoBytes = decodeB64(logoBase64);
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              left: 20,
+              right: 20,
+              top: 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        isEdit ? 'Mağazanı Redaktə Et' : 'Yeni Mağaza Yarat',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  Center(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () async {
+                        try {
+                          final picked = await ImagePicker().pickImage(
+                            source: ImageSource.gallery,
+                            maxWidth: 512,
+                            maxHeight: 512,
+                            imageQuality: 70,
+                          );
+                          if (picked != null) {
+                            final bytes = await picked.readAsBytes();
+                            setModalState(() => logoBase64 = base64Encode(bytes));
+                          }
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Loqo seçilmədi: $e')),
+                          );
+                        }
+                      },
+                      child: Container(
+                        width: 86,
+                        height: 86,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
+                        ),
+                        child: logoBytes != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child: Image.memory(logoBytes, fit: BoxFit.cover),
+                              )
+                            : Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Icon(Icons.add_a_photo_outlined, size: 28, color: Color(0xFF1769D2)),
+                                  SizedBox(height: 4),
+                                  Text('Loqo', style: TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Mağazanın Adı *',
+                      prefixIcon: const Icon(Icons.store_rounded, color: Color(0xFF1769D2)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: selectedCat,
+                          isDense: true,
+                          decoration: InputDecoration(
+                            labelText: 'Kateqoriya',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          items: allListingCategories.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12.5)))).toList(),
+                          onChanged: (val) {
+                            if (val != null) setModalState(() => selectedCat = val);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: selectedCity,
+                          isDense: true,
+                          decoration: InputDecoration(
+                            labelText: 'Şəhər',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          items: CategoryCityService.defaultCities.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12.5)))).toList(),
+                          onChanged: (val) {
+                            if (val != null) setModalState(() => selectedCity = val);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  TextField(
+                    controller: phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      labelText: 'Əlaqə Nömrəsi *',
+                      hintText: '+994 50 123 45 67',
+                      prefixIcon: const Icon(Icons.phone, color: Color(0xFF10B981)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  TextField(
+                    controller: whatsappCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      labelText: 'WhatsApp Nömrəsi',
+                      hintText: '+994 50 123 45 67',
+                      prefixIcon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF25D366)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  TextField(
+                    controller: addressCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Dəqiq Ünvan / Filial *',
+                      hintText: 'Məs: Dərnəgül Baksol yolu, Sıra 4, Mağaza 12',
+                      prefixIcon: const Icon(Icons.location_on_outlined, color: Color(0xFFEA580C)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  TextField(
+                    controller: descCtrl,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      labelText: 'Mağaza Haqqında Qısa Məlumat',
+                      hintText: 'Tikinti materialları, çatdırılma xidməti və xüsusi endirimlər haqqında qeydlər...',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1769D2),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              final name = nameCtrl.text.trim();
+                              final phone = phoneCtrl.text.trim();
+                              final address = addressCtrl.text.trim();
+                              if (name.isEmpty || phone.isEmpty || address.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Zəhmət olmasa Mağaza adı, Əlaqə nömrəsi və Ünvanı doldurun.'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                                return;
+                              }
+
+                              setModalState(() => isSaving = true);
+                              final payload = <String, dynamic>{
+                                'listingType': 'store',
+                                'title': name,
+                                'phone': phone,
+                                'whatsapp': whatsappCtrl.text.trim().isNotEmpty ? whatsappCtrl.text.trim() : phone,
+                                'address': address,
+                                'city': selectedCity,
+                                'category': selectedCat,
+                                'description': descCtrl.text.trim(),
+                                'logoBase64': logoBase64,
+                                'ownerId': user.uid,
+                                'userEmail': user.email ?? '',
+                                'isVerified': existingStore?['isVerified'] ?? false,
+                                'rating': existingStore?['rating'] ?? 5.0,
+                                'reviewCount': existingStore?['reviewCount'] ?? 0,
+                              };
+                              try {
+                                if (isEdit) {
+                                  await FirebaseFirestore.instance
+                                      .collection('market_stores')
+                                      .doc(existingStore['id'].toString())
+                                      .set(payload, SetOptions(merge: true));
+                                } else {
+                                  payload['createdAt'] = FieldValue.serverTimestamp();
+                                  await FirebaseFirestore.instance.collection('market_stores').add(payload);
+                                }
+                                Navigator.pop(ctx);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(isEdit ? 'Mağaza yeniləndi!' : 'Mağazanız uğurla yaradıldı!'),
+                                    backgroundColor: const Color(0xFF059669),
+                                  ),
+                                );
+                              } catch (e) {
+                                setModalState(() => isSaving = false);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Xəta: $e'), backgroundColor: Colors.red),
+                                );
+                              }
+                            },
+                      child: isSaving
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : Text(
+                              isEdit ? 'Dəyişiklikləri Yadda Saxla' : 'Mağazanı Yarat',
+                              style: const TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.bold),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  static Future<void> showProductFormSheet(BuildContext context, {Map<String, dynamic>? existingProduct}) async {
+    final user = AuthService().currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Elan yerləşdirmək üçün əvvəlcə daxil olmalısınız.')),
+      );
+      return;
+    }
+
+    List<Map<String, dynamic>> myStores = [];
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('market_stores')
+          .where('ownerId', isEqualTo: user.uid)
+          .get();
+      myStores = snap.docs
+          .where((d) => (d.data()['listingType'] ?? 'store') == 'store')
+          .map((d) => {'id': d.id, ...d.data()})
+          .toList();
+    } catch (_) {}
+
+    final bool isEdit = existingProduct != null && existingProduct['id'] != null;
+    final titleCtrl = TextEditingController(text: existingProduct?['title']?.toString() ?? '');
+    final unitCtrl = TextEditingController(text: existingProduct?['unit']?.toString() ?? '1 ədəd');
+    final rawPrice = (existingProduct?['price']?.toString() ?? '').replaceAll('AZN', '').trim();
+    final priceCtrl = TextEditingController(text: rawPrice);
+    final storeNameCtrl = TextEditingController(
+      text: existingProduct?['store']?.toString() ??
+          (myStores.isNotEmpty ? (myStores.first['title']?.toString() ?? '') : ''),
+    );
+    final phoneCtrl = TextEditingController(
+      text: existingProduct?['phone']?.toString() ??
+          (myStores.isNotEmpty ? (myStores.first['phone']?.toString() ?? '') : ''),
+    );
+    final whatsappCtrl = TextEditingController(
+      text: existingProduct?['whatsapp']?.toString() ??
+          (myStores.isNotEmpty ? (myStores.first['whatsapp']?.toString() ?? '') : ''),
+    );
+    final addressCtrl = TextEditingController(
+      text: existingProduct?['address']?.toString() ??
+          (myStores.isNotEmpty ? (myStores.first['address']?.toString() ?? '') : ''),
+    );
+    final descCtrl = TextEditingController(text: existingProduct?['description']?.toString() ?? '');
+
+    String selectedCat = existingProduct?['category']?.toString() ?? 'Sement';
+    if (!allListingCategories.contains(selectedCat)) selectedCat = 'Sement';
+
+    String selectedCity = existingProduct?['city']?.toString() ??
+        (myStores.isNotEmpty ? (myStores.first['city']?.toString() ?? 'Bakı') : 'Bakı');
+    if (!CategoryCityService.defaultCities.contains(selectedCity)) selectedCity = 'Bakı';
+
+    String? imageBase64 = existingProduct?['imageBase64']?.toString();
+    bool isSaving = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final Uint8List? imgBytes = decodeB64(imageBase64);
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              left: 20,
+              right: 20,
+              top: 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        isEdit ? 'Elanı Redaktə Et' : 'Yeni Elan Yerləşdir',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  Center(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () async {
+                        try {
+                          final picked = await ImagePicker().pickImage(
+                            source: ImageSource.gallery,
+                            maxWidth: 800,
+                            maxHeight: 800,
+                            imageQuality: 70,
+                          );
+                          if (picked != null) {
+                            final bytes = await picked.readAsBytes();
+                            setModalState(() => imageBase64 = base64Encode(bytes));
+                          }
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Şəkil seçilmədi: $e')),
+                          );
+                        }
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        height: 130,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
+                        ),
+                        child: imgBytes != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child: Image.memory(imgBytes, fit: BoxFit.cover),
+                              )
+                            : Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Icon(Icons.add_photo_alternate_outlined, size: 34, color: Color(0xFF1769D2)),
+                                  SizedBox(height: 6),
+                                  Text('Məhsulun Şəklini Əlavə Et', style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  TextField(
+                    controller: titleCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Məhsulun Adı *',
+                      hintText: 'Məs: Holcim Sement 50 kq (400 marka)',
+                      prefixIcon: const Icon(Icons.shopping_bag_outlined, color: Color(0xFF1769D2)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 6,
+                        child: TextField(
+                          controller: priceCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: InputDecoration(
+                            labelText: 'Qiymət (AZN) *',
+                            hintText: '7.50',
+                            prefixIcon: const Icon(Icons.payments_outlined, color: Color(0xFF10B981)),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 5,
+                        child: TextField(
+                          controller: unitCtrl,
+                          decoration: InputDecoration(
+                            labelText: 'Vahid',
+                            hintText: '1 kisə, 1 ədəd...',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: selectedCat,
+                          isDense: true,
+                          decoration: InputDecoration(
+                            labelText: 'Kateqoriya',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          items: allListingCategories.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12.5)))).toList(),
+                          onChanged: (val) {
+                            if (val != null) setModalState(() => selectedCat = val);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: selectedCity,
+                          isDense: true,
+                          decoration: InputDecoration(
+                            labelText: 'Şəhər',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          items: CategoryCityService.defaultCities.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12.5)))).toList(),
+                          onChanged: (val) {
+                            if (val != null) setModalState(() => selectedCity = val);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  if (myStores.isNotEmpty) ...[
+                    DropdownButtonFormField<String>(
+                      value: storeNameCtrl.text.isNotEmpty ? storeNameCtrl.text : myStores.first['title']?.toString(),
+                      decoration: InputDecoration(
+                        labelText: 'Hansı Mağazaya aiddir?',
+                        prefixIcon: const Icon(Icons.store_rounded, color: Color(0xFF8B5CF6)),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      items: [
+                        const DropdownMenuItem(value: '', child: Text('Fərdi Elan (Mağazasız)')),
+                        ...myStores.map((s) => DropdownMenuItem(
+                              value: s['title']?.toString() ?? '',
+                              child: Text(s['title']?.toString() ?? ''),
+                            )),
+                      ],
+                      onChanged: (val) {
+                        setModalState(() {
+                          storeNameCtrl.text = val ?? '';
+                          if (val != null && val.isNotEmpty) {
+                            final matchStore = myStores.firstWhere((s) => s['title'] == val, orElse: () => {});
+                            if (matchStore.isNotEmpty) {
+                              if (phoneCtrl.text.isEmpty) phoneCtrl.text = matchStore['phone']?.toString() ?? '';
+                              if (addressCtrl.text.isEmpty) addressCtrl.text = matchStore['address']?.toString() ?? '';
+                            }
+                          }
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  TextField(
+                    controller: phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      labelText: 'Əlaqə Nömrəsi *',
+                      hintText: '+994 50 123 45 67',
+                      prefixIcon: const Icon(Icons.phone, color: Color(0xFF10B981)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  TextField(
+                    controller: addressCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Ünvan / Ərazi *',
+                      hintText: 'Məs: Nəsimi bazarı yanı, Mağaza 4',
+                      prefixIcon: const Icon(Icons.location_on_outlined, color: Color(0xFFEA580C)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  TextField(
+                    controller: descCtrl,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      labelText: 'Ətraflı Məlumat',
+                      hintText: 'Məhsulun xüsusiyyətləri, çatdırılma və digər qeydlər...',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1769D2),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              final title = titleCtrl.text.trim();
+                              final price = priceCtrl.text.trim();
+                              final phone = phoneCtrl.text.trim();
+                              final address = addressCtrl.text.trim();
+                              if (title.isEmpty || price.isEmpty || phone.isEmpty || address.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Zəhmət olmasa Məhsul adı, Qiymət, Əlaqə nömrəsi və Ünvanı doldurun.'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                                return;
+                              }
+
+                              setModalState(() => isSaving = true);
+                              final payload = <String, dynamic>{
+                                'listingType': 'product',
+                                'title': title,
+                                'price': '$price AZN',
+                                'unit': unitCtrl.text.trim().isNotEmpty ? unitCtrl.text.trim() : '1 ədəd',
+                                'category': selectedCat,
+                                'city': selectedCity,
+                                'store': storeNameCtrl.text.trim(),
+                                'phone': phone,
+                                'whatsapp': whatsappCtrl.text.trim().isNotEmpty ? whatsappCtrl.text.trim() : phone,
+                                'address': address,
+                                'description': descCtrl.text.trim(),
+                                'imageBase64': imageBase64,
+                                'ownerId': user.uid,
+                                'userEmail': user.email ?? '',
+                              };
+
+                              try {
+                                if (isEdit) {
+                                  await FirebaseFirestore.instance
+                                      .collection('market_stores')
+                                      .doc(existingProduct['id'].toString())
+                                      .set(payload, SetOptions(merge: true));
+                                } else {
+                                  payload['createdAt'] = FieldValue.serverTimestamp();
+                                  await FirebaseFirestore.instance.collection('market_stores').add(payload);
+                                }
+                                Navigator.pop(ctx);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(isEdit ? 'Elan yeniləndi!' : 'Məhsul elanınız uğurla dərc edildi!'),
+                                    backgroundColor: const Color(0xFF059669),
+                                  ),
+                                );
+                              } catch (e) {
+                                setModalState(() => isSaving = false);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Xəta: $e'), backgroundColor: Colors.red),
+                                );
+                              }
+                            },
+                      child: isSaving
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : Text(
+                              isEdit ? 'Dəyişiklikləri Yadda Saxla' : 'Elanı Dərc Et',
+                              style: const TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.bold),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   State<MarketScreen> createState() => _MarketScreenState();
 }
@@ -390,81 +1055,8 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
       return;
     }
 
-    String? liveRole = _currentUserRole;
-    try {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      liveRole = doc.data()?['role']?.toString() ?? liveRole;
-    } catch (_) {}
-
-    if (liveRole == 'seller') {
-      onAllowed();
-      return;
-    }
-
-    if (!mounted) return;
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Row(
-          children: const [
-            Icon(Icons.storefront_rounded, color: Color(0xFF1769D2), size: 26),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Satıcı Profili Tələb Olunur',
-                style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-        content: const Text(
-          'Elan yerləşdirmək üçün Satıcı bölməsinə keçməlisiniz.',
-          style: TextStyle(fontSize: 14, color: Color(0xFF334155), height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Bağla'),
-          ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1769D2),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            icon: const Icon(Icons.swap_horiz_rounded, size: 18),
-            label: const Text('Satıcı bölməsinə keç'),
-            onPressed: () async {
-              try {
-                await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-                  'uid': user.uid,
-                  'email': user.email ?? '',
-                  'role': 'seller',
-                }, SetOptions(merge: true));
-                if (mounted) {
-                  setState(() => _currentUserRole = 'seller');
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Aktiv profil növünüz Satıcı olaraq dəyişdirildi!'),
-                      backgroundColor: Color(0xFF059669),
-                    ),
-                  );
-                  onAllowed();
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              }
-            },
-          ),
-        ],
-      ),
-    );
+    // İndi Usta, Fəhlə, Müştəri və Satıcı - hər kəs mağaza aça və elan yerləşdirə bilər (istifadəçi tələbi)
+    onAllowed();
   }
 
   void _showPublishChoiceSheet() {
@@ -541,709 +1133,11 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
   // ---------------------------------------------------------------------------
   // BÖLMƏ 1.2: MAĞAZA VƏ MƏHSUL YARATMA / REDAKTƏ / SİLMƏ
   // ---------------------------------------------------------------------------
-  Future<void> _showStoreFormSheet({Map<String, dynamic>? existingStore}) async {
-    final user = _authService.currentUser;
-    if (user == null) return;
+  Future<void> _showStoreFormSheet({Map<String, dynamic>? existingStore}) =>
+      MarketScreen.showStoreFormSheet(context, existingStore: existingStore);
 
-    final bool isEdit = existingStore != null && existingStore['id'] != null;
-    final nameCtrl = TextEditingController(text: existingStore?['title']?.toString() ?? '');
-    final phoneCtrl = TextEditingController(text: existingStore?['phone']?.toString() ?? '');
-    final whatsappCtrl = TextEditingController(
-      text: existingStore?['whatsapp']?.toString() ?? existingStore?['phone']?.toString() ?? '',
-    );
-    final addressCtrl = TextEditingController(text: existingStore?['address']?.toString() ?? '');
-    final descCtrl = TextEditingController(text: existingStore?['description']?.toString() ?? '');
-
-    String selectedCat = existingStore?['category']?.toString() ?? 'Tikinti Materialları';
-    if (!_allListingCategories.contains(selectedCat)) selectedCat = _allListingCategories.first;
-
-    String selectedCity = existingStore?['city']?.toString() ?? 'Bakı';
-    if (!CategoryCityService.defaultCities.contains(selectedCity)) selectedCity = 'Bakı';
-
-    String? logoBase64 = existingStore?['logoBase64']?.toString();
-    bool isSaving = false;
-
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) {
-          final Uint8List? logoBytes = _decodeB64(logoBase64);
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-              left: 20,
-              right: 20,
-              top: 16,
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        isEdit ? 'Mağazanı Redaktə Et' : 'Yeni Mağaza Yarat',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Mağaza Loqosu Seçimi
-                  Center(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: () async {
-                        try {
-                          final picked = await ImagePicker().pickImage(
-                            source: ImageSource.gallery,
-                            maxWidth: 512,
-                            maxHeight: 512,
-                            imageQuality: 70,
-                          );
-                          if (picked != null) {
-                            final bytes = await picked.readAsBytes();
-                            setModalState(() => logoBase64 = base64Encode(bytes));
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Loqo seçilmədi: $e')),
-                            );
-                          }
-                        }
-                      },
-                      child: Container(
-                        width: 110,
-                        height: 110,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFF6FF),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFF93C5FD), width: 1.5),
-                          image: logoBytes != null
-                              ? DecorationImage(image: MemoryImage(logoBytes), fit: BoxFit.cover)
-                              : null,
-                        ),
-                        child: logoBytes == null
-                            ? Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: const [
-                                  Icon(Icons.add_photo_alternate_rounded, color: Color(0xFF1769D2), size: 32),
-                                  SizedBox(height: 4),
-                                  Text(
-                                    'Mağaza Loqosu',
-                                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
-                                  ),
-                                ],
-                              )
-                            : Stack(
-                                children: [
-                                  Positioned(
-                                    right: 4,
-                                    bottom: 4,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: const BoxDecoration(color: Color(0xFF1769D2), shape: BoxShape.circle),
-                                      child: const Icon(Icons.edit, color: Colors.white, size: 14),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  TextField(
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Mağaza Adı *',
-                      prefixIcon: Icon(Icons.storefront_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: selectedCat,
-                          decoration: const InputDecoration(labelText: 'Kateqoriya *', prefixIcon: Icon(Icons.category)),
-                          items: _allListingCategories.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12.5)))).toList(),
-                          onChanged: (v) {
-                            if (v != null) setModalState(() => selectedCat = v);
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: selectedCity,
-                          decoration: const InputDecoration(labelText: 'Şəhər *', prefixIcon: Icon(Icons.location_city)),
-                          items: CategoryCityService.defaultCities
-                              .map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12.5))))
-                              .toList(),
-                          onChanged: (v) {
-                            if (v != null) setModalState(() => selectedCity = v);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  TextField(
-                    controller: addressCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Mağaza Ünvanı *',
-                      hintText: 'Məs: Nərimanov r., Dərnəgül bazarı',
-                      prefixIcon: Icon(Icons.location_on_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: phoneCtrl,
-                          keyboardType: TextInputType.phone,
-                          decoration: const InputDecoration(
-                            labelText: 'Telefon Nömrəsi *',
-                            hintText: '+994 50 123 45 67',
-                            prefixIcon: Icon(Icons.phone),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: whatsappCtrl,
-                          keyboardType: TextInputType.phone,
-                          decoration: const InputDecoration(
-                            labelText: 'WhatsApp Nömrəsi *',
-                            hintText: '+994 50 123 45 67',
-                            prefixIcon: Icon(Icons.chat, color: Color(0xFF16A34A)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  TextField(
-                    controller: descCtrl,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'Mağaza Haqqında Məlumat *',
-                      hintText: 'Satılan tikinti malları, iş saatları, çatdırılma...',
-                      prefixIcon: Icon(Icons.description_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1769D2),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: isSaving
-                          ? null
-                          : () async {
-                              if (nameCtrl.text.trim().isEmpty ||
-                                  addressCtrl.text.trim().isEmpty ||
-                                  phoneCtrl.text.trim().isEmpty ||
-                                  descCtrl.text.trim().isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Zəhmət olmasa bütün vacib (*) xanaları doldurun!')),
-                                );
-                                return;
-                              }
-                              setModalState(() => isSaving = true);
-                              final coords = CategoryCityService.resolveArtisanCoordinates(
-                                '$selectedCity, ${addressCtrl.text.trim()}',
-                                user.uid,
-                              );
-                              final wa = whatsappCtrl.text.trim().isNotEmpty
-                                  ? whatsappCtrl.text.trim()
-                                  : phoneCtrl.text.trim();
-                              final fullAddr = addressCtrl.text.trim().toLowerCase().contains(selectedCity.toLowerCase())
-                                  ? addressCtrl.text.trim()
-                                  : '$selectedCity, ${addressCtrl.text.trim()}';
-
-                              final payload = <String, dynamic>{
-                                'listingType': 'store',
-                                'title': nameCtrl.text.trim(),
-                                'category': selectedCat,
-                                'city': selectedCity,
-                                'address': fullAddr,
-                                'phone': phoneCtrl.text.trim(),
-                                'whatsapp': wa,
-                                'description': descCtrl.text.trim(),
-                                'logoBase64': logoBase64 ?? '',
-                                'lat': coords[0],
-                                'lng': coords[1],
-                                'userId': user.uid,
-                                'ownerId': user.uid,
-                                'userEmail': user.email ?? '',
-                                'isVerified': true,
-                                'rating': existingStore?['rating'] ?? 5.0,
-                                'reviewCount': existingStore?['reviewCount'] ?? 0,
-                              };
-                              try {
-                                if (isEdit) {
-                                  await FirebaseFirestore.instance
-                                      .collection('market_stores')
-                                      .doc(existingStore['id'].toString())
-                                      .set(payload, SetOptions(merge: true));
-                                } else {
-                                  payload['createdAt'] = FieldValue.serverTimestamp();
-                                  await FirebaseFirestore.instance.collection('market_stores').add(payload);
-                                }
-                                if (mounted) {
-                                  Navigator.pop(ctx);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(isEdit ? 'Mağaza yeniləndi!' : 'Mağazanız uğurla yaradıldı!'),
-                                      backgroundColor: const Color(0xFF059669),
-                                    ),
-                                  );
-                                }
-                              } catch (e) {
-                                setModalState(() => isSaving = false);
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Xəta: $e'), backgroundColor: Colors.red),
-                                  );
-                                }
-                              }
-                            },
-                      child: isSaving
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                            )
-                          : Text(
-                              isEdit ? 'Dəyişiklikləri Yadda Saxla' : 'Mağazanı Yarat',
-                              style: const TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.bold),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Future<void> _showProductFormSheet({Map<String, dynamic>? existingProduct}) async {
-    final user = _authService.currentUser;
-    if (user == null) return;
-
-    // İstifadəçinin mövcud mağazalarını gətir ki, istəsə mağazasına bağlasın
-    List<Map<String, dynamic>> myStores = [];
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('market_stores')
-          .where('ownerId', isEqualTo: user.uid)
-          .get();
-      myStores = snap.docs
-          .where((d) => (d.data()['listingType'] ?? 'store') == 'store')
-          .map((d) => {'id': d.id, ...d.data()})
-          .toList();
-    } catch (_) {}
-
-    if (!mounted) return;
-    final bool isEdit = existingProduct != null && existingProduct['id'] != null;
-    final titleCtrl = TextEditingController(text: existingProduct?['title']?.toString() ?? '');
-    final unitCtrl = TextEditingController(text: existingProduct?['unit']?.toString() ?? '1 ədəd');
-    final rawPrice = (existingProduct?['price']?.toString() ?? '').replaceAll('AZN', '').trim();
-    final priceCtrl = TextEditingController(text: rawPrice);
-    final storeNameCtrl = TextEditingController(
-      text: existingProduct?['store']?.toString() ??
-          (myStores.isNotEmpty ? (myStores.first['title']?.toString() ?? '') : ''),
-    );
-    final phoneCtrl = TextEditingController(
-      text: existingProduct?['phone']?.toString() ??
-          (myStores.isNotEmpty ? (myStores.first['phone']?.toString() ?? '') : ''),
-    );
-    final whatsappCtrl = TextEditingController(
-      text: existingProduct?['whatsapp']?.toString() ??
-          (myStores.isNotEmpty ? (myStores.first['whatsapp']?.toString() ?? '') : ''),
-    );
-    final addressCtrl = TextEditingController(
-      text: existingProduct?['address']?.toString() ??
-          (myStores.isNotEmpty ? (myStores.first['address']?.toString() ?? '') : ''),
-    );
-    final descCtrl = TextEditingController(text: existingProduct?['description']?.toString() ?? '');
-
-    String selectedCat = existingProduct?['category']?.toString() ?? 'Sement';
-    if (!_allListingCategories.contains(selectedCat)) selectedCat = 'Sement';
-
-    String selectedCity = existingProduct?['city']?.toString() ??
-        (myStores.isNotEmpty ? (myStores.first['city']?.toString() ?? 'Bakı') : 'Bakı');
-    if (!CategoryCityService.defaultCities.contains(selectedCity)) selectedCity = 'Bakı';
-
-    String? imageBase64 = existingProduct?['imageBase64']?.toString();
-    bool isSaving = false;
-
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) {
-          final Uint8List? imgBytes = _decodeB64(imageBase64);
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-              left: 20,
-              right: 20,
-              top: 16,
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        isEdit ? 'Məhsul Elanını Redaktə Et' : 'Yeni Məhsul / Elan Yerləşdir',
-                        style: const TextStyle(fontSize: 17.5, fontWeight: FontWeight.bold),
-                      ),
-                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Məhsul Şəkli
-                  Center(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: () async {
-                        try {
-                          final picked = await ImagePicker().pickImage(
-                            source: ImageSource.gallery,
-                            maxWidth: 640,
-                            maxHeight: 640,
-                            imageQuality: 72,
-                          );
-                          if (picked != null) {
-                            final bytes = await picked.readAsBytes();
-                            setModalState(() => imageBase64 = base64Encode(bytes));
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Şəkil seçilmədi: $e')),
-                            );
-                          }
-                        }
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
-                          image: imgBytes != null
-                              ? DecorationImage(image: MemoryImage(imgBytes), fit: BoxFit.cover)
-                              : null,
-                        ),
-                        child: imgBytes == null
-                            ? Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: const [
-                                  Icon(Icons.add_a_photo_rounded, color: Color(0xFF1769D2), size: 32),
-                                  SizedBox(height: 4),
-                                  Text(
-                                    'Məhsulun Şəklini Əlavə Et',
-                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
-                                  ),
-                                ],
-                              )
-                            : Align(
-                                alignment: Alignment.bottomRight,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(8),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black54,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: const Text('Şəkli dəyiş', style: TextStyle(color: Colors.white, fontSize: 11)),
-                                  ),
-                                ),
-                              ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  if (myStores.isNotEmpty) ...[
-                    const Text('Mağazanızı seçin (avtomatik doldur):', style: TextStyle(fontSize: 11.5, color: Color(0xFF64748B))),
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      height: 34,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        children: myStores.map((st) {
-                          final stTitle = st['title']?.toString() ?? 'Mağazam';
-                          final picked = storeNameCtrl.text.trim() == stTitle;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: ActionChip(
-                              backgroundColor: picked ? const Color(0xFF1769D2) : const Color(0xFFEFF6FF),
-                              label: Text(
-                                stTitle,
-                                style: TextStyle(fontSize: 11.5, color: picked ? Colors.white : const Color(0xFF1769D2), fontWeight: FontWeight.bold),
-                              ),
-                              onPressed: () {
-                                setModalState(() {
-                                  storeNameCtrl.text = stTitle;
-                                  if ((st['phone'] ?? '').toString().isNotEmpty) phoneCtrl.text = st['phone'].toString();
-                                  if ((st['whatsapp'] ?? '').toString().isNotEmpty) whatsappCtrl.text = st['whatsapp'].toString();
-                                  if ((st['address'] ?? '').toString().isNotEmpty) addressCtrl.text = st['address'].toString();
-                                  if ((st['city'] ?? '').toString().isNotEmpty &&
-                                      CategoryCityService.defaultCities.contains(st['city'].toString())) {
-                                    selectedCity = st['city'].toString();
-                                  }
-                                });
-                              },
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-
-                  TextField(
-                    controller: titleCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Məhsulun Adı *',
-                      hintText: 'Məs: Sement M500, Keyfiyyətli Kərpic',
-                      prefixIcon: Icon(Icons.shopping_bag_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: priceCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          decoration: const InputDecoration(
-                            labelText: 'Qiymət (AZN) *',
-                            hintText: '8.50',
-                            prefixIcon: Icon(Icons.sell_outlined),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: unitCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Ölçü Vahidi *',
-                            hintText: '25 kq kisə / 1 ədəd / 1 ton',
-                            prefixIcon: Icon(Icons.straighten_rounded),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: selectedCat,
-                          decoration: const InputDecoration(labelText: 'Kateqoriya *', prefixIcon: Icon(Icons.category)),
-                          items: _allListingCategories.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12.5)))).toList(),
-                          onChanged: (v) {
-                            if (v != null) setModalState(() => selectedCat = v);
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: selectedCity,
-                          decoration: const InputDecoration(labelText: 'Şəhər *', prefixIcon: Icon(Icons.location_city)),
-                          items: CategoryCityService.defaultCities
-                              .map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12.5))))
-                              .toList(),
-                          onChanged: (v) {
-                            if (v != null) setModalState(() => selectedCity = v);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  TextField(
-                    controller: storeNameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Mağaza / Satıcı Adı *',
-                      prefixIcon: Icon(Icons.storefront_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: phoneCtrl,
-                          keyboardType: TextInputType.phone,
-                          decoration: const InputDecoration(
-                            labelText: 'Telefon *',
-                            prefixIcon: Icon(Icons.phone),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: whatsappCtrl,
-                          keyboardType: TextInputType.phone,
-                          decoration: const InputDecoration(
-                            labelText: 'WhatsApp',
-                            prefixIcon: Icon(Icons.chat, color: Color(0xFF16A34A)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  TextField(
-                    controller: descCtrl,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'Məhsul haqqında məlumat',
-                      hintText: 'Keyfiyyət, marka, çatdırılma şərtləri...',
-                      prefixIcon: Icon(Icons.notes_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1769D2),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: isSaving
-                          ? null
-                          : () async {
-                              if (titleCtrl.text.trim().isEmpty ||
-                                  priceCtrl.text.trim().isEmpty ||
-                                  phoneCtrl.text.trim().isEmpty ||
-                                  storeNameCtrl.text.trim().isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Məhsul adı, qiymət, mağaza adı və telefon vacibdir!')),
-                                );
-                                return;
-                              }
-                              setModalState(() => isSaving = true);
-                              final formattedPrice = priceCtrl.text.trim().toUpperCase().contains('AZN')
-                                  ? priceCtrl.text.trim()
-                                  : '${priceCtrl.text.trim()} AZN';
-                              final wa = whatsappCtrl.text.trim().isNotEmpty
-                                  ? whatsappCtrl.text.trim()
-                                  : phoneCtrl.text.trim();
-                              final addr = addressCtrl.text.trim().isNotEmpty ? addressCtrl.text.trim() : selectedCity;
-
-                              final payload = <String, dynamic>{
-                                'listingType': 'product',
-                                'title': titleCtrl.text.trim(),
-                                'unit': unitCtrl.text.trim().isNotEmpty ? unitCtrl.text.trim() : '1 ədəd',
-                                'price': formattedPrice,
-                                'category': selectedCat,
-                                'city': selectedCity,
-                                'storeName': storeNameCtrl.text.trim(),
-                                'address': addr,
-                                'phone': phoneCtrl.text.trim(),
-                                'whatsapp': wa,
-                                'description': descCtrl.text.trim(),
-                                'imageBase64': imageBase64 ?? '',
-                                'userId': user.uid,
-                                'ownerId': user.uid,
-                                'userEmail': user.email ?? '',
-                              };
-
-                              try {
-                                if (isEdit) {
-                                  await FirebaseFirestore.instance
-                                      .collection('market_stores')
-                                      .doc(existingProduct['id'].toString())
-                                      .set(payload, SetOptions(merge: true));
-                                } else {
-                                  payload['createdAt'] = FieldValue.serverTimestamp();
-                                  await FirebaseFirestore.instance.collection('market_stores').add(payload);
-                                }
-                                if (mounted) {
-                                  Navigator.pop(ctx);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(isEdit ? 'Elan yeniləndi!' : 'Məhsul elanınız uğurla dərc edildi!'),
-                                      backgroundColor: const Color(0xFF059669),
-                                    ),
-                                  );
-                                }
-                              } catch (e) {
-                                setModalState(() => isSaving = false);
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Xəta: $e'), backgroundColor: Colors.red),
-                                  );
-                                }
-                              }
-                            },
-                      child: isSaving
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                            )
-                          : Text(
-                              isEdit ? 'Dəyişiklikləri Yadda Saxla' : 'Elanı Dərc Et',
-                              style: const TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.bold),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
+  Future<void> _showProductFormSheet({Map<String, dynamic>? existingProduct}) =>
+      MarketScreen.showProductFormSheet(context, existingProduct: existingProduct);
 
   Future<void> _deleteListing(String docId, {bool isStore = false}) async {
     final confirm = await showDialog<bool>(
