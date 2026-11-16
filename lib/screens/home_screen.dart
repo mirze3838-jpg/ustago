@@ -6978,7 +6978,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          // Dairəvi kamera ikonu outline
+                          // Dairəvi media/kamera ikonu outline
                           Container(
                             width: 82,
                             height: 82,
@@ -6988,7 +6988,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             child: const Center(
                               child: Icon(
-                                Icons.camera_alt_outlined,
+                                Icons.photo_camera_back_outlined,
                                 size: 38,
                                 color: Color(0xFF1E293B),
                               ),
@@ -6996,7 +6996,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(height: 18),
                           const Text(
-                            'Fotoğraflar Paylaş',
+                            'Foto və Videolar Paylaş',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 16,
@@ -7006,7 +7006,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            'Paylaştığın fotoğraflar profilinde gözükür.',
+                            'TikTok hesabını bağladıqdan sonra foto və videolar burada görünəcək.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 13,
