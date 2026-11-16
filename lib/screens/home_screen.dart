@@ -6123,7 +6123,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Sol: Geri qayıtmaq və ya Kilid/Brend
+                  // Sol: Geri qayıtmaq və ya Başlıq
                   if (Navigator.canPop(context))
                     InkWell(
                       onTap: () => Navigator.pop(context),
@@ -6133,30 +6133,74 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     )
                   else
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(Icons.lock_outline_rounded, size: 16, color: Color(0xFF0F172A)),
-                        SizedBox(width: 4),
-                      ],
+                    const Text(
+                      'Profil',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A),
+                        letterSpacing: -0.3,
+                      ),
                     ),
 
-                  // Orta: @istifadəçi_adı (Instagram stili - UstaGo istifadəçi adı)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '@${displayName.toLowerCase().replaceAll(' ', '_')}',
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A),
-                          letterSpacing: -0.2,
+                  // Orta: Canlı Sərbəst / Məşğul Status Göstəricisi (Kliklə dəyişir)
+                  InkWell(
+                    onTap: () async {
+                      final newStatus = !isWorking;
+                      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                        'isWorking': newStatus,
+                      }, SetOptions(merge: true));
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(newStatus
+                                ? 'Status "Hal-hazırda məşğulam" olaraq dəyişdirildi!'
+                                : 'Status "Sərbəstəm (Online)" olaraq dəyişdirildi!'),
+                            backgroundColor: newStatus ? Colors.orange : Colors.green,
+                          ),
+                        );
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isWorking ? const Color(0xFFFEE2E2) : const Color(0xFFDCFCE7),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isWorking ? const Color(0xFFFCA5A5) : const Color(0xFF86EFAC),
+                          width: 1.2,
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.verified, color: Color(0xFF1769D2), size: 17),
-                    ],
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: isWorking ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            isWorking ? 'Məşğulam' : 'Sərbəstəm',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isWorking ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.sync_rounded,
+                            size: 13,
+                            color: isWorking ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
 
                   // Sağ: Bütün ayarlar və idarəetmə üçün 3 Nöqtə (⋮)
@@ -6277,13 +6321,19 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Ad və Soyad
-                      Text(
-                        displayName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          color: Color(0xFF0F172A),
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            displayName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(Icons.verified, color: Color(0xFF1769D2), size: 16),
+                        ],
                       ),
                       const SizedBox(height: 2),
 
