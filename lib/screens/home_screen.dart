@@ -5869,7 +5869,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         try {
                           await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
                             'tiktokConnected': true,
-                            'tiktokHandle': handle,
+                            'tiktokHandle': _cleanTikTokHandle(handle),
                             'tiktokConnectedAt': FieldValue.serverTimestamp(),
                           }, SetOptions(merge: true));
                         } catch (_) {}
@@ -5881,7 +5881,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(parentCtx).showSnackBar(
                           SnackBar(
-                            content: Text('$handle TikTok hesabı UstaGo ilə uğurla əlaqələndirildi! 🎉'),
+                            content: Text('${_cleanTikTokHandle(handle)} TikTok hesabı UstaGo ilə uğurla əlaqələndirildi! 🎉'),
                             backgroundColor: Colors.green,
                           ),
                         );
@@ -5897,9 +5897,23 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// TikTok istifadəçi adını təmizləyən köməkçi (linkləri və artıq işarələri silir)
+  static String _cleanTikTokHandle(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return '';
+    var s = raw.trim();
+    if (s.contains('?')) s = s.split('?').first;
+    s = s.replaceAll(RegExp(r'/+$'), '');
+    if (s.contains('/@')) {
+      s = s.split('/@').last;
+    } else if (s.contains('tiktok.com/')) {
+      s = s.split('tiktok.com/').last;
+    }
+    return s.replaceAll('@', '').trim();
+  }
+
   /// TikTok Profilinə keçid
   Future<void> _openTikTokProfile(String handle) async {
-    final cleanHandle = handle.replaceAll('@', '').trim();
+    final cleanHandle = _cleanTikTokHandle(handle);
     final url = 'https://www.tiktok.com/@$cleanHandle';
     try {
       final uri = Uri.parse(url);
@@ -6089,7 +6103,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final String bio = (userData?['bio'] != null && (userData!['bio'] as String).trim().isNotEmpty)
         ? userData!['bio'] as String
         : 'Keyfiyyətli və peşəkar təmir xidməti. Təcrübə: 10+ il. Hər növ tikinti və təmir işləri.';
-    final String? tiktokHandle = (userData?['tiktokHandle'] as String?)?.trim();
+    final String rawTikTok = (userData?['tiktokHandle'] as String?)?.trim() ?? '';
+    final String cleanTikTok = _cleanTikTokHandle(rawTikTok);
     final bool tiktokConnected = userData?['tiktokConnected'] == true;
 
     return Container(
@@ -6126,14 +6141,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
 
-                  // Orta: @istifadəçi_adı (Instagram stili)
+                  // Orta: @istifadəçi_adı (Instagram stili - UstaGo istifadəçi adı)
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        (tiktokHandle != null && tiktokHandle.isNotEmpty)
-                            ? (tiktokHandle.startsWith('@') ? tiktokHandle : '@$tiktokHandle')
-                            : '@${displayName.toLowerCase().replaceAll(' ', '_')}',
+                        '@${displayName.toLowerCase().replaceAll(' ', '_')}',
                         style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
@@ -6307,8 +6320,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       // TikTok Linki
                       InkWell(
                         onTap: () {
-                          if (tiktokHandle != null && tiktokHandle.isNotEmpty) {
-                            _openTikTokProfile(tiktokHandle);
+                          if (cleanTikTok.isNotEmpty) {
+                            _openTikTokProfile(cleanTikTok);
                           } else {
                             _showTikTokSyncDialog(context);
                           }
@@ -6319,8 +6332,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             const Icon(Icons.link_rounded, size: 16, color: Color(0xFF1769D2)),
                             const SizedBox(width: 4),
                             Text(
-                              (tiktokHandle != null && tiktokHandle.isNotEmpty)
-                                  ? 'tiktok.com/${tiktokHandle.startsWith('@') ? tiktokHandle : '@$tiktokHandle'}'
+                              cleanTikTok.isNotEmpty
+                                  ? 'tiktok.com/@$cleanTikTok'
                                   : 'TikTok hesabını bağla',
                               style: const TextStyle(
                                 color: Color(0xFF1769D2),
@@ -6385,7 +6398,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             icon: const Icon(Icons.music_note_rounded, color: Color(0xFFFE2C55), size: 16),
                             label: Text(
-                              tiktokConnected ? 'TikTok: @${tiktokHandle ?? 'Usta'}' : 'TikTok ilə Qoşul',
+                              tiktokConnected && cleanTikTok.isNotEmpty ? 'TikTok: @$cleanTikTok' : 'TikTok ilə Qoşul',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
@@ -6434,8 +6447,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         bgColor: Colors.black,
                         label: 'Rəsmi TikTok',
                         onTap: () {
-                          if (tiktokHandle != null && tiktokHandle.isNotEmpty) {
-                            _openTikTokProfile(tiktokHandle);
+                          if (cleanTikTok.isNotEmpty) {
+                            _openTikTokProfile(cleanTikTok);
                           } else {
                             _showTikTokSyncDialog(context);
                           }
