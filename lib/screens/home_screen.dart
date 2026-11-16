@@ -4159,6 +4159,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final websiteController = TextEditingController(text: userData?['websiteUrl'] ?? userData?['website'] ?? '');
     final specialtySearchController = TextEditingController();
     String specialtySearchQuery = '';
+    String specialtyLimitWarning = '';
 
     String selectedRole = userData?['role'] ?? 'usta';
     String selectedUstaCategory = userData?['category'] ?? 'Tikinti';
@@ -4548,7 +4549,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                           style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
                                         ),
                                         GestureDetector(
-                                          onTap: () => setDialogState(() => selectedSpecialtyIds.clear()),
+                                          onTap: () => setDialogState(() {
+                                            specialtyLimitWarning = '';
+                                            selectedSpecialtyIds.clear();
+                                          }),
                                           child: const Text(
                                             'Hamısını təmizlə',
                                             style: TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.w600),
@@ -4566,7 +4570,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                         return Chip(
                                           backgroundColor: const Color(0xFFEFF6FF),
                                           deleteIcon: const Icon(Icons.close_rounded, size: 14, color: Color(0xFF1769D2)),
-                                          onDeleted: () => setDialogState(() => selectedSpecialtyIds.remove(sId)),
+                                          onDeleted: () => setDialogState(() {
+                                            specialtyLimitWarning = '';
+                                            selectedSpecialtyIds.remove(sId);
+                                          }),
                                           label: Text(
                                             title,
                                             style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF1769D2)),
@@ -4581,6 +4588,57 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                               const SizedBox(height: 10),
+                            ],
+
+                            // 5-ci ixtisas seçilərkən birbaşa bölmə daxilində görünən xəbərdarlıq banneri
+                            if (specialtyLimitWarning.isNotEmpty) ...[
+                              Container(
+                                width: double.infinity,
+                                margin: const EdgeInsets.only(bottom: 12),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEF2F2),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: const Color(0xFFFCA5A5), width: 1.5),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFFEF4444).withOpacity(0.08),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(5),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFFFEE2E2),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 18),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        specialtyLimitWarning,
+                                        style: const TextStyle(
+                                          color: Color(0xFFB91C1C),
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    InkWell(
+                                      onTap: () => setDialogState(() => specialtyLimitWarning = ''),
+                                      child: const Padding(
+                                        padding: EdgeInsets.all(4),
+                                        child: Icon(Icons.close_rounded, size: 16, color: Color(0xFFDC2626)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ],
 
                             // Qeydiyyatdakı Kateqoriya Qrupları Akordeon Şəklində
@@ -4677,6 +4735,32 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                     if (isExpanded) ...[
                                       const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                                      if (specialtyLimitWarning.isNotEmpty)
+                                        Container(
+                                          margin: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFEF2F2),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: const Color(0xFFFECDD3)),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 16),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: Text(
+                                                  specialtyLimitWarning,
+                                                  style: const TextStyle(color: Color(0xFFB91C1C), fontSize: 11.5, fontWeight: FontWeight.bold),
+                                                ),
+                                              ),
+                                              InkWell(
+                                                onTap: () => setDialogState(() => specialtyLimitWarning = ''),
+                                                child: const Icon(Icons.close_rounded, size: 14, color: Color(0xFFDC2626)),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       Padding(
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                         child: Wrap(
@@ -4711,17 +4795,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                                 setDialogState(() {
                                                   if (selected) {
                                                     if (selectedSpecialtyIds.length >= 4) {
-                                                      ScaffoldMessenger.of(context).showSnackBar(
-                                                        const SnackBar(
-                                                          content: Text('Maksimum 4 ixtisas sahəsi seçə bilərsiniz!'),
-                                                          backgroundColor: Color(0xFFE11D48),
-                                                          duration: Duration(seconds: 2),
-                                                        ),
-                                                      );
+                                                      specialtyLimitWarning = 'Maksimum 4 ixtisas sahəsi seçə bilərsiniz!';
                                                       return;
                                                     }
+                                                    specialtyLimitWarning = '';
                                                     selectedSpecialtyIds.add(itemId);
                                                   } else {
+                                                    specialtyLimitWarning = '';
                                                     selectedSpecialtyIds.remove(itemId);
                                                   }
                                                 });
