@@ -4735,32 +4735,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                     if (isExpanded) ...[
                                       const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                                      if (specialtyLimitWarning.isNotEmpty)
-                                        Container(
-                                          margin: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFFEF2F2),
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: Border.all(color: const Color(0xFFFECDD3)),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 16),
-                                              const SizedBox(width: 6),
-                                              Expanded(
-                                                child: Text(
-                                                  specialtyLimitWarning,
-                                                  style: const TextStyle(color: Color(0xFFB91C1C), fontSize: 11.5, fontWeight: FontWeight.bold),
-                                                ),
-                                              ),
-                                              InkWell(
-                                                onTap: () => setDialogState(() => specialtyLimitWarning = ''),
-                                                child: const Icon(Icons.close_rounded, size: 14, color: Color(0xFFDC2626)),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
                                       Padding(
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                         child: Wrap(
