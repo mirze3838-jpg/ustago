@@ -6011,45 +6011,62 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// İnstaqram stilində Statistika Sütunu (12 | göndəri)
-  Widget _buildInstagramStatItem(String count, String label) {
+  /// UstaGo brendinə uyğun Statistika Sütunu (İşlərim, Video İşlər, Reytinq)
+  Widget _buildUstaStatItem({
+    required String count,
+    required String label,
+    IconData? icon,
+    Color? iconColor,
+  }) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          count,
-          style: const TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF0F172A),
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 15, color: iconColor ?? const Color(0xFF1769D2)),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              count,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 3),
         Text(
           label,
           style: const TextStyle(
-            fontSize: 13,
-            color: Color(0xFF475569),
-            fontWeight: FontWeight.w400,
+            fontSize: 12,
+            color: Color(0xFF64748B),
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],
     );
   }
 
-  /// Dairəvi Hekayələr (Instagram Highlights / Önə Çıxarılanlar)
+  /// Dairəvi Bölmələr (UstaGo Highlights / Xidmətlər, Əlaqə, Məkan, TikTok)
   Widget _buildHighlightCircle({
     required IconData icon,
     required Color iconColor,
     required Color bgColor,
+    Color? borderColor,
     required String label,
     required VoidCallback onTap,
   }) {
+    final ringColor = borderColor ?? iconColor.withOpacity(0.4);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(40),
       child: Container(
-        width: 74,
+        width: 76,
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -6058,16 +6075,16 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.all(2.5),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
+                border: Border.all(color: ringColor, width: 1.8),
               ),
               child: Container(
-                width: 52,
-                height: 52,
+                width: 50,
+                height: 50,
                 decoration: BoxDecoration(
                   color: bgColor,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: iconColor, size: 24),
+                child: Icon(icon, color: iconColor, size: 22),
               ),
             ),
             const SizedBox(height: 5),
@@ -6079,7 +6096,7 @@ class _HomeScreenState extends State<HomeScreen> {
               style: const TextStyle(
                 fontSize: 11,
                 color: Color(0xFF334155),
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -6224,30 +6241,30 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 const SizedBox(height: 8),
 
-                // Yuxarı Sətir: Dairəvi Avatar (Instagram Ring) + 3 Göstərici Sütunu
+                // Yuxarı Sətir: Dairəvi Avatar (UstaGo Ring) + 3 Göstərici Sütunu
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Row(
                     children: [
-                      // Avatar (Instagram gradient halqası ilə)
+                      // Avatar (UstaGo firuzəyi-göy brend halqası ilə)
                       Stack(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(2.8),
+                            padding: const EdgeInsets.all(3.0),
                             decoration: const BoxDecoration(
                               shape: BoxShape.circle,
                               gradient: LinearGradient(
                                 colors: [
-                                  Color(0xFFFBAA47),
-                                  Color(0xFFD91A46),
-                                  Color(0xFFA60F93),
+                                  Color(0xFF1E88E5), // UstaGo Royal Blue
+                                  Color(0xFF00D2FF), // Parlaq Firuzəyi Cyan
+                                  Color(0xFF059669), // Zümrüd Yaşıl
                                 ],
-                                begin: Alignment.bottomLeft,
-                                end: Alignment.topRight,
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
                               ),
                             ),
                             child: Container(
-                              padding: const EdgeInsets.all(2),
+                              padding: const EdgeInsets.all(2.5),
                               decoration: const BoxDecoration(
                                 color: Colors.white,
                                 shape: BoxShape.circle,
@@ -6282,7 +6299,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(width: 16),
 
-                      // 3 Göstərici: Göndəri (İşlər) • Video (TikTok) • Reytinq
+                      // 3 Göstərici: İşlərim (Portfolio) • Video İşlər (Shorts) • Reytinq
                       Expanded(
                         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                           stream: FirebaseFirestore.instance
@@ -6298,12 +6315,28 @@ class _HomeScreenState extends State<HomeScreen> {
                                   .snapshots(),
                               builder: (context, shortSnap) {
                                 final shortCount = shortSnap.data?.docs.length ?? 0;
+                                final cleanRating = rating.replaceAll('★', '').trim();
                                 return Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                                   children: [
-                                    _buildInstagramStatItem('$postCount', 'göndəri'),
-                                    _buildInstagramStatItem('$shortCount', 'video'),
-                                    _buildInstagramStatItem(rating.startsWith('★') ? rating : '★ $rating', 'reytinq'),
+                                    _buildUstaStatItem(
+                                      count: '$postCount',
+                                      label: 'İşlərim',
+                                      icon: Icons.photo_library_outlined,
+                                      iconColor: const Color(0xFF1769D2),
+                                    ),
+                                    _buildUstaStatItem(
+                                      count: '$shortCount',
+                                      label: 'Video İşlər',
+                                      icon: Icons.play_circle_outline_rounded,
+                                      iconColor: const Color(0xFFE11D48),
+                                    ),
+                                    _buildUstaStatItem(
+                                      count: cleanRating,
+                                      label: 'Reytinq',
+                                      icon: Icons.star_rounded,
+                                      iconColor: const Color(0xFFF59E0B),
+                                    ),
                                   ],
                                 );
                               },
@@ -6411,7 +6444,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
-                // Fəaliyyət Düymələri (Instagram Action Buttons)
+                // Fəaliyyət Düymələri (UstaGo Quick Action Buttons)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   child: Row(
@@ -6419,17 +6452,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       // 1. Profili Redaktə Et
                       Expanded(
                         child: SizedBox(
-                          height: 36,
-                          child: ElevatedButton(
+                          height: 38,
+                          child: ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFE2E8F0),
-                              foregroundColor: const Color(0xFF0F172A),
+                              backgroundColor: const Color(0xFFEFF6FF),
+                              foregroundColor: const Color(0xFF1769D2),
                               elevation: 0,
+                              side: const BorderSide(color: Color(0xFFBFDBFE), width: 1.2),
                               padding: EdgeInsets.zero,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
+                            icon: const Icon(Icons.edit_note_rounded, size: 18, color: Color(0xFF1769D2)),
+                            label: const Text('Profili Redaktə', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                             onPressed: () => _showEditProfileDialog(user.uid, userData),
-                            child: const Text('Profili Redaktə Et', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                           ),
                         ),
                       ),
@@ -6438,18 +6473,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       // 2. TikTok ilə Qoşul
                       Expanded(
                         child: SizedBox(
-                          height: 36,
+                          height: 38,
                           child: ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF0F172A),
                               foregroundColor: Colors.white,
                               elevation: 0,
-                              padding: EdgeInsets.zero,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
                             icon: const Icon(Icons.music_note_rounded, color: Color(0xFFFE2C55), size: 16),
                             label: Text(
-                              tiktokConnected && cleanTikTok.isNotEmpty ? 'TikTok: @$cleanTikTok' : 'TikTok ilə Qoşul',
+                              tiktokConnected && cleanTikTok.isNotEmpty ? 'TikTok: @$cleanTikTok' : 'TikTok İlə Qoşul',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
@@ -6462,15 +6497,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       // 3. Paylaş
                       SizedBox(
-                        height: 36,
-                        width: 40,
+                        height: 38,
+                        width: 42,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFE2E8F0),
-                            foregroundColor: const Color(0xFF0F172A),
+                            backgroundColor: const Color(0xFFF8FAFC),
+                            foregroundColor: const Color(0xFF334155),
                             elevation: 0,
+                            side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
                             padding: EdgeInsets.zero,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                           onPressed: () {
                             Clipboard.setData(ClipboardData(text: 'UstaGo Profil: $displayName ($phone)'));
@@ -6478,14 +6514,14 @@ class _HomeScreenState extends State<HomeScreen> {
                               SnackBar(content: Text('$displayName profil linki kopyalandı!'), backgroundColor: const Color(0xFF1769D2)),
                             );
                           },
-                          child: const Icon(Icons.share_outlined, size: 16),
+                          child: const Icon(Icons.share_rounded, size: 18, color: Color(0xFF475569)),
                         ),
                       ),
                     ],
                   ),
                 ),
 
-                // Dairəvi Hekayələr (Instagram Highlights / Önə Çıxarılanlar)
+                // Dairəvi Hekayələr (UstaGo Highlights / Önə Çıxarılanlar)
                 SizedBox(
                   height: 92,
                   child: ListView(
@@ -6496,6 +6532,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         icon: Icons.music_note_rounded,
                         iconColor: const Color(0xFFFE2C55),
                         bgColor: Colors.black,
+                        borderColor: const Color(0xFFFE2C55),
                         label: 'Rəsmi TikTok',
                         onTap: () {
                           if (cleanTikTok.isNotEmpty) {
@@ -6509,13 +6546,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         icon: Icons.handyman_rounded,
                         iconColor: const Color(0xFF1769D2),
                         bgColor: const Color(0xFFEFF6FF),
+                        borderColor: const Color(0xFF1769D2),
                         label: 'Xidmətlər',
                         onTap: () => _showServicesModal(context, category, userData),
                       ),
                       _buildHighlightCircle(
                         icon: Icons.phone_in_talk_rounded,
-                        iconColor: const Color(0xFF22C55E),
-                        bgColor: const Color(0xFFF0FDF4),
+                        iconColor: const Color(0xFF10B981),
+                        bgColor: const Color(0xFFECFDF5),
+                        borderColor: const Color(0xFF10B981),
                         label: 'Əlaqə',
                         onTap: () => _showContactModal(context, phone),
                       ),
@@ -6523,6 +6562,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         icon: Icons.location_on_rounded,
                         iconColor: const Color(0xFFF59E0B),
                         bgColor: const Color(0xFFFEF3C7),
+                        borderColor: const Color(0xFFF59E0B),
                         label: 'Məkan',
                         onTap: () => _showLocationPickerModal(user.uid, userData),
                       ),
@@ -6530,11 +6570,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 6),
-
-                // Instagram Tab Bar (▦ Şəkillər / ▷ Videolar)
+                // UstaGo Brend Tab Bar (Foto Portfolio / Video İşlər)
                 Container(
+                  margin: const EdgeInsets.only(top: 8),
                   decoration: const BoxDecoration(
+                    color: Color(0xFFF8FAFC),
                     border: Border(
                       top: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
                       bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
@@ -6542,46 +6582,76 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: Row(
                     children: [
-                      // Tab 0: ▦ Şəkillər
+                      // Tab 0: Foto Portfolio
                       Expanded(
                         child: InkWell(
                           onTap: () => setState(() => _ustaProfileGalleryTab = 0),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
+                              color: _ustaProfileGalleryTab == 0 ? Colors.white : Colors.transparent,
                               border: Border(
                                 bottom: BorderSide(
-                                  color: _ustaProfileGalleryTab == 0 ? Colors.black : Colors.transparent,
-                                  width: 1.5,
+                                  color: _ustaProfileGalleryTab == 0 ? const Color(0xFF1769D2) : Colors.transparent,
+                                  width: 2.5,
                                 ),
                               ),
                             ),
-                            child: Icon(
-                              Icons.grid_on_rounded,
-                              color: _ustaProfileGalleryTab == 0 ? Colors.black : const Color(0xFF94A3B8),
-                              size: 24,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.photo_library_rounded,
+                                  color: _ustaProfileGalleryTab == 0 ? const Color(0xFF1769D2) : const Color(0xFF64748B),
+                                  size: 19,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Foto Portfolio',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: _ustaProfileGalleryTab == 0 ? FontWeight.bold : FontWeight.w500,
+                                    color: _ustaProfileGalleryTab == 0 ? const Color(0xFF1769D2) : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ),
-                      // Tab 1: ▷ Videolar (Reels / TikTok)
+                      // Tab 1: Video İşlər (Shorts / TikTok)
                       Expanded(
                         child: InkWell(
                           onTap: () => setState(() => _ustaProfileGalleryTab = 1),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
+                              color: _ustaProfileGalleryTab == 1 ? Colors.white : Colors.transparent,
                               border: Border(
                                 bottom: BorderSide(
-                                  color: _ustaProfileGalleryTab == 1 ? Colors.black : Colors.transparent,
-                                  width: 1.5,
+                                  color: _ustaProfileGalleryTab == 1 ? const Color(0xFF1769D2) : Colors.transparent,
+                                  width: 2.5,
                                 ),
                               ),
                             ),
-                            child: Icon(
-                              Icons.video_library_outlined,
-                              color: _ustaProfileGalleryTab == 1 ? Colors.black : const Color(0xFF94A3B8),
-                              size: 24,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.play_circle_fill_rounded,
+                                  color: _ustaProfileGalleryTab == 1 ? const Color(0xFF1769D2) : const Color(0xFF64748B),
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Video İşlər',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: _ustaProfileGalleryTab == 1 ? FontWeight.bold : FontWeight.w500,
+                                    color: _ustaProfileGalleryTab == 1 ? const Color(0xFF1769D2) : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
