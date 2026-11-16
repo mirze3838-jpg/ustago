@@ -19,7 +19,6 @@ import '../services/category_city_service.dart';
 import '../services/shorts_social_service.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
-import 'admin_screen.dart';
 import 'shorts_screen.dart';
 import 'market_screen.dart';
 import 'artisan_detail_screen.dart';
@@ -50,7 +49,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _mapSearchController = TextEditingController();
   String? _currentUserRole;
   final TextEditingController _searchController = TextEditingController();
-  int _adminSecretTap = 0;
   int _unreadNotifications = 0;
   int _ustaProfileGalleryTab = 0; // 0: Portfolio, 1: Shorts
   bool _isUstaBioExpanded = false;
@@ -846,19 +844,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 20),
               Center(
-                child: GestureDetector(
-                  onTap: () {
-                    _adminSecretTap++;
-                    if (_adminSecretTap >= 5) {
-                      _adminSecretTap = 0;
-                      Navigator.pop(ctx);
-                      _showAdminAccessDialog();
-                    }
-                  },
-                  child: Text(
-                    'UstaGo v1.0.0 (Bütün hüquqlar qorunur)',
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                  ),
+                child: Text(
+                  'UstaGo v1.0.0 (Bütün hüquqlar qorunur)',
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                 ),
               ),
             ],
@@ -3737,68 +3725,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showAdminAccessDialog() {
-    final pinController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: const [
-            Icon(Icons.security, color: Color(0xFF1769D2)),
-            SizedBox(width: 8),
-            Text('Admin Girişi', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Admin panelinə daxil olmaq üçün təhlükəsizlik şifrəsini daxil edin:',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: pinController,
-              obscureText: true,
-              keyboardType: TextInputType.text,
-              decoration: const InputDecoration(
-                labelText: 'Admin Şifrəsi',
-                prefixIcon: Icon(Icons.lock),
-                hintText: 'Admin şifrəsini daxil edin',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Ləğv et'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1769D2),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: () {
-              final pin = pinController.text.trim();
-              if (pin == 'ustago2026' || pin == '7777' || _currentUserRole == 'admin') {
-                Navigator.pop(ctx);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminScreen()));
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Yanlış admin şifrəsi!'), backgroundColor: Colors.red),
-                );
-              }
-            },
-            child: const Text('Daxil ol', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
   // Yeni İş / Şəkil və ya Shorts Video Paylaşmaq dialoqu (Yeni dizayn və sistemə 1:1 uyğun)
   Future<void> _showAddPostDialog(String uid, String authorName, String role, {int initialTab = 0, bool lockTab = false}) async {
     // Qalereya və video seçimi üçün MediaCodec və RAM-ı dərhal tam boşaldırıq
@@ -5244,27 +5170,6 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 16),
             ],
 
-            // Yalnız sistem rəhbəri (mirze3838@gmail.com və ya admin rolu olan) üçün Admin Paneli
-            if (isAdmin || (user.email != null && user.email!.toLowerCase() == 'mirze3838@gmail.com') || (userData?['role'] == 'admin')) ...[
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.amber.shade300),
-                ),
-                child: ListTile(
-                  leading: const Icon(Icons.security, color: Colors.amber, size: 26),
-                  title: const Text('Admin İdarəetmə Paneli', style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('Ustaları təsdiqlə və sistemi idarə et'),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.amber),
-                  onTap: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminScreen()));
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-
             // Usta Haqqında (Təcrübə və Xidmət) kartı — istədikdə birbaşa buradan redaktə edə bilər
             if (userRole == 'usta') ...[
               Container(
@@ -5595,23 +5500,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       });
                     },
                   ),
-
-                  // Admin Paneli (yalnız adminlər üçün)
-                  if (isAdmin || (userData?['role'] == 'admin'))
-                    ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(10)),
-                        child: const Icon(Icons.security, color: Colors.amber, size: 20),
-                      ),
-                      title: const Text('Admin İdarəetmə Paneli', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                      subtitle: const Text('Ustaları təsdiqlə və sistemi idarə et', style: TextStyle(fontSize: 12)),
-                      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.amber),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminScreen()));
-                      },
-                    ),
 
                   // 7. Kömək və Dəstək
                   ListTile(
