@@ -431,7 +431,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (imgBytes != null)
+                  if ((_prod['imageUrl'] ?? '').toString().startsWith('http'))
+                    Image.network(
+                      _prod['imageUrl'].toString(),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => imgBytes != null
+                          ? Image.memory(imgBytes, fit: BoxFit.cover)
+                          : const SizedBox.shrink(),
+                    )
+                  else if (imgBytes != null)
                     Image.memory(imgBytes, fit: BoxFit.cover)
                   else
                     Container(
@@ -845,9 +853,21 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
                       CircleAvatar(
                         radius: 34,
                         backgroundColor: const Color(0xFFEFF6FF),
-                        child: logoBytes != null
-                            ? ClipOval(child: Image.memory(logoBytes, fit: BoxFit.cover, width: 68, height: 68))
-                            : const Icon(Icons.storefront_rounded, color: Color(0xFF1769D2), size: 36),
+                        child: (store['logoUrl'] ?? '').toString().startsWith('http')
+                            ? ClipOval(
+                                child: Image.network(
+                                  store['logoUrl'].toString(),
+                                  fit: BoxFit.cover,
+                                  width: 68,
+                                  height: 68,
+                                  errorBuilder: (_, __, ___) => logoBytes != null
+                                      ? Image.memory(logoBytes, fit: BoxFit.cover, width: 68, height: 68)
+                                      : const Icon(Icons.storefront_rounded, color: Color(0xFF1769D2), size: 36),
+                                ),
+                              )
+                            : (logoBytes != null
+                                ? ClipOval(child: Image.memory(logoBytes, fit: BoxFit.cover, width: 68, height: 68))
+                                : const Icon(Icons.storefront_rounded, color: Color(0xFF1769D2), size: 36)),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -1039,14 +1059,27 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
                                   children: [
                                     ClipRRect(
                                       borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
-                                      child: pBytes != null
-                                          ? Image.memory(pBytes, fit: BoxFit.cover)
-                                          : Container(
-                                              color: const Color(0xFFEFF6FF),
-                                              child: const Center(
-                                                child: Icon(Icons.image_outlined, color: Color(0xFF94A3B8), size: 36),
-                                              ),
-                                            ),
+                                      child: (p['imageUrl'] ?? '').toString().startsWith('http')
+                                          ? Image.network(
+                                              p['imageUrl'].toString(),
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => pBytes != null
+                                                  ? Image.memory(pBytes, fit: BoxFit.cover)
+                                                  : Container(
+                                                      color: const Color(0xFFEFF6FF),
+                                                      child: const Center(
+                                                        child: Icon(Icons.image_outlined, color: Color(0xFF94A3B8), size: 36),
+                                                      ),
+                                                    ),
+                                            )
+                                          : (pBytes != null
+                                              ? Image.memory(pBytes, fit: BoxFit.cover)
+                                              : Container(
+                                                  color: const Color(0xFFEFF6FF),
+                                                  child: const Center(
+                                                    child: Icon(Icons.image_outlined, color: Color(0xFF94A3B8), size: 36),
+                                                  ),
+                                                )),
                                     ),
                                     // Mavi "Mağaza" pill-i (Şəkil 1-ə tam uyğun)
                                     Positioned(

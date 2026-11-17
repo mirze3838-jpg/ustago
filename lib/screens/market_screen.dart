@@ -1,3 +1,4 @@
+import '../services/r2_image_upload_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -99,6 +100,8 @@ class MarketScreen extends StatefulWidget {
     if (!CategoryCityService.defaultCities.contains(selectedCity)) selectedCity = 'Bakı';
 
     String? logoBase64 = existingStore?['logoBase64']?.toString();
+    String? logoUrl = existingStore?['logoUrl']?.toString();
+    Uint8List? rawPickedLogoBytes;
     bool isSaving = false;
 
     if (!context.mounted) return;
@@ -148,6 +151,7 @@ class MarketScreen extends StatefulWidget {
                           );
                           if (picked != null) {
                             final bytes = await picked.readAsBytes();
+                            rawPickedLogoBytes = bytes;
                             setModalState(() => logoBase64 = base64Encode(bytes));
                           }
                         } catch (e) {
@@ -432,6 +436,8 @@ class MarketScreen extends StatefulWidget {
     if (!CategoryCityService.defaultCities.contains(selectedCity)) selectedCity = 'Bakı';
 
     String? imageBase64 = existingProduct?['imageBase64']?.toString();
+    String? imageUrl = existingProduct?['imageUrl']?.toString();
+    Uint8List? rawPickedImageBytes;
     bool isSaving = false;
 
     if (!context.mounted) return;
@@ -481,6 +487,7 @@ class MarketScreen extends StatefulWidget {
                           );
                           if (picked != null) {
                             final bytes = await picked.readAsBytes();
+                            rawPickedImageBytes = bytes;
                             setModalState(() => imageBase64 = base64Encode(bytes));
                           }
                         } catch (e) {
@@ -2791,6 +2798,7 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                   'category': data['category'] ?? 'Tikinti Materialları',
                   'description': data['description'] ?? '',
                   'imageBase64': data['imageBase64'] ?? '',
+                  'imageUrl': data['imageUrl'] ?? '',
                   'isVip': true,
                   'createdAt': data['createdAt'],
                 });
@@ -3045,6 +3053,19 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
   }
 
   Widget _buildProductVisual(Map<String, dynamic> prod) {
+    final String? imgUrl = prod['imageUrl']?.toString();
+    if (imgUrl != null && imgUrl.startsWith('http')) {
+      return Image.network(
+        imgUrl,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) {
+          final Uint8List? imgBytes = _decodeB64(prod['imageBase64']?.toString());
+          if (imgBytes != null) return Image.memory(imgBytes, fit: BoxFit.cover, gaplessPlayback: true);
+          return const SizedBox.shrink();
+        },
+      );
+    }
     final Uint8List? imgBytes = _decodeB64(prod['imageBase64']?.toString());
     if (imgBytes != null) {
       return Image.memory(imgBytes, fit: BoxFit.cover, gaplessPlayback: true);

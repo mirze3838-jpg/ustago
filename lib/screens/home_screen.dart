@@ -7513,9 +7513,21 @@ class _HomeScreenState extends State<HomeScreen> {
                                   CircleAvatar(
                                     radius: 28,
                                     backgroundColor: Colors.white,
-                                    child: _HomeScreenState._decodeB64(storeData?['logoBase64']?.toString()) != null
-                                        ? ClipOval(child: Image.memory(_HomeScreenState._decodeB64(storeData!['logoBase64'].toString())!, fit: BoxFit.cover, width: 56, height: 56))
-                                        : const Icon(Icons.store_rounded, color: Color(0xFF8B5CF6), size: 30),
+                                    child: (storeData?['logoUrl'] ?? '').toString().startsWith('http')
+                                        ? ClipOval(
+                                            child: Image.network(
+                                              storeData!['logoUrl'].toString(),
+                                              fit: BoxFit.cover,
+                                              width: 56,
+                                              height: 56,
+                                              errorBuilder: (_, __, ___) => _HomeScreenState._decodeB64(storeData?['logoBase64']?.toString()) != null
+                                                  ? ClipOval(child: Image.memory(_HomeScreenState._decodeB64(storeData!['logoBase64'].toString())!, fit: BoxFit.cover, width: 56, height: 56))
+                                                  : const Icon(Icons.store_rounded, color: Color(0xFF8B5CF6), size: 30),
+                                            ),
+                                          )
+                                        : (_HomeScreenState._decodeB64(storeData?['logoBase64']?.toString()) != null
+                                            ? ClipOval(child: Image.memory(_HomeScreenState._decodeB64(storeData!['logoBase64'].toString())!, fit: BoxFit.cover, width: 56, height: 56))
+                                            : const Icon(Icons.store_rounded, color: Color(0xFF8B5CF6), size: 30)),
                                   ),
                                   const SizedBox(width: 14),
                                   Expanded(
@@ -7662,9 +7674,17 @@ class _HomeScreenState extends State<HomeScreen> {
                                       width: 64,
                                       height: 64,
                                       color: const Color(0xFFF1F5F9),
-                                      child: imgBytes != null
-                                          ? Image.memory(imgBytes, fit: BoxFit.cover)
-                                          : const Icon(Icons.inventory_2_outlined, color: Color(0xFF94A3B8)),
+                                      child: (pData['imageUrl'] ?? '').toString().startsWith('http')
+                                          ? Image.network(
+                                              pData['imageUrl'].toString(),
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => imgBytes != null
+                                                  ? Image.memory(imgBytes, fit: BoxFit.cover)
+                                                  : const Icon(Icons.inventory_2_outlined, color: Color(0xFF94A3B8)),
+                                            )
+                                          : (imgBytes != null
+                                              ? Image.memory(imgBytes, fit: BoxFit.cover)
+                                              : const Icon(Icons.inventory_2_outlined, color: Color(0xFF94A3B8))),
                                     ),
                                   ),
                                   const SizedBox(width: 12),
@@ -7928,9 +7948,17 @@ class _HomeScreenState extends State<HomeScreen> {
                                       width: 72,
                                       height: 72,
                                       color: const Color(0xFFF1F5F9),
-                                      child: imgBytes != null
-                                          ? Image.memory(imgBytes, fit: BoxFit.cover)
-                                          : const Icon(Icons.shopping_bag_outlined, color: Color(0xFF94A3B8), size: 28),
+                                      child: (data['imageUrl'] ?? '').toString().startsWith('http')
+                                          ? Image.network(
+                                              data['imageUrl'].toString(),
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => imgBytes != null
+                                                  ? Image.memory(imgBytes, fit: BoxFit.cover)
+                                                  : const Icon(Icons.shopping_bag_outlined, color: Color(0xFF94A3B8), size: 28),
+                                            )
+                                          : (imgBytes != null
+                                              ? Image.memory(imgBytes, fit: BoxFit.cover)
+                                              : const Icon(Icons.shopping_bag_outlined, color: Color(0xFF94A3B8), size: 28)),
                                     ),
                                   ),
                                   const SizedBox(width: 12),
