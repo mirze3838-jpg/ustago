@@ -2783,6 +2783,11 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
             for (final d in docs) {
               final data = d.data();
               if (data['listingType']?.toString() == 'product' && data['isVip'] == true) {
+                // 30 gündən köhnə elanlar avtomatik gizlədilir
+                if (data['createdAt'] is Timestamp) {
+                  final passed = DateTime.now().difference((data['createdAt'] as Timestamp).toDate()).inDays;
+                  if (passed >= 30) continue;
+                }
                 final sName = (data['store']?.toString().isNotEmpty == true)
                     ? data['store'].toString()
                     : (data['storeName']?.toString().isNotEmpty == true ? data['storeName'].toString() : 'Mağaza');
@@ -2967,6 +2972,12 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                 final loc = CategoryCityService.normalizeAz('${p['city'] ?? ''} ${p['address'] ?? ''}');
                 if (!loc.contains(CategoryCityService.normalizeAz(_selectedCityFilter))) return false;
               }
+              // 30 gündən köhnə elanlar siyahıdan avtomatik çıxarılır
+              if (p['createdAt'] is Timestamp) {
+                final passed = DateTime.now().difference((p['createdAt'] as Timestamp).toDate()).inDays;
+                if (passed >= 30) return false;
+              }
+
               final favKey = (p['id'] ?? p['sampleId'] ?? p['title']).toString();
               if (_onlyFavorites && !_favoriteIds.contains(favKey)) return false;
 

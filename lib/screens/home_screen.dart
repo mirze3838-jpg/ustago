@@ -7715,6 +7715,27 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
+                                        if (isExpired)
+                                          InkWell(
+                                            onTap: () async {
+                                              await FirebaseFirestore.instance.collection('market_stores').doc(doc.id).update({
+                                                'createdAt': FieldValue.serverTimestamp(),
+                                                'bumpedAt': FieldValue.serverTimestamp(),
+                                              });
+                                              ScaffoldMessenger.of(rootContext).showSnackBar(
+                                                const SnackBar(content: Text('Elanın müddəti 30 gün uzadıldı! 🚀')),
+                                              );
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                              margin: const EdgeInsets.only(right: 4),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF10B981),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: const Text('🔄 Uzat', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                            ),
+                                          ),
                                         IconButton(
                                           icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF1769D2)),
                                           onPressed: () {
@@ -7919,6 +7940,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             final price = (data['price'] ?? '').toString();
                             final city = (data['city'] ?? '').toString();
                             final phone = (data['phone'] ?? '').toString();
+                            int daysLeft = 30;
+                            bool isExpired = false;
+                            if (data['createdAt'] is Timestamp) {
+                              final dt = (data['createdAt'] as Timestamp).toDate();
+                              final passed = DateTime.now().difference(dt).inDays;
+                              daysLeft = (30 - passed).clamp(0, 30);
+                              isExpired = passed >= 30;
+                            }
 
                             return InkWell(
                               borderRadius: BorderRadius.circular(16),
@@ -7990,7 +8019,23 @@ class _HomeScreenState extends State<HomeScreen> {
                                               const Icon(Icons.phone_outlined, size: 12, color: Color(0xFF10B981)),
                                               const SizedBox(width: 2),
                                               Text(phone, style: const TextStyle(fontSize: 11.5, color: Color(0xFF10B981), fontWeight: FontWeight.w600)),
+                                              const SizedBox(width: 8),
                                             ],
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: isExpired ? const Color(0xFFFEE2E2) : const Color(0xFFEFF6FF),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Text(
+                                                isExpired ? 'Bitib' : '$daysLeft gün',
+                                                style: TextStyle(
+                                                  color: isExpired ? const Color(0xFFDC2626) : const Color(0xFF1D4ED8),
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
                                           ],
                                         ),
                                       ],

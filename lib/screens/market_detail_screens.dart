@@ -370,6 +370,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
     // Tarix
     String formattedDate = '17.Nov.2026';
+    int daysLeft = 30;
+    bool isExpired = false;
+    if (_prod['createdAt'] is Timestamp) {
+      final dt = (_prod['createdAt'] as Timestamp).toDate();
+      final passed = DateTime.now().difference(dt).inDays;
+      daysLeft = (30 - passed).clamp(0, 30);
+      isExpired = passed >= 30;
+    }
     if (_prod['createdAt'] is Timestamp) {
       final dt = (_prod['createdAt'] as Timestamp).toDate();
       formattedDate = '${dt.day}.${dt.month}.${dt.year}';
@@ -511,6 +519,54 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Müddəti bitmiş elan xəbərdarlığı
+                  if (isExpired)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFCA5A5)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline_rounded, color: Color(0xFFDC2626), size: 22),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              'Bu elanın 30 günlük nümayiş müddəti bitib. Elanı yeniləyərək yenidən aktiv edin.',
+                              style: TextStyle(fontSize: 12.5, color: Color(0xFF991B1B)),
+                            ),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFDC2626),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: () async {
+                              final docId = _prod['id']?.toString();
+                              if (docId != null && docId.isNotEmpty) {
+                                await FirebaseFirestore.instance.collection('market_stores').doc(docId).update({
+                                  'createdAt': FieldValue.serverTimestamp(),
+                                  'bumpedAt': FieldValue.serverTimestamp(),
+                                });
+                                setState(() {
+                                  _prod['createdAt'] = Timestamp.now();
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Elanın müddəti 30 gün uzadıldı və ən ön sıraya keçirildi! 🚀')),
+                                );
+                              }
+                            },
+                            child: const Text('30 gün uzat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   // Qiymət
                   Text(
                     price.contains('AZN') ? price : '$price AZN',
@@ -655,6 +711,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         _buildStatRow('Elan nömrəsi:', adNumber),
                         const SizedBox(height: 6),
                         _buildStatRow('Tarix:', formattedDate),
+                        const SizedBox(height: 6),
+                        _buildStatRow('Müddət:', isExpired ? 'Müddəti bitib' : '$daysLeft gün qalıb (Maks. 30 gün)'),
                       ],
                     ),
                   ),
