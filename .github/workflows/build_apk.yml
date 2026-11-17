@@ -95,7 +95,8 @@ jobs:
         run: |
           flutter build web --release --pwa-strategy=none --base-href "/ustago/" --no-tree-shake-icons 2>&1 | tee web_build.log || {
             echo "BUILD_FAILED=1" >> $GITHUB_ENV
-            echo "::error::Web build failed. Check uploaded web-build-log artifact."
+            ERR_LINES=$(grep -E "Error:|lib/.*\.dart:[0-9]+" web_build.log | head -n 8 | tr '\n' ' ')
+            echo "::error::Web build failed: $ERR_LINES"
             exit 1
           }
           TS=$(date +%s)
