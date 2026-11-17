@@ -311,12 +311,39 @@ class _HomeScreenState extends State<HomeScreen> {
     return bytes;
   }
 
+  DateTime? _lastBackPressTime;
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: _buildBody(),
-      bottomNavigationBar: _buildBottomNav(),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (_currentIndex != 0) {
+          setState(() => _currentIndex = 0);
+          return;
+        }
+        final now = DateTime.now();
+        if (_lastBackPressTime == null ||
+            now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
+          _lastBackPressTime = now;
+          ScaffoldMessenger.of(context)
+            ..clearSnackBars()
+            ..showSnackBar(
+              const SnackBar(
+                duration: Duration(milliseconds: 1800),
+                content: Text('Tətbiqdən çıxmaq üçün geri düyməsini yenidən basın'),
+              ),
+            );
+          return;
+        }
+        SystemNavigator.pop();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        body: _buildBody(),
+        bottomNavigationBar: _buildBottomNav(),
+      ),
     );
   }
 
