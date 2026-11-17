@@ -21,8 +21,8 @@ service cloud.firestore {
 
     // İSTİFADƏÇİ VƏ USTA PROFİLLƏRİ
     match /users/{userId} {
-      // Müştərilər və digər istifadəçilər ustaların profilini görə bilsin deyə read açıqdır
-      allow read: if signedIn();
+      // Müştərilər və qonaqlar ustaların profilini görə bilsin deyə oxuma açıqdır
+      allow read: if true;
 
       // Qeydiyyat: Heç kim özünü birbaşa 'admin', 'isVerified: true' və ya balanslı edə bilməz!
       allow create: if signedIn() 
