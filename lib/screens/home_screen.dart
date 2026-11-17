@@ -1249,7 +1249,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                                   overflow: TextOverflow.ellipsis,
                                                 ),
                                               ),
-                                              if (data['isVerified'] == true) ...[
+                                              if (u['isVerified'] == true) ...[
                                                 const SizedBox(width: 4),
                                                 const Icon(Icons.verified, color: Color(0xFF1769D2), size: 15),
                                               ],
@@ -3054,7 +3054,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A)),
                         ),
                       ),
-                      if (data['isVerified'] == true) ...[
+                      if (u['isVerified'] == true) ...[
                         const SizedBox(width: 4),
                         const Icon(Icons.verified, color: Color(0xFF1769D2), size: 15),
                       ],
