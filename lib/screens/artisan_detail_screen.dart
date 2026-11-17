@@ -97,9 +97,88 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
     }
   }
 
-  Future<void> _showAddReviewDialog(String artisanUid, String artisanName) async {
-    int rating = 5;
-    final commentController = TextEditingController();
+  Future<void> _recalculateArtisanRating(String artisanUid) async {
+    try {
+      final reviewsRef = FirebaseFirestore.instance.collection('users').doc(artisanUid).collection('reviews');
+      final allReviews = await reviewsRef.get();
+      double sum = 0;
+      for (var doc in allReviews.docs) {
+        sum += (doc.data()['rating'] as num?)?.toDouble() ?? 5.0;
+      }
+      final double avg = allReviews.docs.isEmpty ? 5.0 : sum / allReviews.docs.length;
+      final int count = allReviews.docs.length;
+      await FirebaseFirestore.instance.collection('users').doc(artisanUid).set({
+        'rating': double.parse(avg.toStringAsFixed(1)),
+        'reviewCount': count,
+      }, SetOptions(merge: true));
+    } catch (_) {}
+  }
+
+  Future<void> _deleteReview(String artisanUid, String reviewId) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Rəyi sil', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+        content: const Text('Bu rəyi silmək istədiyinizə əminsiniz?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Ləğv et', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(artisanUid)
+          .collection('reviews')
+          .doc(reviewId)
+          .delete();
+
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .collection('given_reviews')
+            .doc(reviewId)
+            .delete()
+            .catchError((_) {});
+      }
+
+      await _recalculateArtisanRating(artisanUid);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Rəyiniz silindi'), backgroundColor: Colors.orange),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Silinmə xətası: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _showAddReviewDialog(
+    String artisanUid,
+    String artisanName, {
+    String? existingReviewId,
+    int initialRating = 5,
+    String initialComment = '',
+  }) async {
+    int rating = initialRating;
+    final commentController = TextEditingController(text: initialComment);
+    final bool isEdit = existingReviewId != null;
     final currentUser = FirebaseAuth.instance.currentUser;
     String resolvedName = 'Müştəri';
     String resolvedPhotoBase64 = '';
@@ -123,10 +202,10 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
         builder: (context, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           title: Row(
-            children: const [
-              Icon(Icons.rate_review_rounded, color: Color(0xFF1769D2), size: 24),
-              SizedBox(width: 8),
-              Text('Rəy və Qiymətləndirmə', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            children: [
+              const Icon(Icons.rate_review_rounded, color: Color(0xFF1769D2), size: 24),
+              const SizedBox(width: 8),
+              Text(isEdit ? 'Rəyi Düzəlt' : 'Rəy və Qiymətləndirmə', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ],
           ),
           content: SingleChildScrollView(
@@ -202,33 +281,60 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                       .doc(artisanUid)
                       .collection('reviews');
 
-                  await reviewsRef.add({
-                    'rating': rating,
-                    'comment': comment,
-                    'reviewerName': reviewerName,
-                    'reviewerPhotoBase64': resolvedPhotoBase64,
-                    'reviewerId': currentUser?.uid ?? 'anonymous',
-                    'createdAt': FieldValue.serverTimestamp(),
-                  });
-
-                  final allReviews = await reviewsRef.get();
-                  double sum = 0;
-                  for (var doc in allReviews.docs) {
-                    sum += (doc.data()['rating'] as num?)?.toDouble() ?? 5.0;
+                  if (isEdit) {
+                    await reviewsRef.doc(existingReviewId).update({
+                      'rating': rating,
+                      'comment': comment,
+                      'updatedAt': FieldValue.serverTimestamp(),
+                    });
+                    if (currentUser != null) {
+                      await FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(currentUser.uid)
+                          .collection('given_reviews')
+                          .doc(existingReviewId)
+                          .set({
+                        'reviewId': existingReviewId,
+                        'artisanId': artisanUid,
+                        'artisanName': artisanName,
+                        'rating': rating,
+                        'comment': comment,
+                        'updatedAt': FieldValue.serverTimestamp(),
+                      }, SetOptions(merge: true));
+                    }
+                  } else {
+                    final docRef = await reviewsRef.add({
+                      'rating': rating,
+                      'comment': comment,
+                      'reviewerName': reviewerName,
+                      'reviewerPhotoBase64': resolvedPhotoBase64,
+                      'reviewerId': currentUser?.uid ?? 'anonymous',
+                      'createdAt': FieldValue.serverTimestamp(),
+                    });
+                    if (currentUser != null) {
+                      await FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(currentUser.uid)
+                          .collection('given_reviews')
+                          .doc(docRef.id)
+                          .set({
+                        'reviewId': docRef.id,
+                        'artisanId': artisanUid,
+                        'artisanName': artisanName,
+                        'rating': rating,
+                        'comment': comment,
+                        'createdAt': FieldValue.serverTimestamp(),
+                      });
+                    }
                   }
-                  final double avg = allReviews.docs.isEmpty ? 5.0 : sum / allReviews.docs.length;
-                  final int count = allReviews.docs.length;
 
-                  await FirebaseFirestore.instance.collection('users').doc(artisanUid).set({
-                    'rating': double.parse(avg.toStringAsFixed(1)),
-                    'reviewCount': count,
-                  }, SetOptions(merge: true));
+                  await _recalculateArtisanRating(artisanUid);
 
                   if (mounted) {
                     setState(() => _selectedTabIndex = 1);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Rəyiniz uğurla əlavə edildi! Təşəkkür edirik.'),
+                      SnackBar(
+                        content: Text(isEdit ? 'Rəyiniz uğurla yeniləndi!' : 'Rəyiniz uğurla əlavə edildi! Təşəkkür edirik.'),
                         backgroundColor: Colors.green,
                       ),
                     );
@@ -241,7 +347,7 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                   }
                 }
               },
-              child: const Text('Göndər'),
+              child: Text(isEdit ? 'Yadda saxla' : 'Göndər'),
             ),
           ],
         ),
@@ -1063,13 +1169,16 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                   itemCount: docs.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (context, idx) {
-                    final r = docs[idx].data();
+                    final doc = docs[idx];
+                    final r = doc.data();
                     final revName = (r['reviewerName'] ?? 'Müştəri').toString();
                     final revComment = (r['comment'] ?? '').toString();
                     final revRating = (r['rating'] as num?)?.toInt() ?? 5;
                     final revId = (r['reviewerId'] ?? '').toString();
                     final revPhotoB64 = (r['reviewerPhotoBase64'] ?? '').toString();
                     final directBytes = _decodeB64(revPhotoB64);
+                    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+                    final bool isMyReview = currentUid != null && revId == currentUid;
 
                     Widget buildAvatar(Uint8List? bytes) {
                       return CircleAvatar(
@@ -1139,6 +1248,51 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(revComment, style: const TextStyle(fontSize: 13, color: Color(0xFF334155), height: 1.35)),
+                          if (isMyReview) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                InkWell(
+                                  onTap: () => _showAddReviewDialog(
+                                    userId,
+                                    displayName,
+                                    existingReviewId: doc.id,
+                                    initialRating: revRating,
+                                    initialComment: revComment,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: const [
+                                        Icon(Icons.edit_outlined, size: 15, color: Color(0xFF1769D2)),
+                                        SizedBox(width: 4),
+                                        Text('Düzəlt', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1769D2))),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                InkWell(
+                                  onTap: () => _deleteReview(userId, doc.id),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: const [
+                                        Icon(Icons.delete_outline_rounded, size: 15, color: Color(0xFFDC2626)),
+                                        SizedBox(width: 4),
+                                        Text('Sil', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFDC2626))),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     );

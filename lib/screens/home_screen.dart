@@ -5721,6 +5721,348 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// İnstaqram Sağ Yuxarı 3 Nöqtə (⋮) menyusu — Bütün ayarlar və idarəetmə funksiyaları
+  Future<void> _recalculateTargetRating(String artisanUid) async {
+    try {
+      final reviewsRef = FirebaseFirestore.instance.collection('users').doc(artisanUid).collection('reviews');
+      final allReviews = await reviewsRef.get();
+      double sum = 0;
+      for (var doc in allReviews.docs) {
+        sum += (doc.data()['rating'] as num?)?.toDouble() ?? 5.0;
+      }
+      final double avg = allReviews.docs.isEmpty ? 5.0 : sum / allReviews.docs.length;
+      await FirebaseFirestore.instance.collection('users').doc(artisanUid).set({
+        'rating': double.parse(avg.toStringAsFixed(1)),
+        'reviewCount': allReviews.docs.length,
+      }, SetOptions(merge: true));
+    } catch (_) {}
+  }
+
+  void _showMyGivenReviewsModal(BuildContext rootContext, String uid) {
+    showModalBottomSheet(
+      context: rootContext,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (modalCtx) => DraggableScrollableSheet(
+        initialChildSize: 0.72,
+        minChildSize: 0.45,
+        maxChildSize: 0.92,
+        expand: false,
+        builder: (sheetCtx, scrollCtrl) => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
+              .collection('given_reviews')
+              .orderBy('createdAt', descending: true)
+              .snapshots(),
+          builder: (streamCtx, snapshot) {
+            final docs = snapshot.data?.docs ?? [];
+            return Column(
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(8)),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 16, 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.rate_review_outlined, color: Color(0xFFD97706), size: 22),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Yazdığım Rəylər (${docs.length})',
+                          style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                        onPressed: () => Navigator.pop(modalCtx),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: docs.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.rate_review_outlined, size: 48, color: Color(0xFF94A3B8)),
+                                SizedBox(height: 12),
+                                Text(
+                                  'Hələlik heç bir ustaya rəy yazmamısınız',
+                                  style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                                  textAlign: TextAlign.center,
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Başqa istifadəçilərin profilində "Rəy yaz" düyməsi ilə qiymətləndirmə etdiyinizdə burada görünəcək.',
+                                  style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          controller: scrollCtrl,
+                          padding: const EdgeInsets.all(16),
+                          itemCount: docs.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 10),
+                          itemBuilder: (context, idx) {
+                            final doc = docs[idx];
+                            final data = doc.data();
+                            final artisanId = (data['artisanId'] ?? '').toString();
+                            final artisanName = (data['artisanName'] ?? 'Usta').toString();
+                            final comment = (data['comment'] ?? '').toString();
+                            final ratingVal = (data['rating'] as num?)?.toInt() ?? 5;
+                            final reviewId = (data['reviewId'] ?? doc.id).toString();
+
+                            return Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                boxShadow: [
+                                  BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 1)),
+                                ],
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                                          future: artisanId.isNotEmpty
+                                              ? FirebaseFirestore.instance.collection('users').doc(artisanId).get()
+                                              : null,
+                                          builder: (ctx, aSnap) {
+                                            final aData = aSnap.data?.data();
+                                            final aBytes = _HomeScreenState._decodeB64(aData?['photoBase64']?.toString());
+                                            final displayArtisanName = (aData?['fullName'] ?? aData?['name'] ?? artisanName).toString();
+                                            return InkWell(
+                                              onTap: () {
+                                                if (artisanId.isNotEmpty) {
+                                                  Navigator.push(
+                                                    rootContext,
+                                                    MaterialPageRoute(
+                                                      builder: (_) => ArtisanDetailScreen(
+                                                        artisanData: {'uid': artisanId, 'fullName': displayArtisanName, ...?aData},
+                                                      ),
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                              child: Row(
+                                                children: [
+                                                  CircleAvatar(
+                                                    radius: 17,
+                                                    backgroundColor: const Color(0xFFEFF6FF),
+                                                    backgroundImage: aBytes != null ? MemoryImage(aBytes) : null,
+                                                    child: aBytes == null
+                                                        ? Text(
+                                                            displayArtisanName.isNotEmpty ? displayArtisanName[0].toUpperCase() : 'U',
+                                                            style: const TextStyle(color: Color(0xFF1769D2), fontWeight: FontWeight.bold, fontSize: 13),
+                                                          )
+                                                        : null,
+                                                  ),
+                                                  const SizedBox(width: 10),
+                                                  Expanded(
+                                                    child: Text(
+                                                      displayArtisanName,
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A)),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                      Row(
+                                        children: List.generate(
+                                          5,
+                                          (i) => Icon(
+                                            i < ratingVal ? Icons.star_rounded : Icons.star_border_rounded,
+                                            color: Colors.amber,
+                                            size: 16,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(comment, style: const TextStyle(fontSize: 13, color: Color(0xFF334155), height: 1.35)),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      InkWell(
+                                        onTap: () {
+                                          int editRating = ratingVal;
+                                          final editCtrl = TextEditingController(text: comment);
+                                          showDialog(
+                                            context: rootContext,
+                                            builder: (dCtx) => StatefulBuilder(
+                                              builder: (dCtx, setDState) => AlertDialog(
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                                title: const Text('Rəyi Düzəlt', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                                content: Column(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Row(
+                                                      mainAxisAlignment: MainAxisAlignment.center,
+                                                      children: List.generate(5, (i) {
+                                                        return IconButton(
+                                                          icon: Icon(
+                                                            i < editRating ? Icons.star_rounded : Icons.star_border_rounded,
+                                                            color: Colors.amber,
+                                                            size: 30,
+                                                          ),
+                                                          onPressed: () => setDState(() => editRating = i + 1),
+                                                        );
+                                                      }),
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    TextField(
+                                                      controller: editCtrl,
+                                                      maxLines: 3,
+                                                      decoration: InputDecoration(
+                                                        labelText: 'Rəyiniz',
+                                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                actions: [
+                                                  TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Ləğv et')),
+                                                  ElevatedButton(
+                                                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1769D2), foregroundColor: Colors.white),
+                                                    onPressed: () async {
+                                                      final newText = editCtrl.text.trim();
+                                                      if (newText.isEmpty) return;
+                                                      Navigator.pop(dCtx);
+                                                      if (artisanId.isNotEmpty) {
+                                                        await FirebaseFirestore.instance
+                                                            .collection('users')
+                                                            .doc(artisanId)
+                                                            .collection('reviews')
+                                                            .doc(reviewId)
+                                                            .update({'rating': editRating, 'comment': newText})
+                                                            .catchError((_) {});
+                                                        await _recalculateTargetRating(artisanId);
+                                                      }
+                                                      await FirebaseFirestore.instance
+                                                          .collection('users')
+                                                          .doc(uid)
+                                                          .collection('given_reviews')
+                                                          .doc(doc.id)
+                                                          .update({'rating': editRating, 'comment': newText});
+                                                    },
+                                                    child: const Text('Yadda saxla'),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: const [
+                                              Icon(Icons.edit_outlined, size: 15, color: Color(0xFF1769D2)),
+                                              SizedBox(width: 4),
+                                              Text('Düzəlt', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1769D2))),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      InkWell(
+                                        onTap: () async {
+                                          final bool? confirmed = await showDialog<bool>(
+                                            context: rootContext,
+                                            builder: (cCtx) => AlertDialog(
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                              title: const Text('Rəyi sil', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+                                              content: const Text('Bu rəyi silmək istədiyinizə əminsiniz?'),
+                                              actions: [
+                                                TextButton(onPressed: () => Navigator.pop(cCtx, false), child: const Text('Ləğv et')),
+                                                ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                                                  onPressed: () => Navigator.pop(cCtx, true),
+                                                  child: const Text('Sil'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                          if (confirmed != true) return;
+                                          if (artisanId.isNotEmpty) {
+                                            await FirebaseFirestore.instance
+                                                .collection('users')
+                                                .doc(artisanId)
+                                                .collection('reviews')
+                                                .doc(reviewId)
+                                                .delete()
+                                                .catchError((_) {});
+                                            await _recalculateTargetRating(artisanId);
+                                          }
+                                          await FirebaseFirestore.instance
+                                              .collection('users')
+                                              .doc(uid)
+                                              .collection('given_reviews')
+                                              .doc(doc.id)
+                                              .delete();
+                                        },
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: const [
+                                              Icon(Icons.delete_outline_rounded, size: 15, color: Color(0xFFDC2626)),
+                                              SizedBox(width: 4),
+                                              Text('Sil', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFDC2626))),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   void _showProfileOptionsMenu(String uid, Map<String, dynamic>? userData, bool isAdmin, String userRole) {
     showModalBottomSheet(
       context: context,
@@ -5946,6 +6288,22 @@ class _HomeScreenState extends State<HomeScreen> {
                     onTap: () {
                       Navigator.pop(ctx);
                       _showUserListingsModal(context, uid, userData?['fullName'] ?? '', isOwner: true, userPhone: userData?['phone']?.toString(), userAddress: userData?['city']?.toString());
+                    },
+                  ),
+
+                  // 6.2 Yazdığım Rəylər
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.rate_review_outlined, color: Color(0xFFD97706), size: 20),
+                    ),
+                    title: const Text('Yazdığım Rəylər', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('Başqa ustalara yazdığınız rəylərə baxın, düzəldin və ya silin', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showMyGivenReviewsModal(context, uid);
                     },
                   ),
 
