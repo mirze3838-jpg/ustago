@@ -62,6 +62,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
   void didUpdateWidget(covariant ShortsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.targetUserId != widget.targetUserId) {
+      _disposeAllControllers();
+      _currentIndex = widget.initialIndex;
       _shortsStream = _createShortsStream();
     }
   }
@@ -712,26 +714,32 @@ class _ShortsScreenState extends State<ShortsScreen> {
                           }
                         }
 
+                        if (user == null) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                              const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Video paylaşmaq üçün əvvəlcə daxil olun')),
+                            );
+                          }
+                          return;
+                        }
                         try {
-                          String authorName = user?.displayName ?? 'UstaGo Ustası';
-                          final uid = user?.uid ?? 'guest';
+                          String authorName = user.displayName ?? 'UstaGo Ustası';
+                          final uid = user.uid;
                           final tradeVal = tradeController.text.trim().isEmpty ? 'Tikinti' : tradeController.text.trim();
                           String authorPhone = phone.isEmpty ? '+994 50 000 00 00' : phone;
 
                           String? uPhoto;
-                          if (user != null) {
-                            try {
-                              final uDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-                              if (uDoc.exists) {
-                                final uData = uDoc.data();
-                                uPhoto = uData?['photoBase64'];
-                                final fn = uData?['fullName']?.toString().trim();
+                          try {
+                            final uDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+                            if (uDoc.exists) {
+                              final uData = uDoc.data();
+                              uPhoto = uData?['photoBase64'];
+                              final fn = uData?['fullName']?.toString().trim();
                                 if (fn != null && fn.isNotEmpty) authorName = fn;
                                 final ph = uData?['phone']?.toString().trim();
                                 if (ph != null && ph.isNotEmpty) authorPhone = ph;
                               }
                             } catch (_) {}
-                          }
 
                           final String coverBase64 = pickedCoverBytes != null ? base64Encode(pickedCoverBytes!) : '';
                           final String finalTitle = isTikTok && (tkInfo?.title != null && tkInfo!.title!.isNotEmpty) ? tkInfo!.title! : title;
@@ -1044,12 +1052,20 @@ class _ShortsScreenState extends State<ShortsScreen> {
                       final rawLines = text.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty && (e.contains('tiktok.com') || e.startsWith('http'))).toList();
                       if (rawLines.isEmpty) return;
 
+                      if (user == null) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                            const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Video paylaşmaq üçün əvvəlcə daxil olun')),
+                          );
+                        }
+                        return;
+                      }
                       setDlgState(() {
                         isProcessing = true;
                         status = 'Videolar hazırlanır (0/${rawLines.length})...';
                       });
 
-                      final uid = user?.uid ?? 'guest_${DateTime.now().millisecondsSinceEpoch}';
+                      final uid = user.uid;
                       String authorName = 'Usta';
                       String authorPhone = '';
                       String tradeVal = 'Usta';
@@ -1415,20 +1431,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     final bool isTikTok = widget.data['isTikTok'] == true ||
         (widget.data['videoUrl']?.toString().contains('tiktok.com') ?? false) ||
         (widget.data['tiktokUrl'] != null && widget.data['tiktokUrl'].toString().isNotEmpty);
-    if (isTikTok) {
-      final rawUrl = widget.data['tiktokUrl']?.toString() ?? widget.data['videoUrl']?.toString() ?? '';
-      if (rawUrl.isNotEmpty) {
-        TikTokService.isVideoStillActive(rawUrl).then((active) {
-          if (!active && mounted) {
-            final docId = widget.data['id']?.toString() ?? '';
-            if (docId.isNotEmpty) {
-              debugPrint('TikTok videosu silinib, UstaGo-dan da təmizlənir: $docId');
-              ShortsSocialService.deleteShortVideoCompletely(docId);
-            }
-          }
-        });
-      }
-    }
+    // Qeyd: İzləyici tərəfindən avtomatik video silmə təhlükəsizlik səbəbilə ləğv edilib.
   }
 
   void _checkSocialStates() async {
@@ -1784,8 +1787,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
   void _showMoreMenu() {
     final currentUser = FirebaseAuth.instance.currentUser;
     final bool isOwnerOrAdmin = currentUser != null &&
-        ((widget.data['userId'] != null && currentUser.uid == widget.data['userId']) ||
-         currentUser.email == 'mirze3838@gmail.com');
+        widget.data['userId'] != null &&
+        currentUser.uid == widget.data['userId'];
 
     showModalBottomSheet(
       context: context,
@@ -2292,7 +2295,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                                   } catch (e) {
                                     debugPrint('Rəy əlavə xətası: $e');
                                   } finally {
-                                    setModalState(() => isPosting = false);
+                                    if (ctx.mounted) setModalState(() => isPosting = false);
                                   }
                                 },
                         ),
@@ -2514,8 +2517,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     final bool hasNativeController = c != null;
     final currentUser = FirebaseAuth.instance.currentUser;
     final bool isOwnerOrAdmin = currentUser != null &&
-        ((widget.data['userId'] != null && currentUser.uid == widget.data['userId']) ||
-         currentUser.email == 'mirze3838@gmail.com');
+        widget.data['userId'] != null &&
+        currentUser.uid == widget.data['userId'];
     final double sysBottom = MediaQuery.of(context).padding.bottom;
     final double baseBottom = widget.bottomInset + sysBottom;
 

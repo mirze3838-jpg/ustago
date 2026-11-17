@@ -663,7 +663,6 @@ class CategoryCityService {
     return input
         .toLowerCase()
         .replaceAll('ə', 'e')
-        .replaceAll('?', 'e')
         .replaceAll('ş', 's')
         .replaceAll('ç', 'c')
         .replaceAll('ğ', 'g')

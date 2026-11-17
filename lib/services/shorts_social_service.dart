@@ -114,31 +114,34 @@ class ShortsSocialService {
     final followingRef = _firestore.collection('users').doc(uid).collection('following').doc(artisanUid);
     final currentUserRef = _firestore.collection('users').doc(uid);
 
-    final snap = await followerRef.get();
-    if (snap.exists) {
-      // İzləməni ləğv et
-      final batch = _firestore.batch();
-      batch.delete(followerRef);
-      batch.delete(followingRef);
-      // Yalnız öz sənədimizdəki followingCount sayğacını yeniləyirik
-      batch.update(currentUserRef, {'followingCount': FieldValue.increment(-1)});
-      await batch.commit();
-      return false;
-    } else {
-      // İzlə
-      final batch = _firestore.batch();
-      batch.set(followerRef, {
-        'followerId': uid,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      batch.set(followingRef, {
-        'targetUserId': artisanUid,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      batch.update(currentUserRef, {'followingCount': FieldValue.increment(1)});
-      await batch.commit();
-      return true;
-    }
+    return _firestore.runTransaction<bool>((tx) async {
+      final snap = await tx.get(followerRef);
+      final userSnap = await tx.get(currentUserRef);
+      final currentCount = (userSnap.data()?['followingCount'] as int?) ?? 0;
+
+      if (snap.exists) {
+        tx.delete(followerRef);
+        tx.delete(followingRef);
+        final nextCount = currentCount > 0 ? currentCount - 1 : 0;
+        if (userSnap.exists) {
+          tx.update(currentUserRef, {'followingCount': nextCount});
+        }
+        return false;
+      } else {
+        tx.set(followerRef, {
+          'followerId': uid,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        tx.set(followingRef, {
+          'targetUserId': artisanUid,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        if (userSnap.exists) {
+          tx.update(currentUserRef, {'followingCount': currentCount + 1});
+        }
+        return true;
+      }
+    });
   }
 
   // ================= 3. SAVE / BOOKMARK =================
@@ -239,16 +242,24 @@ class ShortsSocialService {
 
   /// Şərhi sil (Yalnız şərh müəllifi, video sahibi və ya admin)
   static Future<void> deleteComment(String shortId, String commentId) async {
-    await _firestore
-        .collection('shorts')
-        .doc(shortId)
-        .collection('comments')
-        .doc(commentId)
-        .delete();
+    final uid = currentUid;
+    if (uid == null || shortId.isEmpty || commentId.isEmpty) {
+      throw Exception('Şərhi silmək üçün daxil olun');
+    }
 
-    await _firestore.collection('shorts').doc(shortId).update({
-      'commentsCount': FieldValue.increment(-1),
-    }).catchError((_) {});
+    final shortRef = _firestore.collection('shorts').doc(shortId);
+    final commentRef = shortRef.collection('comments').doc(commentId);
+
+    await _firestore.runTransaction((tx) async {
+      final commentSnap = await tx.get(commentRef);
+      if (!commentSnap.exists) return;
+      final shortSnap = await tx.get(shortRef);
+      tx.delete(commentRef);
+      if (shortSnap.exists) {
+        final curCount = (shortSnap.data()?['commentsCount'] as int?) ?? 0;
+        tx.update(shortRef, {'commentsCount': curCount > 0 ? curCount - 1 : 0});
+      }
+    });
   }
 
   /// Yeni şərh göndər
@@ -258,7 +269,10 @@ class ShortsSocialService {
     required String userName,
     String? userPhotoBase64,
   }) async {
-    final uid = currentUid ?? 'guest';
+    final uid = currentUid;
+    if (uid == null) {
+      throw Exception('Şərh yazmaq üçün daxil olun');
+    }
     await _firestore.collection('shorts').doc(shortId).collection('comments').add({
       'userId': uid,
       'userName': userName,
@@ -278,10 +292,14 @@ class ShortsSocialService {
     required String shortId,
     required String reason,
   }) async {
-    final uid = currentUid ?? 'guest';
+    final uid = currentUid;
+    if (uid == null) {
+      throw Exception('Şikayət göndərmək üçün daxil olun');
+    }
     await _firestore.collection('reports').add({
       'targetType': 'short',
       'shortId': shortId,
+      'reporterId': uid,
       'reportedBy': uid,
       'reason': reason,
       'status': 'pending',
@@ -306,15 +324,22 @@ class ShortsSocialService {
     final isOwner = shortData?['userId'] == uid;
     final String? videoUrl = shortData?['videoUrl']?.toString();
     final String? ownerUid = shortData?['userId']?.toString();
+
+    bool isAdmin = false;
+    if (!isOwner) {
+      final meDoc = await _firestore.collection('users').doc(uid).get();
+      isAdmin = meDoc.data()?['role'] == 'admin';
+    }
+
     // Yalnız video sahibi və ya admin silə bilər
-    if (!isOwner && currentUser?.email != 'mirze3838@gmail.com') {
+    if (!isOwner && !isAdmin) {
       throw Exception('Yalnız öz videonuzu silə bilərsiniz');
     }
 
-    // 1. Şərhləri və onların likes alt-kolleksiyalarını tam bitənə qədər hissə-hissə silirik
+    // 1. Şərhləri və onların likes alt-kolleksiyalarını tam bitənə qədər hissə-hissə silirik (<= 420 op/batch)
     bool hasMoreComments = true;
     while (hasMoreComments) {
-      final commentsSnap = await shortRef.collection('comments').limit(80).get();
+      final commentsSnap = await shortRef.collection('comments').limit(20).get();
       if (commentsSnap.docs.isEmpty) {
         hasMoreComments = false;
         break;
@@ -322,7 +347,6 @@ class ShortsSocialService {
 
       final batch = _firestore.batch();
       for (var cDoc in commentsSnap.docs) {
-        // Şərhin öz like-larını da silirik
         final cLikesSnap = await cDoc.reference.collection('likes').limit(20).get();
         for (var clDoc in cLikesSnap.docs) {
           batch.delete(clDoc.reference);
@@ -330,7 +354,7 @@ class ShortsSocialService {
         batch.delete(cDoc.reference);
       }
       await batch.commit();
-      if (commentsSnap.docs.length < 80) {
+      if (commentsSnap.docs.length < 20) {
         hasMoreComments = false;
       }
     }

@@ -69,28 +69,82 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       if (mounted) {
-        final errorStr = e.toString();
-        String userFriendlyMsg = 'Google ilə daxil olarkən xəta baş verdi: $errorStr';
-        if (errorStr.contains('unauthorized-domain')) {
-          userFriendlyMsg = 'Firebase Xətası: ustago-app.github.io domeni Firebase Console-da "Authorized domains" bölməsinə əlavə edilməlidir.';
-        } else if (errorStr.contains('10') || errorStr.contains('DEVELOPER_ERROR')) {
-          userFriendlyMsg = 'Google Xətası 10: Tətbiqin paket adı (com.ustago.app) və ya SHA-1 Firebase-də təsdiqlənməlidir.';
-        } else if (errorStr.contains('12500')) {
-          userFriendlyMsg = 'Google Xətası 12500: Firebase Authentication-da Google provayderini aktiv edin.';
-        } else if (errorStr.contains('network') || errorStr.contains('7')) {
+        final errorStr = e.toString().toLowerCase();
+        String userFriendlyMsg = 'Google ilə daxil olmaq mümkün olmadı. Yenidən cəhd edin.';
+        if (errorStr.contains('network') || errorStr.contains('unavailable')) {
           userFriendlyMsg = 'İnternet bağlantınızı yoxlayın.';
+        } else if (errorStr.contains('popup-closed') || errorStr.contains('canceled')) {
+          userFriendlyMsg = 'Giriş ləğv edildi.';
         }
         ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
           SnackBar(
             content: Text(userFriendlyMsg),
             backgroundColor: Colors.red.shade700,
-            duration: const Duration(seconds: 6),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _showForgotPasswordDialog() async {
+    final resetCtrl = TextEditingController(text: _emailController.text.trim());
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Şifrəni Sıfırla'),
+        content: TextField(
+          controller: resetCtrl,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(
+            labelText: 'E-mail ünvanınız',
+            hintText: 'numune@mail.com',
+            prefixIcon: Icon(Icons.email_outlined),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Ləğv et'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final email = resetCtrl.text.trim();
+              if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+                ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                  const SnackBar(content: Text('Düzgün e-mail daxil edin')),
+                );
+                return;
+              }
+              try {
+                await _authService.sendPasswordResetEmail(email);
+                if (!ctx.mounted) return;
+                Navigator.pop(ctx);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                  const SnackBar(
+                    content: Text('Şifrə sıfırlama linki e-poçtunuza göndərildi.'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              } catch (_) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                  const SnackBar(
+                    content: Text('Link göndərilə bilmədi. E-mail ünvanını yoxlayın.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text('Göndər'),
+          ),
+        ],
+      ),
+    );
+    resetCtrl.dispose();
   }
 
   @override
@@ -179,7 +233,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     validator: (v) => v!.isEmpty ? 'Şifrənizi daxil edin' : null,
                   ),
-                  const SizedBox(height: 24),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _isLoading ? null : _showForgotPasswordDialog,
+                      child: const Text('Şifrəni unutdum?', style: TextStyle(fontSize: 13)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
 
                   // Daxil ol düyməsi
                   SizedBox(

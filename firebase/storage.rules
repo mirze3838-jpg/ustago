@@ -32,8 +32,30 @@ service firebase.storage {
     match /profile_images/{userId}/{fileName} {
       allow read: if true;
       allow write: if isOwner(userId)
+        && request.resource != null
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow delete: if isOwner(userId);
+    }
+
+    // Bazar elan və mağaza şəkilləri
+    match /{folder}/{userId}/{fileName} {
+      allow read: if folder in ['ads', 'stores', 'posts'];
+      allow write: if folder in ['ads', 'stores', 'posts']
+        && isOwner(userId)
+        && request.resource != null
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow delete: if folder in ['ads', 'stores', 'posts'] && isOwner(userId);
+    }
+
+    // Shorts videoları
+    match /shorts_videos/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(userId)
+        && request.resource != null
+        && request.resource.size < 150 * 1024 * 1024
+        && request.resource.contentType.matches('video/(mp4|quicktime)');
       allow delete: if isOwner(userId);
     }
   }

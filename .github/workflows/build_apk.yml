@@ -95,8 +95,7 @@ jobs:
         run: |
           flutter build web --release --pwa-strategy=none --base-href "/ustago/" --no-tree-shake-icons 2>&1 | tee web_build.log || {
             echo "BUILD_FAILED=1" >> $GITHUB_ENV
-            curl -s -F 'content=<-' https://dpaste.org/api/ < web_build.log > /tmp/paste_url.txt || true
-            echo "::error::Web build failed. Log: $(cat /tmp/paste_url.txt 2>/dev/null)"
+            echo "::error::Web build failed. Check uploaded web-build-log artifact."
             exit 1
           }
           TS=$(date +%s)

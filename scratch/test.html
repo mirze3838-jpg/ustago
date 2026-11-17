@@ -1,0 +1,12 @@
+
+<!DOCTYPE html>
+<html>
+<body>
+<div id="res"></div>
+<script>
+  const mp4 = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/mp4');
+  const webm = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/webm');
+  document.getElementById('res').innerText = JSON.stringify({ mp4, webm });
+</script>
+</body>
+</html>

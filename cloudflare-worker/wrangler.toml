@@ -1,0 +1,14 @@
+name = "ustago-video-upload-worker"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+[vars]
+FIREBASE_PROJECT_ID = "ustago-6a961"
+R2_BUCKET_NAME = "ustago-videos"
+R2_PUBLIC_DOMAIN = "https://pub-7889d6fa89354ee286e5eb34c3a51e97.r2.dev"
+
+# QEYD: Gizli açarlar (Secrets) heç vaxt bu fayla yazılmır!
+# Onlar Cloudflare Dashboard-dan və ya 'wrangler secret put' ilə təhlükəsiz təyin olunur:
+# - R2_ACCOUNT_ID
+# - R2_ACCESS_KEY_ID
+# - R2_SECRET_ACCESS_KEY

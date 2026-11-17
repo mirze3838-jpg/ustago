@@ -108,6 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _ustaStream = FirebaseFirestore.instance
         .collection('users')
         .where('role', whereIn: ['usta', 'worker'])
+        .limit(150)
         .snapshots()
         .asBroadcastStream();
     _shortsSub = _shortsStream.listen((snap) {
@@ -960,7 +961,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _openWhatsApp(String phone) async {
     var cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (cleanPhone.startsWith('0')) cleanPhone = '994${cleanPhone.substring(1)}';
+    if (cleanPhone.startsWith('0')) {
+      cleanPhone = '994${cleanPhone.substring(1)}';
+    } else if (cleanPhone.length == 9 && !cleanPhone.startsWith('994')) {
+      cleanPhone = '994$cleanPhone';
+    }
     final uri = Uri.parse('https://wa.me/$cleanPhone');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -1244,8 +1249,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                                   overflow: TextOverflow.ellipsis,
                                                 ),
                                               ),
-                                              const SizedBox(width: 4),
-                                              const Icon(Icons.verified, color: Color(0xFF1769D2), size: 15),
+                                              if (data['isVerified'] == true) ...[
+                                                const SizedBox(width: 4),
+                                                const Icon(Icons.verified, color: Color(0xFF1769D2), size: 15),
+                                              ],
                                             ],
                                           ),
                                           const SizedBox(height: 2),
@@ -3047,8 +3054,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A)),
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.verified, color: Color(0xFF1769D2), size: 15),
+                      if (data['isVerified'] == true) ...[
+                        const SizedBox(width: 4),
+                        const Icon(Icons.verified, color: Color(0xFF1769D2), size: 15),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -6736,9 +6745,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final cleanHandle = _cleanTikTokHandle(handle);
     final url = 'https://www.tiktok.com/@$cleanHandle';
     try {
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      final uri = Uri.tryParse(url);
+      if (uri != null && (uri.scheme == 'https' || uri.scheme == 'http') && uri.host.isNotEmpty) {
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
       }
     } catch (_) {}
   }
@@ -6763,9 +6774,11 @@ class _HomeScreenState extends State<HomeScreen> {
       url = 'https://$url';
     }
     try {
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      final uri = Uri.tryParse(url);
+      if (uri != null && (uri.scheme == 'https' || uri.scheme == 'http') && uri.host.isNotEmpty) {
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
       }
     } catch (_) {}
   }
@@ -7425,7 +7438,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               .where('userId', isEqualTo: user.uid)
                               .snapshots(),
                           builder: (context, postSnap) {
-                            final postCount = postSnap.data?.docs.length ?? 0;
+                            final nonShortPostCount = (postSnap.data?.docs ?? []).where((d) => d.data()['isShorts'] != true).length;
                             return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                               stream: FirebaseFirestore.instance
                                   .collection('shorts')
@@ -7433,7 +7446,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   .snapshots(),
                               builder: (context, shortSnap) {
                                 final shortCount = shortSnap.data?.docs.length ?? 0;
-                                final totalCount = postCount + shortCount;
+                                final totalCount = nonShortPostCount + shortCount;
                                 final cleanRating = rating.replaceAll('★', '').trim();
                                 return Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -7491,8 +7504,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: Color(0xFF0F172A),
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          const Icon(Icons.verified, color: Color(0xFF1769D2), size: 16),
+                          if (userData?['isVerified'] == true) ...[
+                            const SizedBox(width: 6),
+                            const Icon(Icons.verified, color: Color(0xFF1769D2), size: 16),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 2),
@@ -8836,22 +8851,29 @@ class _HomeScreenState extends State<HomeScreen> {
             final shortDocs = shortSnap.data?.docs ?? [];
             final postDocs = postSnap.data?.docs ?? [];
 
-            // Bütün elementləri vahid siyahıda birləşdiririk
+            // Bütün elementləri vahid siyahıda birləşdiririk (təkrar shorts-ları çıxırıq)
             final List<_UnifiedGridItem> allItems = [];
+            final Set<String> seenVideoUrls = {};
 
             for (final doc in shortDocs) {
+              final sData = doc.data();
+              final vUrl = (sData['videoUrl'] ?? '').toString().trim();
+              if (vUrl.isNotEmpty) seenVideoUrls.add(vUrl);
               allItems.add(_UnifiedGridItem(
                 id: doc.id,
                 isVideo: true,
-                data: doc.data(),
-                createdAt: doc.data()['createdAt'],
+                data: sData,
+                createdAt: sData['createdAt'],
               ));
             }
 
             for (final doc in postDocs) {
               final data = doc.data();
-              final isVid = data['isVideo'] == true ||
-                  (data['videoUrl'] != null && data['videoUrl'].toString().trim().isNotEmpty);
+              final vUrl = (data['videoUrl'] ?? '').toString().trim();
+              if (data['isShorts'] == true || (vUrl.isNotEmpty && seenVideoUrls.contains(vUrl))) {
+                continue;
+              }
+              final isVid = data['isVideo'] == true || vUrl.isNotEmpty;
               allItems.add(_UnifiedGridItem(
                 id: doc.id,
                 isVideo: isVid,
@@ -9712,6 +9734,7 @@ class FullScreenVideoViewerState extends State<FullScreenVideoViewer> {
     } else {
       await c.play();
     }
+    if (!mounted) return;
     setState(() {
       _showControls = true;
     });

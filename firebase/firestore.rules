@@ -24,23 +24,53 @@ service cloud.firestore {
       // Müştərilər və digər istifadəçilər ustaların profilini görə bilsin deyə read açıqdır
       allow read: if signedIn();
 
-      // Qeydiyyat: Heç kim özünü birbaşa 'admin' edə bilməz!
+      // Qeydiyyat: Heç kim özünü birbaşa 'admin', 'isVerified: true' və ya balanslı edə bilməz!
       allow create: if signedIn() 
         && request.auth.uid == userId
         && request.resource.data.role in ['usta', 'worker', 'customer', 'seller']
-        && request.resource.data.keys().hasAll(['fullName', 'role', 'createdAt']);
+        && request.resource.data.keys().hasAll(['fullName', 'role', 'createdAt'])
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() >= 2
+        && request.resource.data.fullName.size() <= 100
+        && (!('isVerified' in request.resource.data) || request.resource.data.isVerified == false)
+        && (!('balance' in request.resource.data) || request.resource.data.balance == 0)
+        && (!('vipUntil' in request.resource.data))
+        && (!('followersCount' in request.resource.data) || request.resource.data.followersCount == 0);
 
       // Redaktə Təhlükəsizliyi:
-      // 1. İstifadəçi öz məlumatını redaktə edərkən ROLUNU dəyişə BİLMƏZ!
-      // 2. Sayğaclar (followersCount, followingCount) istifadəçi tərəfindən istədiyi rəqəmə dəyişdirilə bilməz, yalnız +-1 artırıla/azaldıla bilər!
+      // 1. İstifadəçi rolunu, isVerified, balance, vipUntil, rating, followersCount və isBanned sahələrini dəyişə BİLMƏZ!
+      // 2. followingCount yalnız +-1 artırıla/azaldıla bilər.
       allow update: if isAdmin() || (
         isOwner(userId) &&
-        request.resource.data.role == resource.data.role &&
-        (!('followingCount' in request.resource.data) || !('followingCount' in resource.data) ||
-          request.resource.data.followingCount == resource.data.followingCount + 1 ||
-          request.resource.data.followingCount == resource.data.followingCount - 1 ||
-          request.resource.data.followingCount == resource.data.followingCount)
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'fullName', 'phone', 'category', 'specialtyIds', 'specialties',
+          'specialtyCategories', 'pendingSpecialtyIds', 'country', 'city',
+          'cityName', 'district', 'settlement', 'street',
+          'gpsPermissionGranted', 'locationSharingConsent',
+          'latitude', 'longitude', 'lat', 'lng', 'roleNote',
+          'photoBase64', 'photoUrl', 'bio', 'socialLinks',
+          'tiktokHandle', 'tiktokConnected', 'isAvailable',
+          'followingCount', 'updatedAt', 'notificationsRead'
+        ]) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['followingCount']) ||
+          (resource.data.followingCount is int && (
+            request.resource.data.followingCount == resource.data.followingCount + 1 ||
+            request.resource.data.followingCount == resource.data.followingCount - 1
+          )) ||
+          (!('followingCount' in resource.data) && request.resource.data.followingCount in [0, 1]))
       );
+
+      // Rəylər alt-kolleksiyası: Giriş etmiş müştəri öz adından yaza bilər (özünə rəy yaza bilməz)
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create: if signedIn()
+          && request.auth.uid != userId
+          && request.resource.data.reviewerId == request.auth.uid
+          && request.resource.data.rating is number
+          && request.resource.data.rating >= 1
+          && request.resource.data.rating <= 5;
+        allow update, delete: if signedIn() && (resource.data.reviewerId == request.auth.uid || isAdmin());
+      }
 
       // Hesabı yalnız admin və ya istifadəçi özü silə bilər
       allow delete: if isOwner(userId) || isAdmin();
@@ -50,12 +80,34 @@ service cloud.firestore {
     match /listings/{listingId} {
       allow read: if true; // Hər kəs elanları axtarıb görə bilər
       allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if signedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow update: if signedIn() && (
+        isAdmin() ||
+        (resource.data.ownerId == request.auth.uid && request.resource.data.ownerId == resource.data.ownerId)
+      );
+      allow delete: if signedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+    }
+
+    // BAZAR MAĞAZALARI VƏ MƏHSUL ELANLARI
+    match /market_stores/{docId} {
+      allow read: if true;
+      allow create: if signedIn()
+        && (request.resource.data.ownerId == request.auth.uid || request.resource.data.userId == request.auth.uid)
+        && (!('isVip' in request.resource.data) || request.resource.data.isVip == false);
+      allow update: if signedIn() && (
+        isAdmin() ||
+        ((resource.data.ownerId == request.auth.uid || resource.data.userId == request.auth.uid) &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'userId', 'isVip', 'vipUntil'])) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']) &&
+          request.resource.data.views is int &&
+          (!('views' in resource.data) && request.resource.data.views == 1 ||
+            resource.data.views is int && request.resource.data.views == resource.data.views + 1))
+      );
+      allow delete: if signedIn() && (resource.data.ownerId == request.auth.uid || resource.data.userId == request.auth.uid || isAdmin());
     }
 
     // ŞİKAYƏT VƏ MODERASİYA SİSTEMİ
     match /reports/{reportId} {
-      allow create: if signedIn(); // İstənilən istifadəçi şikayət yaza bilər
+      allow create: if signedIn() && request.resource.data.reporterId == request.auth.uid;
       allow read, update, delete: if isAdmin(); // Yalnız admin oxuyub tədbir görə bilər
     }
 
@@ -88,8 +140,16 @@ service cloud.firestore {
             request.resource.data.commentsCount == resource.data.commentsCount + 1 ||
             request.resource.data.commentsCount == resource.data.commentsCount - 1) &&
           (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['likedBy']) ||
-            request.resource.data.likedBy.toSet().difference(resource.data.likedBy.toSet()).hasOnly([request.auth.uid]) ||
-            resource.data.likedBy.toSet().difference(request.resource.data.likedBy.toSet()).hasOnly([request.auth.uid]))
+            (
+              request.resource.data.likedBy.size() == resource.data.likedBy.size() + 1 &&
+              request.resource.data.likedBy.toSet().difference(resource.data.likedBy.toSet()).hasOnly([request.auth.uid]) &&
+              resource.data.likedBy.toSet().difference(request.resource.data.likedBy.toSet()).size() == 0
+            ) ||
+            (
+              request.resource.data.likedBy.size() == resource.data.likedBy.size() - 1 &&
+              resource.data.likedBy.toSet().difference(request.resource.data.likedBy.toSet()).hasOnly([request.auth.uid]) &&
+              request.resource.data.likedBy.toSet().difference(resource.data.likedBy.toSet()).size() == 0
+            ))
         )
       );
       

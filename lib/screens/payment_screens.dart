@@ -622,6 +622,9 @@ class _VipPromotionScreenState extends State<VipPromotionScreen> {
   String get _currentPlanLabel => _selectedPlanIndex == 0 ? '25 AZN / 30 gün' : '10 AZN / 10 gün';
 
   Future<void> _activateVip() async {
+    final user = FirebaseAuth.instance.currentUser;
+    final owner = (widget.product['ownerId'] ?? widget.product['userId'])?.toString();
+    if (user == null || user.uid != owner) return;
     final docId = widget.product['id']?.toString();
     if (docId != null && docId.isNotEmpty) {
       final now = DateTime.now();
@@ -670,8 +673,14 @@ class _VipPromotionScreenState extends State<VipPromotionScreen> {
     if (user == null) return;
 
     try {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-        'balance': FieldValue.increment(-_currentAmount),
+      final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      await FirebaseFirestore.instance.runTransaction((tx) async {
+        final snap = await tx.get(userRef);
+        final cur = (snap.data()?['balance'] as num?)?.toDouble() ?? 0.0;
+        if (cur < _currentAmount) {
+          throw Exception('Balansda kifayət qədər vəsait yoxdur');
+        }
+        tx.update(userRef, {'balance': cur - _currentAmount});
       });
 
       await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('transactions').add({
@@ -684,19 +693,20 @@ class _VipPromotionScreenState extends State<VipPromotionScreen> {
 
       await _activateVip();
 
+      if (!mounted) return;
       setState(() {
         _userBalance -= _currentAmount;
       });
 
-      if (!mounted) return;
       ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
         const SnackBar(duration: Duration(milliseconds: 1300), 
           content: Text('Təbriklər! Hesabınızdan ödəniş edildi və elanınız VIP oldu! 👑'),
           backgroundColor: Color(0xFF16A34A),
         ),
       );
-      Navigator.pop(context);
+      Navigator.pop(context, true);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
         SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta baş verdi: $e')),
       );
@@ -1061,6 +1071,9 @@ class _BumpPromotionScreenState extends State<BumpPromotionScreen> {
   String get _currentPlanLabel => _selectedPlanIndex == 0 ? '1.00 AZN / 1 dəfə irəli çək' : '2.50 AZN / 3 dəfə irəli çək';
 
   Future<void> _activateBump() async {
+    final user = FirebaseAuth.instance.currentUser;
+    final owner = (widget.product['ownerId'] ?? widget.product['userId'])?.toString();
+    if (user == null || user.uid != owner) return;
     final docId = widget.product['id']?.toString();
     if (docId != null && docId.isNotEmpty) {
       await FirebaseFirestore.instance.collection('market_stores').doc(docId).update({
@@ -1105,8 +1118,14 @@ class _BumpPromotionScreenState extends State<BumpPromotionScreen> {
     if (user == null) return;
 
     try {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-        'balance': FieldValue.increment(-_currentAmount),
+      final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      await FirebaseFirestore.instance.runTransaction((tx) async {
+        final snap = await tx.get(userRef);
+        final cur = (snap.data()?['balance'] as num?)?.toDouble() ?? 0.0;
+        if (cur < _currentAmount) {
+          throw Exception('Balansda kifayət qədər vəsait yoxdur');
+        }
+        tx.update(userRef, {'balance': cur - _currentAmount});
       });
 
       await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('transactions').add({
@@ -1119,19 +1138,20 @@ class _BumpPromotionScreenState extends State<BumpPromotionScreen> {
 
       await _activateBump();
 
+      if (!mounted) return;
       setState(() {
         _userBalance -= _currentAmount;
       });
 
-      if (!mounted) return;
       ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
         const SnackBar(duration: Duration(milliseconds: 1300), 
           content: Text('Təbriklər! Hesabınızdan ödəniş edildi və elanınız ən ön sıraya keçirildi! 🚀'),
           backgroundColor: Color(0xFF16A34A),
         ),
       );
-      Navigator.pop(context);
+      Navigator.pop(context, true);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
         SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta baş verdi: $e')),
       );

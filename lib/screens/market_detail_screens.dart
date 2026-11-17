@@ -9,6 +9,16 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/category_city_service.dart';
 
+/// VIP statusunun aktiv olub-olmadığını (vipUntil tarixinə görə) yoxlayır
+bool isVipActive(Map<String, dynamic> data) {
+  if (data['isVip'] != true) return false;
+  final vipUntil = data['vipUntil'];
+  if (vipUntil is Timestamp) {
+    return vipUntil.toDate().isAfter(DateTime.now());
+  }
+  return false;
+}
+
 /// Baza64 şəkil çevirici köməkçi funksiya
 Uint8List? decodeBase64Safe(String? b64) {
   if (b64 == null || b64.trim().isEmpty) return null;
@@ -92,192 +102,38 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
   }
 
-  void _showVipSheet() {
-    final bool alreadyVip = _prod['isVip'] == true;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 44,
-                height: 4,
-                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(8)),
-              ),
-              const SizedBox(height: 18),
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFFFBBF24), Color(0xFFF59E0B)]),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(color: const Color(0xFFF59E0B).withOpacity(0.35), blurRadius: 14, offset: const Offset(0, 4)),
-                  ],
-                ),
-                child: const Center(
-                  child: Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 36),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                alreadyVip ? 'Bu Elan Artıq VIP-dir' : 'Elanı VIP Et (İndi Pulsuz)',
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                alreadyVip
-                    ? 'Elanınız hazırda VIP statusundadır və Alış-Satış bölməsinin ən üstündə nümayiş olunur.'
-                    : 'Aksiya çərçivəsində elanınızı 30 günlük tamamilə pulsuz VIP vitrininə qaldırın!',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.4),
-              ),
-              const SizedBox(height: 18),
-              _buildBenefitRow(Icons.star_rounded, const Color(0xFFF59E0B), 'Xüsusi VIP Vitrini', 'Alış-satış bölməsinin ən üstündəki VIP lentində daimi nümayiş olunur.'),
-              const SizedBox(height: 10),
-              _buildBenefitRow(Icons.brush_rounded, const Color(0xFFEA580C), 'Qızılı Fərqləndirici Haşiyə', 'Axtarışda və kateqoriyalarda digər elanlardan seçilən parlaq dizayn.'),
-              const SizedBox(height: 10),
-              _buildBenefitRow(Icons.bolt_rounded, const Color(0xFF10B981), 'İndi Pulsuz Aktivləşdirmə', 'Heç bir ödəniş tələb olunmur, bir toxunuşla dərhal aktivləşir.'),
-              const SizedBox(height: 22),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFF59E0B),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    elevation: 0,
-                  ),
-                  icon: Icon(alreadyVip ? Icons.check_circle_rounded : Icons.bolt_rounded, size: 20),
-                  label: Text(
-                    alreadyVip ? 'VIP Müddətini Yenilə (30 gün)' : 'İndi Pulsuz VIP Et',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                  ),
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    final docId = _prod['id']?.toString();
-                    if (docId != null && docId.isNotEmpty) {
-                      await FirebaseFirestore.instance.collection('market_stores').doc(docId).update({
-                        'isVip': true,
-                        'vipUntil': Timestamp.fromDate(DateTime.now().add(const Duration(days: 30))),
-                      }).catchError((_) {});
-                    }
-                    setState(() {
-                      _prod['isVip'] = true;
-                    });
-                    if (mounted) {
-                      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
-                        const SnackBar(duration: Duration(milliseconds: 1300), 
-                          content: Text('Təbriklər! Elanınız pulsuz 30 günlük VIP statusu qazandı! 👑'),
-                          backgroundColor: Color(0xFFD97706),
-                        ),
-                      );
-                    }
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  bool get _isOwner {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || uid.isEmpty) return false;
+    final owner = (_prod['ownerId'] ?? _prod['userId'])?.toString();
+    return owner == uid;
   }
 
-  void _showBumpSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 44,
-                height: 4,
-                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(8)),
-              ),
-              const SizedBox(height: 18),
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFF34D399), Color(0xFF059669)]),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(color: const Color(0xFF10B981).withOpacity(0.35), blurRadius: 14, offset: const Offset(0, 4)),
-                  ],
-                ),
-                child: const Center(
-                  child: Icon(Icons.trending_up_rounded, color: Colors.white, size: 36),
-                ),
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                'Elanı İrəli Çək (İndi Pulsuz)',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Elanınızın dərc olunma tarixini yeniləyərək bütün siyahının ən önünə keçirin!',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-              ),
-              const SizedBox(height: 18),
-              _buildBenefitRow(Icons.arrow_upward_rounded, const Color(0xFF10B981), '1-ci Sıraya Qalxma', 'Elanınız bütün alıcılar üçün ən üstdə və yeni kimi görünür.'),
-              const SizedBox(height: 10),
-              _buildBenefitRow(Icons.schedule_rounded, const Color(0xFF1769D2), 'Tarix Yenilənməsi', 'Dərc olunma tarixi "İndicə yerləşdirildi" kimi qeyd olunur.'),
-              const SizedBox(height: 10),
-              _buildBenefitRow(Icons.volunteer_activism_rounded, const Color(0xFF8B5CF6), 'Tamamilə Pulsuz', 'Aksiya müddətində heç bir ödənişsiz dərhal istifadə edin.'),
-              const SizedBox(height: 22),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF10B981),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    elevation: 0,
-                  ),
-                  icon: const Icon(Icons.rocket_launch_rounded, size: 20),
-                  label: const Text('İndi İrəli Çək', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    final docId = _prod['id']?.toString();
-                    if (docId != null && docId.isNotEmpty) {
-                      await FirebaseFirestore.instance.collection('market_stores').doc(docId).update({
-                        'bumpedAt': FieldValue.serverTimestamp(),
-                        'createdAt': FieldValue.serverTimestamp(),
-                      }).catchError((_) {});
-                    }
-                    if (mounted) {
-                      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
-                        const SnackBar(duration: Duration(milliseconds: 1300), 
-                          content: Text('Elanınız uğurla ən ön sıraya qaldırıldı! 🚀'),
-                          backgroundColor: Color(0xFF059669),
-                        ),
-                      );
-                    }
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+  Future<void> _showVipSheet() async {
+    if (!_isOwner) return;
+    final bool? activated = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => VipPromotionScreen(product: _prod)),
     );
+    if (activated == true && mounted) {
+      setState(() {
+        _prod['isVip'] = true;
+        _prod['vipUntil'] = Timestamp.fromDate(DateTime.now().add(const Duration(days: 30)));
+      });
+    }
+  }
+
+  Future<void> _showBumpSheet() async {
+    if (!_isOwner) return;
+    final bool? bumped = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => BumpPromotionScreen(product: _prod)),
+    );
+    if (bumped == true && mounted) {
+      setState(() {
+        _prod['bumpedAt'] = Timestamp.now();
+      });
+    }
   }
 
   Widget _buildBenefitRow(IconData icon, Color color, String title, String desc) {
@@ -546,13 +402,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
-                            onPressed: () async {
+                            onPressed: _isOwner ? () async {
                               final docId = _prod['id']?.toString();
                               if (docId != null && docId.isNotEmpty) {
                                 await FirebaseFirestore.instance.collection('market_stores').doc(docId).update({
                                   'createdAt': FieldValue.serverTimestamp(),
                                   'bumpedAt': FieldValue.serverTimestamp(),
                                 });
+                                if (!mounted) return;
                                 setState(() {
                                   _prod['createdAt'] = Timestamp.now();
                                 });
@@ -560,7 +417,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                   const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Elanın müddəti 30 gün uzadıldı və ən ön sıraya keçirildi! 🚀')),
                                 );
                               }
-                            },
+                            } : null,
                             child: const Text('30 gün uzat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           ),
                         ],
@@ -719,7 +576,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
                   const SizedBox(height: 18),
 
-                  // VIP və İrəli Çək Düymələri (Nümunə Şəkil 4-ə tam uyğun)
+                  // VIP və İrəli Çək Düymələri (Yalnız elan sahibinə göstərilir)
+                  if (_isOwner)
                   Row(
                     children: [
                       Expanded(
@@ -1012,26 +870,39 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
 
           // 2. 2 Sütunlu Məhsul Gridi (Canlı Firestore datası)
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance.collection('market_stores').snapshots(),
+            stream: FirebaseFirestore.instance
+                .collection('market_stores')
+                .where('listingType', isEqualTo: 'product')
+                .limit(150)
+                .snapshots(),
             builder: (context, snapshot) {
               final allDocs = snapshot.data?.docs ?? [];
               final List<Map<String, dynamic>> storeProducts = [];
+              final storeId = widget.store['id']?.toString() ?? '';
 
               for (final d in allDocs) {
                 final data = d.data();
                 final isProduct = data['listingType'] == 'product';
-                final isMatchOwner = ownerId.isNotEmpty && (data['ownerId'] == ownerId || data['userId'] == ownerId);
-                final isMatchStoreName = title.isNotEmpty && (data['store'] == title || data['storeName'] == title);
+                final docStoreId = data['storeId']?.toString() ?? '';
+                final isMatchStoreId = storeId.isNotEmpty && docStoreId.isNotEmpty && docStoreId == storeId;
+                final isMatchOwner = docStoreId.isEmpty && ownerId.isNotEmpty && (data['ownerId'] == ownerId || data['userId'] == ownerId);
+                final isMatchStoreName = docStoreId.isEmpty && title.isNotEmpty && (data['store'] == title || data['storeName'] == title);
 
-                if (isProduct && (isMatchOwner || isMatchStoreName)) {
+                final createdTs = data['createdAt'];
+                final isExpired = createdTs is Timestamp &&
+                    DateTime.now().difference(createdTs.toDate()).inDays >= 30;
+
+                if (isProduct && !isExpired && (isMatchStoreId || isMatchOwner || isMatchStoreName)) {
                   storeProducts.add({'id': d.id, ...data});
                 }
               }
 
-              // Tarixə görə sıralayırıq (VIP-lər ən üstdə)
+              // Tarixə görə sıralayırıq (aktiv VIP-lər ən üstdə)
               storeProducts.sort((a, b) {
-                if (a['isVip'] == true && b['isVip'] != true) return -1;
-                if (b['isVip'] == true && a['isVip'] != true) return 1;
+                final aVip = isVipActive(a);
+                final bVip = isVipActive(b);
+                if (aVip && !bVip) return -1;
+                if (bVip && !aVip) return 1;
                 final ta = a['createdAt'] is Timestamp ? (a['createdAt'] as Timestamp).millisecondsSinceEpoch : 0;
                 final tb = b['createdAt'] is Timestamp ? (b['createdAt'] as Timestamp).millisecondsSinceEpoch : 0;
                 return tb.compareTo(ta);

@@ -82,14 +82,17 @@ class AuthService {
     // Koordinatlar yalnız istifadəçinin ayrıca razılığı olduqda ictimai profilə yazılır
     final bool shareCoords = locationSharingConsent && lat != null && lng != null;
 
+    const allowedRoles = {'usta', 'worker', 'customer', 'seller'};
+    final safeRole = allowedRoles.contains(role) ? role : 'customer';
+
     // İstifadəçi məlumatları Firestore bazasına yazılır
     await _db.collection('users').doc(uid).set({
       'uid': uid,
       'fullName': fullName.trim(),
       'email': email.trim(),
       'phone': phone?.trim() ?? '',
-      'role': role,
-      'category': category ?? (role == 'worker' ? 'Fəhlə (Köməkçi işlər)' : 'Tikinti'),
+      'role': safeRole,
+      'category': category ?? (safeRole == 'worker' ? 'Fəhlə (Köməkçi işlər)' : 'Tikinti'),
       'specialtyIds': specialtyIds,
       'specialties': specialties,
       'specialtyCategories': specialtyCategories,
@@ -108,7 +111,7 @@ class AuthService {
       if (shareCoords) 'lng': lng,
       if (roleNote != null && roleNote.trim().isNotEmpty) 'roleNote': roleNote.trim(),
       'photoBase64': photoBase64 ?? '',
-      'isVerified': true,
+      'isVerified': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
 
@@ -165,19 +168,26 @@ class AuthService {
     if (user != null) {
       final doc = await _db.collection('users').doc(user.uid).get();
       if (!doc.exists) {
+        const allowedRoles = {'usta', 'worker', 'customer', 'seller'};
+        final safeRole = allowedRoles.contains(defaultRole) ? defaultRole : 'customer';
         await _db.collection('users').doc(user.uid).set({
           'uid': user.uid,
           'fullName': user.displayName ?? 'Adsız İstifadəçi',
           'email': user.email ?? '',
-          'role': defaultRole,
+          'role': safeRole,
           'photoUrl': user.photoURL ?? '',
-          'isVerified': true,
+          'isVerified': false,
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
     }
 
     return cred;
+  }
+
+  // 3.5 Şifrə sıfırlama linki göndərmək
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email: email.trim());
   }
 
   // 4. Çıxış etmək (Logout - Həm Firebase, həm də Google sessiyasını təmizləyir)

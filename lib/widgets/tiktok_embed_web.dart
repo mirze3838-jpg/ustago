@@ -32,8 +32,14 @@ class _TikTokEmbedViewState extends State<TikTokEmbedView> {
   void initState() {
     super.initState();
     _viewType = 'tiktok-iframe-${widget.videoId}-${DateTime.now().microsecondsSinceEpoch}';
-    final src = widget.embedUrl ??
+    final fallbackSrc =
         'https://www.tiktok.com/player/v1/${widget.videoId}?embed_from=oembed&music_info=1&description=1&autoplay=1&muted=0';
+    final rawSrc = widget.embedUrl ?? fallbackSrc;
+    final parsed = Uri.tryParse(rawSrc);
+    final isAllowedTikTok = parsed != null &&
+        parsed.scheme == 'https' &&
+        (parsed.host == 'tiktok.com' || parsed.host.endsWith('.tiktok.com'));
+    final src = isAllowedTikTok ? parsed.toString() : fallbackSrc;
 
     ui_web.platformViewRegistry.registerViewFactory(_viewType, (int viewId) {
       final iframe = html.IFrameElement()
@@ -43,6 +49,7 @@ class _TikTokEmbedViewState extends State<TikTokEmbedView> {
         ..style.height = '100%'
         ..style.backgroundColor = 'black'
         ..allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'
+        ..setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-presentation')
         ..allowFullscreen = true;
       return iframe;
     });

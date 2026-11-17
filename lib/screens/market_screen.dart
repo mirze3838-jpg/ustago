@@ -379,12 +379,15 @@ class MarketScreen extends StatefulWidget {
 
     List<Map<String, dynamic>> myStores = [];
     try {
-      final snap = await FirebaseFirestore.instance.collection('market_stores').get();
+      final snap = await FirebaseFirestore.instance
+          .collection('market_stores')
+          .where('listingType', isEqualTo: 'store')
+          .limit(100)
+          .get();
       myStores = snap.docs
           .where((d) {
             final data = d.data();
-            final isOwner = data['ownerId'] == user.uid || data['userId'] == user.uid;
-            return isOwner && (data['listingType'] ?? 'store') == 'store';
+            return data['ownerId'] == user.uid || data['userId'] == user.uid;
           })
           .map((d) => {'id': d.id, ...d.data()})
           .toList();
@@ -600,21 +603,27 @@ class MarketScreen extends StatefulWidget {
                   const SizedBox(height: 12),
 
                   if (myStores.isNotEmpty) ...[
-                    DropdownButtonFormField<String>(
-                      value: storeNameCtrl.text.isNotEmpty ? storeNameCtrl.text : myStores.first['title']?.toString(),
-                      decoration: InputDecoration(
-                        labelText: 'Hansı Mağazaya aiddir?',
-                        prefixIcon: const Icon(Icons.store_rounded, color: Color(0xFF8B5CF6)),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      items: [
-                        const DropdownMenuItem(value: '', child: Text('Fərdi Elan (Mağazasız)')),
-                        ...myStores.map((s) => DropdownMenuItem(
-                              value: s['title']?.toString() ?? '',
-                              child: Text(s['title']?.toString() ?? ''),
-                            )),
-                      ],
-                      onChanged: (val) {
+                    Builder(builder: (_) {
+                      final storeTitles = myStores.map((s) => s['title']?.toString() ?? '').toSet();
+                      final currentVal = storeNameCtrl.text;
+                      final safeVal = storeTitles.contains(currentVal)
+                          ? currentVal
+                          : (currentVal.isEmpty ? '' : (myStores.first['title']?.toString() ?? ''));
+                      return DropdownButtonFormField<String>(
+                        value: safeVal,
+                        decoration: InputDecoration(
+                          labelText: 'Hansı Mağazaya aiddir?',
+                          prefixIcon: const Icon(Icons.store_rounded, color: Color(0xFF8B5CF6)),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        items: [
+                          const DropdownMenuItem(value: '', child: Text('Fərdi Elan (Mağazasız)')),
+                          ...myStores.map((s) => DropdownMenuItem(
+                                value: s['title']?.toString() ?? '',
+                                child: Text(s['title']?.toString() ?? ''),
+                              )),
+                        ],
+                        onChanged: (val) {
                         setModalState(() {
                           storeNameCtrl.text = val ?? '';
                           if (val != null && val.isNotEmpty) {
@@ -1034,6 +1043,7 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
     _marketStream = FirebaseFirestore.instance
         .collection('market_stores')
         .orderBy('createdAt', descending: true)
+        .limit(200)
         .snapshots()
         .asBroadcastStream();
     _marketSub = _marketStream.listen((snap) {
@@ -1359,11 +1369,25 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                       data['id'] = d.id;
                       final bool isStore = (data['listingType']?.toString() ?? 'store') == 'store';
                       final String title = data['title']?.toString() ?? '';
+                      final String storeLabel = (data['store'] ?? data['storeName'] ?? '').toString();
                       final String subtitle = isStore
                           ? '${data['category'] ?? ''} • ${data['address'] ?? ''}'
-                          : '${data['price'] ?? ''} (${data['unit'] ?? '1 ədəd'}) • ${data['storeName'] ?? ''}';
+                          : '${data['price'] ?? ''} (${data['unit'] ?? '1 ədəd'}) • $storeLabel';
 
-                      return Container(
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => isStore
+                                  ? StoreDetailScreen(store: data)
+                                  : ProductDetailScreen(product: data),
+                            ),
+                          );
+                        },
+                        child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: const Color(0xFFF8FAFC),
@@ -1440,6 +1464,7 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                             ),
                           ],
                         ),
+                      ),
                       );
                     },
                   );
@@ -1465,7 +1490,11 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
 
   Future<void> _openWhatsApp(String phone, {String? message}) async {
     var cleanPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
-    if (cleanPhone.startsWith('0')) cleanPhone = '994${cleanPhone.substring(1)}';
+    if (cleanPhone.startsWith('0')) {
+      cleanPhone = '994${cleanPhone.substring(1)}';
+    } else if (cleanPhone.length == 9 && !cleanPhone.startsWith('994')) {
+      cleanPhone = '994$cleanPhone';
+    }
     final encodedMsg = message != null ? '?text=${Uri.encodeComponent(message)}' : '';
     final uri = Uri.parse('https://wa.me/$cleanPhone$encodedMsg');
     if (await canLaunchUrl(uri)) {
@@ -2464,7 +2493,7 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
         currentUser != null &&
         (store['ownerId'] == currentUser.uid ||
             store['userId'] == currentUser.uid ||
-            currentUser.email?.toLowerCase() == 'mirze3838@gmail.com');
+            _currentUserRole == 'admin');
 
     final double ratingVal = (store['rating'] is num) ? (store['rating'] as num).toDouble() : 4.8;
     final int reviews = (store['reviewCount'] is num) ? (store['reviewCount'] as num).toInt() : 12;
@@ -2782,7 +2811,7 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
             // Firestore-dakı VIP elanlar
             for (final d in docs) {
               final data = d.data();
-              if (data['listingType']?.toString() == 'product' && data['isVip'] == true) {
+              if (data['listingType']?.toString() == 'product' && isVipActive(data)) {
                 // 30 gündən köhnə elanlar avtomatik gizlədilir
                 if (data['createdAt'] is Timestamp) {
                   final passed = DateTime.now().difference((data['createdAt'] as Timestamp).toDate()).inDays;
@@ -2805,6 +2834,7 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                   'imageBase64': data['imageBase64'] ?? '',
                   'imageUrl': data['imageUrl'] ?? '',
                   'isVip': true,
+                  'vipUntil': data['vipUntil'],
                   'createdAt': data['createdAt'],
                 });
               }
@@ -2945,7 +2975,8 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                   'category': data['category'] ?? 'Tikinti Materialları',
                   'description': data['description'] ?? '',
                   'imageBase64': data['imageBase64'] ?? '',
-                  'isVip': data['isVip'] == true,
+                  'imageUrl': data['imageUrl'] ?? '',
+                  'isVip': isVipActive(data),
                   'vipUntil': data['vipUntil'],
                   'bumpedAt': data['bumpedAt'],
                   'createdAt': data['createdAt'],
@@ -3147,7 +3178,7 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
         currentUser != null &&
         (prod['ownerId'] == currentUser.uid ||
             prod['userId'] == currentUser.uid ||
-            currentUser.email?.toLowerCase() == 'mirze3838@gmail.com');
+            _currentUserRole == 'admin');
 
     return InkWell(
       borderRadius: BorderRadius.circular(14),

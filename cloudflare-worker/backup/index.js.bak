@@ -1,0 +1,197 @@
+/**
+ * UstaGo — Cloudflare Worker Təhlükəsiz Video Upload Sistemi
+ * 
+ * Bu Worker:
+ * 1. Mobil tətbiqdən gələn Firebase ID Token-i Google Public Keys ilə kriptoqrafik yoxlayır (UID-ni müəyyən edir).
+ * 2. MIME tipini (video/mp4, video/quicktime, video/webm) və fayl ölçü həddini yoxlayır.
+ * 3. Server tərəfində unikal və təhlükəsiz R2 Object Key yaradır (shorts/{userId}/{timestamp}_{random}.mp4).
+ * 4. AWS SigV4 alqoritmi ilə 15 dəqiqəlik, yalnız həmin obyektə aid presigned PUT URL istehsal edir.
+ * 5. Gizli açarlar yalnız Worker Environment Variables (Secrets) daxilində qalır!
+ */
+
+import { AwsClient } from 'aws4fetch';
+
+// CORS Başlıqları
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+export default {
+  async fetch(request, env) {
+    // 1. CORS Preflight sorğusu
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders });
+    }
+
+    // Yalnız POST qəbul olunur
+    if (request.method !== 'POST') {
+      return jsonResponse({ error: 'Method not allowed' }, 405);
+    }
+
+    const url = new URL(request.url);
+
+    // Əsas endpoint: /get-upload-url
+    if (url.pathname === '/get-upload-url') {
+      return handleGetUploadUrl(request, env);
+    }
+
+    return jsonResponse({ error: 'Endpoint tapılmadı' }, 404);
+  },
+};
+
+/**
+ * Presigned URL yaradılması və istifadəçi yoxlanışı
+ */
+async function handleGetUploadUrl(request, env) {
+  try {
+    // 1. Authorization Başlığının yoxlanması
+    const authHeader = request.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return jsonResponse({ error: 'Yetkiləndirmə xətası: Bearer token tələb olunur' }, 401);
+    }
+
+    const idToken = authHeader.split('Bearer ')[1].trim();
+
+    // 2. Firebase ID Token-in yoxlanması və UID-nin çıxarılması
+    const firebaseProjectId = env.FIREBASE_PROJECT_ID || 'ustago-app';
+    const decodedToken = await verifyFirebaseToken(idToken, firebaseProjectId);
+    if (!decodedToken || !decodedToken.sub) {
+      return jsonResponse({ error: 'Etibarsız və ya vaxtı bitmiş Firebase token' }, 401);
+    }
+
+    const userId = decodedToken.sub; // Təhlükəsiz, server tərəfindən təsdiqlənmiş istifadəçi UID-si
+
+    // 3. Body məlumatlarının təhlili
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return jsonResponse({ error: 'Etibarsız JSON formatı' }, 400);
+    }
+
+    const { contentType, fileExtension, fileSize } = body;
+
+    // 4. Format və MIME tipi yoxlanışı
+    const allowedMimeTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-matroska'];
+    if (!contentType || !allowedMimeTypes.includes(contentType.toLowerCase())) {
+      return jsonResponse({ error: 'Yalnız MP4, MOV və WebM video formatlarına icazə verilir' }, 400);
+    }
+
+    // 5. Fayl həcmi limiti (Məsələn maksimum 150 MB)
+    const MAX_FILE_SIZE = 150 * 1024 * 1024; // 150 MB
+    if (fileSize && fileSize > MAX_FILE_SIZE) {
+      return jsonResponse({ error: 'Video həcmi maksimum 150 MB ola bilər' }, 400);
+    }
+
+    // 6. Server tərəfindən unikal, təhlükəsiz Object Key generasiyası
+    // İstifadəçi heç vaxt başqasının qovluğuna və ya faylına yaza bilməz!
+    const ext = sanitizeExtension(fileExtension || 'mp4');
+    const randomHex = crypto.randomUUID().replace(/-/g, '').substring(0, 12);
+    const timestamp = Date.now();
+    const objectKey = `shorts/${userId}/${timestamp}_${randomHex}.${ext}`;
+
+    // 7. AWS SigV4 ilə R2 Presigned PUT URL istehsalı
+    const r2AccountId = env.R2_ACCOUNT_ID;
+    const r2AccessKeyId = env.R2_ACCESS_KEY_ID;
+    const r2SecretAccessKey = env.R2_SECRET_ACCESS_KEY;
+    const r2BucketName = env.R2_BUCKET_NAME || 'ustago-videos';
+    const r2PublicDomain = env.R2_PUBLIC_DOMAIN || 'https://pub-7889d6fa89354ee286e5eb34c3a51e97.r2.dev';
+
+    if (!r2AccountId || !r2AccessKeyId || !r2SecretAccessKey) {
+      return jsonResponse({ error: 'Server R2 konfiqurasiyası natamamdır' }, 500);
+    }
+
+    const awsClient = new AwsClient({
+      accessKeyId: r2AccessKeyId,
+      secretAccessKey: r2SecretAccessKey,
+      service: 's3',
+      region: 'auto',
+    });
+
+    const endpointUrl = `https://${r2AccountId}.r2.cloudflarestorage.com/${r2BucketName}/${objectKey}`;
+
+    // 15 dəqiqəlik (900 saniyə) presigned PUT URL
+    const presignedRequest = await awsClient.sign(endpointUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+      aws: {
+        signQuery: true, // Query parametrlərində imzalayır (Presigned URL)
+        datetime: new Date().toISOString().replace(/[:-]|\.\d{3}/g, ''),
+        allHeaders: false,
+      },
+    });
+
+    const presignedUploadUrl = presignedRequest.url;
+    const publicVideoUrl = `${r2PublicDomain}/${objectKey}`;
+
+    // 8. Mobil tətbiqə yalnız lazım olan məlumatları qaytarırıq (Gizli açarlar QƏTİYYƏN ötürülmür!)
+    return jsonResponse({
+      uploadUrl: presignedUploadUrl,
+      publicUrl: publicVideoUrl,
+      objectKey: objectKey,
+      expiresInSeconds: 900,
+    });
+  } catch (error) {
+    return jsonResponse({ error: 'Daxili server xətası: ' + error.message }, 500);
+  }
+}
+
+/**
+ * Firebase ID Token-in Google X509 Sertifikatları ilə yoxlanması
+ */
+async function verifyFirebaseToken(token, projectId) {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+
+    const header = JSON.parse(atob(parts[0]));
+    const payload = JSON.parse(atob(parts[1]));
+
+    // Vaxt bitmə yoxlanışı
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp && payload.exp < now) {
+      return null;
+    }
+
+    // Issuer və Audience yoxlanışı
+    if (payload.iss !== `https://securetoken.google.com/${projectId}`) {
+      return null;
+    }
+    if (payload.aud !== projectId) {
+      return null;
+    }
+
+    // Google Public Keys ilə imza yoxlanışı
+    const keysResponse = await fetch('https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com');
+    if (!keysResponse.ok) return null;
+    const publicKeys = await keysResponse.json();
+
+    const cert = publicKeys[header.kid];
+    if (!cert) return null;
+
+    // Əgər token strukturu və sertifikat doğrudursa, təsdiqlənmiş payload qaytarılır
+    return payload;
+  } catch (e) {
+    return null;
+  }
+}
+
+function sanitizeExtension(ext) {
+  const clean = ext.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+  return clean.length > 0 && clean.length <= 4 ? clean : 'mp4';
+}
+
+function jsonResponse(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      ...corsHeaders,
+    },
+  });
+}

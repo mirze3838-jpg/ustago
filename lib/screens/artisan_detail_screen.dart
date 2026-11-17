@@ -79,8 +79,13 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
       }
       return;
     }
-    if (clean.startsWith('0')) clean = '994${clean.substring(1)}';
-    final Uri uri = Uri.parse('https://wa.me/$clean?text=Salam%20$name,%20UstaGo-dan%20əlaqə%20saxlayıram.');
+    if (clean.startsWith('0')) {
+      clean = '994${clean.substring(1)}';
+    } else if (clean.length == 9 && !clean.startsWith('994')) {
+      clean = '994$clean';
+    }
+    final msg = Uri.encodeComponent('Salam $name, UstaGo-dan əlaqə saxlayıram.');
+    final Uri uri = Uri.parse('https://wa.me/$clean?text=$msg');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
@@ -135,12 +140,6 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
 
     if (confirmed != true) return;
 
-    if (mounted) {
-      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
-        const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Rəyiniz silindi'), backgroundColor: Colors.orange),
-      );
-    }
-
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
       await Future.wait([
@@ -150,6 +149,11 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
       ]);
 
       await _recalculateArtisanRating(artisanUid);
+      if (mounted) {
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Rəyiniz silindi'), backgroundColor: Colors.orange),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
@@ -167,23 +171,36 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
     String initialComment = '',
   }) async {
     int rating = initialRating;
-    final commentController = TextEditingController(text: initialComment);
     final bool isEdit = existingReviewId != null;
     final currentUser = FirebaseAuth.instance.currentUser;
-    String resolvedName = 'Müştəri';
-    String resolvedPhotoBase64 = '';
-    if (currentUser != null) {
-      resolvedName = currentUser.displayName ?? currentUser.email?.split('@').first ?? 'Müştəri';
-      try {
-        final uDoc = await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get();
-        final uData = uDoc.data();
-        if (uData != null) {
-          final fn = (uData['fullName'] ?? uData['name'] ?? '').toString().trim();
-          if (fn.isNotEmpty) resolvedName = fn;
-          resolvedPhotoBase64 = (uData['photoBase64'] ?? '').toString().trim();
-        }
-      } catch (_) {}
+    if (currentUser == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Rəy yazmaq üçün əvvəlcə daxil olun')),
+        );
+      }
+      return;
     }
+    if (currentUser.uid == artisanUid) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Öz profilinizə rəy yaza bilməzsiniz')),
+        );
+      }
+      return;
+    }
+    final commentController = TextEditingController(text: initialComment);
+    String resolvedName = currentUser.displayName ?? currentUser.email?.split('@').first ?? 'Müştəri';
+    String resolvedPhotoBase64 = '';
+    try {
+      final uDoc = await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get();
+      final uData = uDoc.data();
+      if (uData != null) {
+        final fn = (uData['fullName'] ?? uData['name'] ?? '').toString().trim();
+        if (fn.isNotEmpty) resolvedName = fn;
+        resolvedPhotoBase64 = (uData['photoBase64'] ?? '').toString().trim();
+      }
+    } catch (_) {}
     if (!mounted) return;
 
     showDialog(
@@ -265,17 +282,6 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
 
                 Navigator.pop(ctx);
 
-                if (mounted) {
-                  setState(() => _selectedTabIndex = 1);
-                  ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
-                    SnackBar(
-                      duration: const Duration(milliseconds: 1300),
-                      content: Text(isEdit ? 'Rəyiniz yeniləndi!' : 'Rəyiniz əlavə edildi!'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-
                 try {
                   final reviewsRef = FirebaseFirestore.instance
                       .collection('users')
@@ -288,48 +294,54 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                       'comment': comment,
                       'updatedAt': FieldValue.serverTimestamp(),
                     });
-                    if (currentUser != null) {
-                      await FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(currentUser.uid)
-                          .collection('given_reviews')
-                          .doc(existingReviewId)
-                          .set({
-                        'reviewId': existingReviewId,
-                        'artisanId': artisanUid,
-                        'artisanName': artisanName,
-                        'rating': rating,
-                        'comment': comment,
-                        'updatedAt': FieldValue.serverTimestamp(),
-                      }, SetOptions(merge: true));
-                    }
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(currentUser.uid)
+                        .collection('given_reviews')
+                        .doc(existingReviewId)
+                        .set({
+                      'reviewId': existingReviewId,
+                      'artisanId': artisanUid,
+                      'artisanName': artisanName,
+                      'rating': rating,
+                      'comment': comment,
+                      'updatedAt': FieldValue.serverTimestamp(),
+                    }, SetOptions(merge: true));
                   } else {
                     final docRef = await reviewsRef.add({
                       'rating': rating,
                       'comment': comment,
                       'reviewerName': reviewerName,
                       'reviewerPhotoBase64': resolvedPhotoBase64,
-                      'reviewerId': currentUser?.uid ?? 'anonymous',
+                      'reviewerId': currentUser.uid,
                       'createdAt': FieldValue.serverTimestamp(),
                     });
-                    if (currentUser != null) {
-                      await FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(currentUser.uid)
-                          .collection('given_reviews')
-                          .doc(docRef.id)
-                          .set({
-                        'reviewId': docRef.id,
-                        'artisanId': artisanUid,
-                        'artisanName': artisanName,
-                        'rating': rating,
-                        'comment': comment,
-                        'createdAt': FieldValue.serverTimestamp(),
-                      });
-                    }
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(currentUser.uid)
+                        .collection('given_reviews')
+                        .doc(docRef.id)
+                        .set({
+                      'reviewId': docRef.id,
+                      'artisanId': artisanUid,
+                      'artisanName': artisanName,
+                      'rating': rating,
+                      'comment': comment,
+                      'createdAt': FieldValue.serverTimestamp(),
+                    });
                   }
 
                   await _recalculateArtisanRating(artisanUid);
+                  if (mounted) {
+                    setState(() => _selectedTabIndex = 1);
+                    ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                      SnackBar(
+                        duration: const Duration(milliseconds: 1300),
+                        content: Text(isEdit ? 'Rəyiniz yeniləndi!' : 'Rəyiniz əlavə edildi!'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
                 } catch (e) {
                   if (mounted) {
                     ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
@@ -988,15 +1000,23 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
           stream: FirebaseFirestore.instance.collection('shorts').where('userId', isEqualTo: uId).snapshots(),
           builder: (context, shortSnap) {
             final List<Map<String, dynamic>> items = [];
+            final Set<String> seenVideoUrls = {};
+
+            for (final d in (shortSnap.data?.docs ?? [])) {
+              final sData = d.data();
+              final vUrl = (sData['videoUrl'] ?? '').toString().trim();
+              if (vUrl.isNotEmpty) seenVideoUrls.add(vUrl);
+              items.add({'id': d.id, 'source': 'short', ...sData});
+            }
 
             for (final d in (postSnap.data?.docs ?? [])) {
               final data = d.data();
-              final bool isVid = data['isVideo'] == true || (data['videoUrl'] ?? '').toString().trim().isNotEmpty;
+              final vUrl = (data['videoUrl'] ?? '').toString().trim();
+              if (data['isShorts'] == true || (vUrl.isNotEmpty && seenVideoUrls.contains(vUrl))) {
+                continue;
+              }
+              final bool isVid = data['isVideo'] == true || vUrl.isNotEmpty;
               items.add({'id': d.id, 'source': isVid ? 'short' : 'post', ...data});
-            }
-
-            for (final d in (shortSnap.data?.docs ?? [])) {
-              items.add({'id': d.id, 'source': 'short', ...d.data()});
             }
 
             items.sort((a, b) {
@@ -1319,7 +1339,7 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
           final String displayName = (data['fullName'] ?? data['name'] ?? 'Usta').toString();
           final String phone = (data['phone'] ?? '').toString().trim();
           final String category = (data['category'] ?? data['trade'] ?? '').toString();
-          final String rating = (data['rating'] != null) ? data['rating'].toString() : '5.0';
+          final String rating = (data['rating'] != null) ? data['rating'].toString() : 'Yeni';
           final String userRole = (data['role'] ?? 'usta').toString().toLowerCase().trim();
           final bool isWorking = data['isWorking'] == true;
 
@@ -1499,12 +1519,12 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                               stream: FirebaseFirestore.instance.collection('posts').where('userId', isEqualTo: userId).snapshots(),
                               builder: (context, postSnap) {
-                                final postCount = postSnap.data?.docs.length ?? 0;
+                                final nonShortPostCount = (postSnap.data?.docs ?? []).where((d) => d.data()['isShorts'] != true).length;
                                 return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                                   stream: FirebaseFirestore.instance.collection('shorts').where('userId', isEqualTo: userId).snapshots(),
                                   builder: (context, shortSnap) {
                                     final shortCount = shortSnap.data?.docs.length ?? 0;
-                                    final totalCount = postCount + shortCount;
+                                    final totalCount = nonShortPostCount + shortCount;
                                     final cleanRating = rating.replaceAll('★', '').trim();
                                     return Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -1539,8 +1559,10 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                           Row(
                             children: [
                               Text(displayName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A))),
-                              const SizedBox(width: 6),
-                              const Icon(Icons.verified, color: Color(0xFF1769D2), size: 16),
+                              if (data['isVerified'] == true) ...[
+                                const SizedBox(width: 6),
+                                const Icon(Icons.verified, color: Color(0xFF1769D2), size: 16),
+                              ],
                             ],
                           ),
                           const SizedBox(height: 2),

@@ -58,9 +58,14 @@ class TikTokInfo {
 class TikTokService {
   /// Daxil edilən mətnin TikTok linki olub-olmadığını yoxlayır
   static bool isTikTokUrl(String input) {
-    final text = input.trim().toLowerCase();
+    final text = input.trim();
     if (text.isEmpty) return false;
-    return text.contains('tiktok.com') || text.startsWith('@');
+    if (text.startsWith('@') && text.length > 1) return true;
+    final withScheme = text.startsWith('http://') || text.startsWith('https://') ? text : 'https://$text';
+    final uri = Uri.tryParse(withScheme);
+    if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) return false;
+    final host = uri.host.toLowerCase();
+    return host == 'tiktok.com' || host.endsWith('.tiktok.com');
   }
 
   /// Qısa linkləri (vt.tiktok.com və ya vm.tiktok.com) tam linkə açır
@@ -73,18 +78,30 @@ class TikTokService {
       url = 'https://$url';
     }
 
+    final parsed = Uri.tryParse(url);
+    if (parsed == null || (parsed.scheme != 'https' && parsed.scheme != 'http')) {
+      return url;
+    }
+
     // Əgər vt.tiktok.com və ya vm.tiktok.com qısa linkidirsə, redirect-i izləyirik
-    if (url.contains('vt.tiktok.com') || url.contains('vm.tiktok.com')) {
+    final host = parsed.host.toLowerCase();
+    if (host == 'vt.tiktok.com' || host == 'vm.tiktok.com') {
+      final client = http.Client();
       try {
-        final client = http.Client();
-        final request = http.Request('GET', Uri.parse(url))..followRedirects = false;
+        final request = http.Request('GET', parsed)..followRedirects = false;
         final response = await client.send(request).timeout(const Duration(seconds: 5));
         final location = response.headers['location'];
         if (location != null && location.isNotEmpty) {
-          return location.split('?').first;
+          final locUri = Uri.tryParse(location);
+          if (locUri != null && locUri.scheme == 'https' &&
+              (locUri.host.toLowerCase() == 'tiktok.com' || locUri.host.toLowerCase().endsWith('.tiktok.com'))) {
+            return location.split('?').first;
+          }
         }
       } catch (e) {
         debugPrint('TikTok redirect resolve xətası: $e');
+      } finally {
+        client.close();
       }
     }
 
@@ -141,7 +158,7 @@ class TikTokService {
           if (jsonMap['code'] == 0 && jsonMap['data'] != null) {
             final d = jsonMap['data'] as Map<String, dynamic>;
             final vidId = (d['id'] ?? extractVideoId(canonical))?.toString();
-            final playUrl = (d['wmplay'] ?? d['hdplay'] ?? d['play'])?.toString();
+            final playUrl = (d['hdplay'] ?? d['play'] ?? d['wmplay'])?.toString();
             final coverUrl = (d['cover'] ?? d['origin_cover'])?.toString();
             final videoTitle = d['title']?.toString();
             final authorObj = d['author'] as Map<String, dynamic>?;

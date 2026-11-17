@@ -106,7 +106,7 @@ class _RegisterScreenState extends State<RegisterScreen> with WidgetsBindingObse
           }
         });
       }
-    });
+    }, onError: (_) {});
 
     _syncMapToAddress(markConfirmed: false);
   }
@@ -664,7 +664,11 @@ class _RegisterScreenState extends State<RegisterScreen> with WidgetsBindingObse
                   hintText: '+994 50 123 45 67',
                   prefixIcon: Icon(Icons.phone_outlined),
                 ),
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Əlaqə nömrənizi daxil edin' : null,
+                validator: (v) {
+                  final digits = (v ?? '').replaceAll(RegExp(r'\D'), '');
+                  if (digits.length < 9) return 'Düzgün əlaqə nömrəsi daxil edin (məs: 050 123 45 67)';
+                  return null;
+                },
               ),
             ),
             const SizedBox(height: 16),
@@ -680,7 +684,9 @@ class _RegisterScreenState extends State<RegisterScreen> with WidgetsBindingObse
                   hintText: 'numune@mail.com',
                   prefixIcon: Icon(Icons.email_outlined),
                 ),
-                validator: (v) => (v == null || !v.contains('@')) ? 'Düzgün e-mail daxil edin' : null,
+                validator: (v) => (v == null || !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v.trim()))
+                    ? 'Düzgün e-mail daxil edin'
+                    : null,
               ),
             ),
             const SizedBox(height: 16),

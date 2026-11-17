@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -33,6 +34,25 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
   List<String> _cities = List.from(CategoryCityService.defaultCities);
   StreamSubscription<List<String>>? _citySub;
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _artisansStream;
+  final Map<String, Uint8List?> _photoCache = {};
+
+  Uint8List? _decodeB64(String? b64) {
+    if (b64 == null || b64.trim().isEmpty) return null;
+    if (_photoCache.containsKey(b64)) return _photoCache[b64];
+    try {
+      var clean = b64.trim();
+      final idx = clean.indexOf(',');
+      if (idx != -1 && clean.startsWith('data:')) {
+        clean = clean.substring(idx + 1);
+      }
+      final bytes = base64Decode(clean);
+      _photoCache[b64] = bytes;
+      return bytes;
+    } catch (_) {
+      _photoCache[b64] = null;
+      return null;
+    }
+  }
 
   @override
   void initState() {
@@ -41,10 +61,11 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
     _artisansStream = FirebaseFirestore.instance
         .collection('users')
         .where('role', whereIn: ['usta', 'worker', 'fehle', 'fəhlə'])
+        .limit(150)
         .snapshots();
     _citySub = CategoryCityService.getCitiesStream().listen((cities) {
       if (mounted) setState(() => _cities = cities);
-    });
+    }, onError: (_) {});
   }
 
   @override
@@ -112,10 +133,19 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
 
   Future<void> _openWhatsApp(String phone, String name) async {
     var cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (cleanPhone.startsWith('0')) cleanPhone = '994${cleanPhone.substring(1)}';
-    final uri = Uri.parse('https://wa.me/$cleanPhone?text=Salam%20$name,%20UstaGo-dan%20əlaqə%20saxlayıram.');
+    if (cleanPhone.startsWith('0')) {
+      cleanPhone = '994${cleanPhone.substring(1)}';
+    } else if (cleanPhone.length == 9 && !cleanPhone.startsWith('994')) {
+      cleanPhone = '994$cleanPhone';
+    }
+    final msg = Uri.encodeComponent('Salam $name, UstaGo-dan əlaqə saxlayıram.');
+    final uri = Uri.parse('https://wa.me/$cleanPhone?text=$msg');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+        const SnackBar(duration: Duration(milliseconds: 1300), content: Text('WhatsApp açıla bilmədi')),
+      );
     }
   }
 
@@ -279,6 +309,13 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: _artisansStream,
             builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const SliverFillRemaining(
+                  child: Center(
+                    child: Text('Məlumatlar yüklənərkən xəta baş verdi. Yenidən cəhd edin.'),
+                  ),
+                );
+              }
               if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                 return const SliverFillRemaining(
                   child: Center(child: CircularProgressIndicator()),
@@ -287,9 +324,10 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
 
               final allDocs = snapshot.data?.docs ?? [];
 
-              // YALNIZ bu kateqoriyaya / ixtisasa aid olan ustalar
+              // YALNIZ bu kateqoriyaya / ixtisasa aid olan aktiv ustalar
               var matchingArtisans = allDocs.where((doc) {
                 final data = doc.data();
+                if (data['isBanned'] == true || data['isHidden'] == true) return false;
                 final cat = (data['category'] ?? data['trade'] ?? '').toString();
                 final specs = (data['specialties'] is List) ? (data['specialties'] as List).join(' ') : '';
                 String idTitles = '';
@@ -302,12 +340,13 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
                 return _isMatchingCategory(cat) || _isMatchingCategory(specs) || (idTitles.isNotEmpty && _isMatchingCategory(idTitles));
               }).toList();
 
-              // Şəhər filtri
+              // Şəhər filtri (Azərbaycan hərfləri normallaşdırılmış)
               if (_activeCityFilter != 'Bütün Şəhərlər') {
+                final normFilter = CategoryCityService.normalizeAz(_activeCityFilter);
                 matchingArtisans = matchingArtisans.where((doc) {
                   final data = doc.data();
-                  final city = (data['city'] ?? 'Bakı').toString().toLowerCase();
-                  return city.contains(_activeCityFilter.toLowerCase());
+                  final city = CategoryCityService.normalizeAz((data['city'] ?? '').toString());
+                  return city.contains(normFilter);
                 }).toList();
               }
 
@@ -438,23 +477,24 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       // Profil fotosu
-                                      CircleAvatar(
-                                        radius: 30,
-                                        backgroundColor: const Color(0xFF1769D2).withOpacity(0.12),
-                                        backgroundImage: (photoBase64 != null && photoBase64.isNotEmpty)
-                                            ? MemoryImage(base64Decode(photoBase64))
-                                            : null,
-                                        child: (photoBase64 == null || photoBase64.isEmpty)
-                                            ? Text(
-                                                name.isNotEmpty ? name[0].toUpperCase() : 'U',
-                                                style: const TextStyle(
-                                                  color: Color(0xFF1769D2),
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 22,
-                                                ),
-                                              )
-                                            : null,
-                                      ),
+                                      Builder(builder: (_) {
+                                        final decodedPhoto = _decodeB64(photoBase64);
+                                        return CircleAvatar(
+                                          radius: 30,
+                                          backgroundColor: const Color(0xFF1769D2).withOpacity(0.12),
+                                          backgroundImage: decodedPhoto != null ? MemoryImage(decodedPhoto) : null,
+                                          child: decodedPhoto == null
+                                              ? Text(
+                                                  name.isNotEmpty ? name[0].toUpperCase() : 'U',
+                                                  style: const TextStyle(
+                                                    color: Color(0xFF1769D2),
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 22,
+                                                  ),
+                                                )
+                                              : null,
+                                        );
+                                      }),
                                       const SizedBox(width: 12),
 
                                       // Usta Adı və İxtisası
@@ -475,8 +515,10 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
                                                     overflow: TextOverflow.ellipsis,
                                                   ),
                                                 ),
-                                                const SizedBox(width: 4),
-                                                const Icon(Icons.verified, color: Color(0xFF1769D2), size: 16),
+                                                if (data['isVerified'] == true) ...[
+                                                  const SizedBox(width: 4),
+                                                  const Icon(Icons.verified, color: Color(0xFF1769D2), size: 16),
+                                                ],
                                               ],
                                             ),
                                             const SizedBox(height: 4),
