@@ -40,7 +40,7 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
     _activeCityFilter = widget.selectedCity;
     _artisansStream = FirebaseFirestore.instance
         .collection('users')
-        .where('role', whereIn: ['usta', 'worker'])
+        .where('role', whereIn: ['usta', 'worker', 'fehle', 'fəhlə'])
         .snapshots();
     _citySub = CategoryCityService.getCitiesStream().listen((cities) {
       if (mounted) setState(() => _cities = cities);
@@ -56,34 +56,41 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
 
   String get _cleanTitle => widget.categoryTitle.replaceAll('\n', ' ').trim();
 
-  // Kateqoriyanın dəqiq uyğunluğunu yoxlayır
+  // Kateqoriya və ya İxtisasın dəqiq uyğunluğunu yoxlayır
   bool _isMatchingCategory(String? ustaCategory) {
-    final t = _cleanTitle.toLowerCase();
+    final t = CategoryCityService.normalizeAz(_cleanTitle);
     // Bütün ustalar və ya Hamısı seçilibsə, bütün ustalar uyğun gəlir
-    if (t.contains('bütün') || t.contains('hamı')) return true;
+    if (t.contains('butun') || t.contains('hami')) return true;
 
     if (ustaCategory == null || ustaCategory.trim().isEmpty) {
-      return t.contains('bütün') || t.contains('digər');
+      return t.contains('butun') || t.contains('diger');
     }
 
-    final u = ustaCategory.trim().toLowerCase().replaceAll('\n', ' ');
+    final u = CategoryCityService.normalizeAz(ustaCategory.replaceAll('\n', ' '));
     if (u == t || u.contains(t) || t.contains(u)) return true;
 
+    // "ustasi" sözünü çıxarıb əsas açar sözü yoxlayırıq (məs: "Kombi ustası" -> "kombi")
+    final coreT = t.replaceAll('ustasi', '').replaceAll('temiri', '').trim();
+    if (coreT.length >= 3 && u.contains(coreT)) return true;
+
     const categoryKeywords = {
-      'tikinti': ['tikinti', 'hörgü', 'suvaq', 'bünövrə', 'dam', 'fəhlə', 'köməkçi', 'fasad', 'beton', 'armatur', 'alçıpan', 'laminat', 'parket', 'izolyasiya'],
-      'fəhlə': ['fəhlə', 'fehle', 'köməkçi'],
-      'santexnik': ['santexnik', 'boru', 'kran', 'su təchizatı', 'su nasosu'],
-      'elektrik': ['elektrik', 'şit', 'naqil', 'işıqlandırma', 'avtoelektrik', 'günəş paneli'],
-      'təmir': ['təmir', 'quraşdırma', 'usta', 'servis'],
-      'avtomobil': ['avtomobil', 'avto', 'motor', 'dəmirçi', 'sürətlər qutusu', 'kuzov', 'təkər', 'diaqnostika'],
-      'mebel': ['mebel', 'quraşdırılması', 'yığılması', 'dülgər'],
+      'tikinti': ['tikinti', 'horgu', 'suvaq', 'bunovre', 'dam', 'fehle', 'komekci', 'fasad', 'beton', 'armatur', 'alcipan', 'laminat', 'parket', 'izolyasiya'],
+      'fehle': ['fehle', 'komekci'],
+      'santexnik': ['santexnik', 'boru', 'kran', 'su techizati', 'su nasosu'],
+      'elektrik': ['elektrik', 'sit', 'naqil', 'isiqlandirma', 'avtoelektrik', 'gunes paneli'],
+      'temir': ['temir', 'qurasdirma', 'usta', 'servis'],
+      'avtomobil': ['avtomobil', 'avto', 'motor', 'demirci', 'suretler qutusu', 'kuzov', 'teker', 'diaqnostika'],
+      'mebel': ['mebel', 'qurasdirilmasi', 'yigilmasi', 'dulger'],
       'kondisioner': ['kondisioner', 'soyuducu', 'freon', 'kombi', 'paltaryuyan', 'qabyuyan'],
-      'dülgər': ['dülgər', 'dulger', 'qapı', 'taxta', 'mebel'],
-      'rəngsaz': ['rəngsaz', 'rengsaz', 'malyar', 'oboy', 'boya'],
-      'telefon': ['telefon', 'iphone', 'android', 'ekran', 'sensor', 'planşet'],
-      'elektronika': ['kompüter', 'noutbuk', 'televizor', 'tv', 'monitor', 'printer', 'audio'],
+      'kombi': ['kombi', 'pitminutka', 'istilik', 'radiator', 'su qizdirici'],
+      'pitminutka': ['pitminutka', 'kombi', 'su qizdirici'],
+      'iran': ['iran soba', 'soba', 'kombi'],
+      'dulger': ['dulger', 'qapi', 'taxta', 'mebel'],
+      'rengsaz': ['rengsaz', 'malyar', 'oboy', 'boya'],
+      'telefon': ['telefon', 'iphone', 'android', 'ekran', 'sensor', 'planset'],
+      'elektronika': ['komputer', 'noutbuk', 'televizor', 'tv', 'monitor', 'printer', 'audio'],
       'oyun': ['playstation', 'ps4', 'ps5', 'xbox', 'pult', 'konsol'],
-      'məişət': ['soyuducu', 'paltaryuyan', 'qabyuyan', 'mikrodalğalı', 'soba', 'tozsoran', 'kombi'],
+      'meiset': ['soyuducu', 'paltaryuyan', 'qabyuyan', 'mikrodalgali', 'soba', 'tozsoran', 'kombi', 'pitminutka'],
     };
 
     for (var entry in categoryKeywords.entries) {
@@ -280,12 +287,19 @@ class _CategoryArtisansScreenState extends State<CategoryArtisansScreen> {
 
               final allDocs = snapshot.data?.docs ?? [];
 
-              // YALNIZ bu kateqoriyaya aid olan ustalar
+              // YALNIZ bu kateqoriyaya / ixtisasa aid olan ustalar
               var matchingArtisans = allDocs.where((doc) {
                 final data = doc.data();
                 final cat = (data['category'] ?? data['trade'] ?? '').toString();
                 final specs = (data['specialties'] is List) ? (data['specialties'] as List).join(' ') : '';
-                return _isMatchingCategory(cat) || _isMatchingCategory(specs);
+                String idTitles = '';
+                if (data['specialtyIds'] is List) {
+                  for (final id in (data['specialtyIds'] as List)) {
+                    final sp = CategoryCityService.findSpecialtyById(id.toString());
+                    if (sp != null) idTitles += ' ${sp['title']}';
+                  }
+                }
+                return _isMatchingCategory(cat) || _isMatchingCategory(specs) || (idTitles.isNotEmpty && _isMatchingCategory(idTitles));
               }).toList();
 
               // Şəhər filtri

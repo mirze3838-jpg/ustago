@@ -454,6 +454,8 @@ class CategoryCityService {
         {'id': 'sp_qabyuyan', 'title': 'Qabyuyan ustası'},
         {'id': 'sp_kondisioner', 'title': 'Kondisioner ustası'},
         {'id': 'sp_kombi', 'title': 'Kombi ustası'},
+        {'id': 'sp_pitminutka', 'title': 'Pitminutka ustası'},
+        {'id': 'sp_iran_soba', 'title': 'İran sobalarının təmiri ustası'},
         {'id': 'sp_su_qizdirici', 'title': 'Su qızdırıcısı ustası'},
         {'id': 'sp_mikrodalga', 'title': 'Mikrodalğalı soba ustası'},
         {'id': 'sp_elektrik_soba', 'title': 'Elektrik sobası ustası'},

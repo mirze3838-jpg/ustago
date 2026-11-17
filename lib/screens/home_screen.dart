@@ -566,12 +566,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Bütün Kateqoriyalar Modal Pəncərəsi
+  // Bütün Kateqoriyalar və İxtisaslar Modal Pəncərəsi
   void _showAllCategoriesSheet() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -579,15 +580,30 @@ class _HomeScreenState extends State<HomeScreen> {
         String filter = '';
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            final filtered = _categories.where((c) {
-              final title = (c['title'] as String).replaceAll('\n', ' ').toLowerCase();
-              return title.contains(filter.toLowerCase());
-            }).toList();
+            final normFilter = CategoryCityService.normalizeAz(filter);
+            final List<Map<String, dynamic>> filteredGroups = [];
+
+            for (final grp in CategoryCityService.specialtyGroups) {
+              final grpTitle = grp['title'] as String;
+              final items = (grp['items'] as List<Map<String, String>>).where((item) {
+                if (normFilter.isEmpty) return true;
+                final itemTitle = CategoryCityService.normalizeAz(item['title'] ?? '');
+                final normGrp = CategoryCityService.normalizeAz(grpTitle);
+                return itemTitle.contains(normFilter) || normGrp.contains(normFilter);
+              }).toList();
+
+              if (items.isNotEmpty) {
+                filteredGroups.add({
+                  ...grp,
+                  'items': items,
+                });
+              }
+            }
 
             return Container(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
               constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.85,
+                maxHeight: MediaQuery.of(context).size.height * 0.88,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -603,7 +619,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -612,8 +628,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           Icon(Icons.grid_view_rounded, color: Color(0xFF1769D2), size: 24),
                           SizedBox(width: 8),
                           Text(
-                            'Bütün Kateqoriyalar',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            'Bütün İxtisaslar və Kateqoriyalar',
+                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                           ),
                         ],
                       ),
@@ -623,11 +639,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   TextField(
                     onChanged: (v) => setSheetState(() => filter = v),
                     decoration: InputDecoration(
-                      hintText: 'Kateqoriya axtarın (məs: Santexnik, Mebel...)',
+                      hintText: 'İxtisas axtarın (məs: Santexnik, Kombi, Pitminutka...)',
                       prefixIcon: const Icon(Icons.search, size: 20),
                       filled: true,
                       fillColor: const Color(0xFFF1F5F9),
@@ -638,67 +654,137 @@ class _HomeScreenState extends State<HomeScreen> {
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  Expanded(
-                    child: filtered.isEmpty
-                        ? const Center(
-                            child: Text('Uyğun kateqoriya tapılmadı', style: TextStyle(color: Colors.grey)),
-                          )
-                        : GridView.builder(
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 3,
-                              mainAxisSpacing: 12,
-                              crossAxisSpacing: 12,
-                              childAspectRatio: 0.95,
+                  const SizedBox(height: 12),
+
+                  // Bütün Ustalar sürətli düyməsi
+                  if (normFilter.isEmpty) ...[
+                    InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CategoryArtisansScreen(
+                              categoryTitle: 'Bütün Ustalar',
+                              categoryIcon: Icons.people_alt_rounded,
+                              categoryColor: const Color(0xFF1769D2),
+                              categoryBgColor: const Color(0xFFEFF6FF),
+                              selectedCity: _selectedCity,
                             ),
-                            itemCount: filtered.length,
-                            itemBuilder: (context, i) {
-                              final cat = filtered[i];
-                              final isOther = cat['id'] == 'def_diger';
-                              return InkWell(
-                                borderRadius: BorderRadius.circular(14),
-                                onTap: () {
-                                  Navigator.pop(ctx);
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => CategoryArtisansScreen(
-                                        categoryTitle: isOther ? 'Bütün Ustalar' : cat['title'],
-                                        categoryIcon: cat['icon'] as IconData? ?? Icons.handyman,
-                                        categoryColor: cat['color'] as Color? ?? const Color(0xFF1769D2),
-                                        categoryBgColor: cat['bgColor'] as Color? ?? const Color(0xFFEFF6FF),
-                                        selectedCity: _selectedCity,
-                                      ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                        ),
+                        child: Row(
+                          children: const [
+                            Icon(Icons.people_alt_rounded, color: Color(0xFF1769D2), size: 20),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Bütün Ustalar (Hamısına bax)',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: Color(0xFF1E3A8A)),
+                              ),
+                            ),
+                            Icon(Icons.chevron_right_rounded, color: Color(0xFF1769D2)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  Expanded(
+                    child: filteredGroups.isEmpty
+                        ? const Center(
+                            child: Text('Uyğun ixtisas tapılmadı', style: TextStyle(color: Colors.grey)),
+                          )
+                        : ListView.separated(
+                            itemCount: filteredGroups.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 14),
+                            itemBuilder: (context, gIdx) {
+                              final grp = filteredGroups[gIdx];
+                              final grpTitle = grp['title'] as String;
+                              final grpIcon = grp['icon'] as IconData? ?? Icons.handyman;
+                              final grpColor = grp['color'] as Color? ?? const Color(0xFF1769D2);
+                              final grpBg = grp['bgColor'] as Color? ?? const Color(0xFFEFF6FF);
+                              final items = grp['items'] as List<Map<String, String>>;
+
+                              return Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(color: grpBg, borderRadius: BorderRadius.circular(8)),
+                                          child: Icon(grpIcon, color: grpColor, size: 18),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            grpTitle,
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A)),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  );
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: (cat['bgColor'] as Color? ?? const Color(0xFFEFF6FF)),
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(
-                                      color: (cat['color'] as Color? ?? const Color(0xFF1769D2)).withOpacity(0.2),
+                                    const SizedBox(height: 10),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: items.map((item) {
+                                        final spTitle = item['title'] ?? '';
+                                        return InkWell(
+                                          borderRadius: BorderRadius.circular(10),
+                                          onTap: () {
+                                            Navigator.pop(ctx);
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => CategoryArtisansScreen(
+                                                  categoryTitle: spTitle,
+                                                  categoryIcon: grpIcon,
+                                                  categoryColor: grpColor,
+                                                  categoryBgColor: grpBg,
+                                                  selectedCity: _selectedCity,
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(10),
+                                              border: Border.all(color: grpColor.withOpacity(0.25)),
+                                            ),
+                                            child: Text(
+                                              spTitle,
+                                              style: const TextStyle(
+                                                fontSize: 12.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: Color(0xFF1E293B),
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
                                     ),
-                                  ),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        cat['icon'] as IconData? ?? Icons.handyman,
-                                        color: cat['color'] as Color? ?? const Color(0xFF1769D2),
-                                        size: 32,
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        (cat['title'] as String).replaceAll('\n', ' '),
-                                        textAlign: TextAlign.center,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
-                                  ),
+                                  ],
                                 ),
                               );
                             },
