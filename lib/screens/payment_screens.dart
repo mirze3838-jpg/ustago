@@ -98,22 +98,22 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
   Future<void> _handlePayment() async {
     final cardNo = _cardNumberController.text.replaceAll(' ', '');
     if (cardNo.length < 16) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Zəhmət olmasa 16 rəqəmli kart nömrəsini daxil edin.')),
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+        const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Zəhmət olmasa 16 rəqəmli kart nömrəsini daxil edin.')),
       );
       return;
     }
 
     if (_expiryController.text.replaceAll('/', '').replaceAll(' ', '').length < 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Zəhmət olmasa bitmə tarixini daxil edin (MM / YY).')),
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+        const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Zəhmət olmasa bitmə tarixini daxil edin (MM / YY).')),
       );
       return;
     }
 
     if (_cvvController.text.length < 3) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Zəhmət olmasa CVV/CVV2 kodunu daxil edin.')),
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+        const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Zəhmət olmasa CVV/CVV2 kodunu daxil edin.')),
       );
       return;
     }
@@ -205,8 +205,8 @@ class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isProcessing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+        SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -650,8 +650,8 @@ class _VipPromotionScreenState extends State<VipPromotionScreen> {
     } else {
       // Hesabdan ödə
       if (_userBalance < _currentAmount) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          SnackBar(duration: const Duration(milliseconds: 1300), 
             content: Text(
               'Balansınızda kifayət qədər vəsait yoxdur (Hazırki: ${_userBalance.toStringAsFixed(2)} AZN). Zəhmət olmasa balansı artırın və ya Visa/Mastercard seçin.',
             ),
@@ -689,16 +689,16 @@ class _VipPromotionScreenState extends State<VipPromotionScreen> {
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+        const SnackBar(duration: Duration(milliseconds: 1300), 
           content: Text('Təbriklər! Hesabınızdan ödəniş edildi və elanınız VIP oldu! 👑'),
           backgroundColor: Color(0xFF16A34A),
         ),
       );
       Navigator.pop(context);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Xəta baş verdi: $e')),
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+        SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta baş verdi: $e')),
       );
     }
   }
@@ -1085,8 +1085,8 @@ class _BumpPromotionScreenState extends State<BumpPromotionScreen> {
       );
     } else {
       if (_userBalance < _currentAmount) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          SnackBar(duration: const Duration(milliseconds: 1300), 
             content: Text(
               'Balansınızda kifayət qədər vəsait yoxdur (Hazırki: ${_userBalance.toStringAsFixed(2)} AZN). Zəhmət olmasa balansı artırın və ya Visa/Mastercard seçin.',
             ),
@@ -1124,16 +1124,16 @@ class _BumpPromotionScreenState extends State<BumpPromotionScreen> {
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+        const SnackBar(duration: Duration(milliseconds: 1300), 
           content: Text('Təbriklər! Hesabınızdan ödəniş edildi və elanınız ən ön sıraya keçirildi! 🚀'),
           backgroundColor: Color(0xFF16A34A),
         ),
       );
       Navigator.pop(context);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Xəta baş verdi: $e')),
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+        SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta baş verdi: $e')),
       );
     }
   }

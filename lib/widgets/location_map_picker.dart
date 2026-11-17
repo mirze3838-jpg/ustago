@@ -33,7 +33,7 @@ class LocationFlow {
 
   static void _snack(BuildContext context, String msg, {Color color = const Color(0xFF334155)}) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
+    ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(SnackBar(duration: const Duration(milliseconds: 1300), content: Text(msg), backgroundColor: color));
   }
 
   static Future<LocationAcquireResult> acquireCurrentLocation(BuildContext context) async {

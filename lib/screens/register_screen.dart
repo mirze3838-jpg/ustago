@@ -180,8 +180,8 @@ class _RegisterScreenState extends State<RegisterScreen> with WidgetsBindingObse
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Şəkil seçilərkən xəta: $e')),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Şəkil seçilərkən xəta: $e')),
         );
       }
     }
@@ -214,15 +214,15 @@ class _RegisterScreenState extends State<RegisterScreen> with WidgetsBindingObse
           _locationSharingConsent = consented;
         });
         if (consented) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+            const SnackBar(duration: Duration(milliseconds: 1300), 
               content: Text('Konumunuz təsdiqləndi və profilinizdə paylaşılacaq.'),
               backgroundColor: Color(0xFF059669),
             ),
           );
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+            const SnackBar(duration: Duration(milliseconds: 1300), 
               content: Text('Konum paylaşımı ləğv edildi. Koordinatlarınız ictimai profildə göstərilməyəcək.'),
               backgroundColor: Color(0xFF475569),
             ),
@@ -359,15 +359,15 @@ class _RegisterScreenState extends State<RegisterScreen> with WidgetsBindingObse
           _pendingCustomSpecialtyIds.add(docId);
           _expandedGroupIds.add(gId);
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          SnackBar(duration: const Duration(milliseconds: 1300), 
             content: Text('"$title" ixtisası profilinizə əlavə olundu və təsdiq üçün göndərildi.'),
             backgroundColor: const Color(0xFF059669),
           ),
         );
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Xəta: $e'), backgroundColor: Colors.red),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -378,8 +378,8 @@ class _RegisterScreenState extends State<RegisterScreen> with WidgetsBindingObse
   // ===================================================================
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+        const SnackBar(duration: Duration(milliseconds: 1300), 
           content: Text('Zəhmət olmasa tələb olunan sahələri düzgün doldurun!'),
           backgroundColor: Colors.red,
         ),
@@ -390,8 +390,8 @@ class _RegisterScreenState extends State<RegisterScreen> with WidgetsBindingObse
     // Usta və Fəhlə üçün ən azı bir ixtisas tələbi
     final isWorkerOrUsta = _selectedRole == 'usta' || _selectedRole == 'worker';
     if (isWorkerOrUsta && _selectedSpecialtyIds.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+        SnackBar(duration: const Duration(milliseconds: 1300), 
           content: Text('Zəhmət olmasa ${_selectedRole == 'usta' ? 'usta' : 'fəhlə'} üçün ən azı bir fəaliyyət sahəsi və ya ixtisas seçin!'),
           backgroundColor: Colors.red,
         ),
@@ -495,8 +495,8 @@ class _RegisterScreenState extends State<RegisterScreen> with WidgetsBindingObse
         } else if (msg.contains('invalid-email')) {
           msg = 'E-mail ünvanı düzgün deyil.';
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: Colors.red),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          SnackBar(duration: const Duration(milliseconds: 1300), content: Text(msg), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -1196,7 +1196,7 @@ class _RegisterScreenState extends State<RegisterScreen> with WidgetsBindingObse
             onOpenFullScreen: _openFullScreenMap,
             onConfirm: () {
               setState(() => _isLocationConfirmed = true);
-              ScaffoldMessenger.of(context).showSnackBar(
+              ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
                 const SnackBar(
                   content: Text('Xəritədə seçilmiş mövqe təsdiqləndi!'),
                   backgroundColor: Color(0xFF059669),

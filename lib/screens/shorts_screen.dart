@@ -618,15 +618,15 @@ class _ShortsScreenState extends State<ShortsScreen> {
                         final phone = phoneController.text.trim();
 
                         if (title.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Zəhmət olmasa video başlığını yazın!')),
+                          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                            const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Zəhmət olmasa video başlığını yazın!')),
                           );
                           return;
                         }
 
                         if (link.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Zəhmət olmasa TikTok video linki daxil edin və ya yuxarıdakı TikTok ilə Qoşul düyməsindən istifadə edin!')),
+                          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                            const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Zəhmət olmasa TikTok video linki daxil edin və ya yuxarıdakı TikTok ilə Qoşul düyməsindən istifadə edin!')),
                           );
                           return;
                         }
@@ -648,8 +648,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
                           if (tkInfo == null || !tkInfo.isValid) {
                             if (ctx.mounted) setModalState(() => isUploading = false);
                             if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('TikTok videosu tapılmadı və ya link yanlışdır!'), backgroundColor: Colors.red),
+                              ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                                const SnackBar(duration: Duration(milliseconds: 1300), content: Text('TikTok videosu tapılmadı və ya link yanlışdır!'), backgroundColor: Colors.red),
                               );
                             }
                             return;
@@ -700,7 +700,7 @@ class _ShortsScreenState extends State<ShortsScreen> {
                               setModalState(() => isUploading = false);
                             }
                             if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
                                 SnackBar(
                                   content: Text('Video yükləmə xətası: $e\nZəhmət olmasa internet bağlantısını yoxlayın və ya video linki daxil edin.'),
                                   backgroundColor: Colors.orange.shade900,
@@ -779,8 +779,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
 
                           if (mounted) {
                             Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
+                            ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                              const SnackBar(duration: Duration(milliseconds: 1300), 
                                 content: Text('Shorts videonuz uğurla paylaşıldı! 🎉'),
                                 backgroundColor: Colors.green,
                               ),
@@ -789,8 +789,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
                         } catch (e) {
                           setModalState(() => isUploading = false);
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
+                            ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                              SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
                             );
                           }
                         }
@@ -951,8 +951,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
 
                       if (ctx.mounted) {
                         Navigator.pop(ctx);
-                        ScaffoldMessenger.of(parentCtx).showSnackBar(
-                          SnackBar(
+                        ScaffoldMessenger.of(parentCtx)..clearSnackBars()..showSnackBar(
+                          SnackBar(duration: const Duration(milliseconds: 1300), 
                             content: Text('$handle TikTok hesabı UstaGo ilə uğurla əlaqələndirildi! 🎉'),
                             backgroundColor: Colors.green,
                           ),
@@ -1128,8 +1128,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
 
                       if (ctx.mounted) {
                         Navigator.pop(ctx);
-                        ScaffoldMessenger.of(parentCtx).showSnackBar(
-                          SnackBar(
+                        ScaffoldMessenger.of(parentCtx)..clearSnackBars()..showSnackBar(
+                          SnackBar(duration: const Duration(milliseconds: 1300), 
                             content: Text('$added TikTok videosu uğurla UstaGo-ya idxal edildi! 🎉'),
                             backgroundColor: Colors.green,
                           ),
@@ -1643,8 +1643,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+        const SnackBar(duration: Duration(milliseconds: 1300), 
           content: Text('Bəyənmək üçün zəhmət olmasa daxil olun.'),
           backgroundColor: Color(0xFF1769D2),
         ),
@@ -1701,8 +1701,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+        const SnackBar(duration: Duration(milliseconds: 1300), 
           content: Text('Ustanı izləmək üçün daxil olun.'),
           backgroundColor: Color(0xFF1769D2),
         ),
@@ -1711,8 +1711,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
     }
 
     if (user.uid == authorUid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Öz profilinizi izləyə bilməzsiniz.')),
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+        const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Öz profilinizi izləyə bilməzsiniz.')),
       );
       return;
     }
@@ -1735,8 +1735,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+        const SnackBar(duration: Duration(milliseconds: 1300), 
           content: Text('Videonu yadda saxlamaq üçün daxil olun.'),
           backgroundColor: Color(0xFF1769D2),
         ),
@@ -1751,7 +1751,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       final res = await ShortsSocialService.toggleSaveVideo(docId, widget.data);
       if (mounted) {
         setState(() => _isSaved = res);
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
           SnackBar(
             content: Text(res ? 'Video seçilmişlərə əlavə edildi!' : 'Video seçilmişlərdən silindi.'),
             duration: const Duration(seconds: 1),
@@ -1941,7 +1941,7 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
               } catch (_) {}
 
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
                   const SnackBar(
                     content: Text('Video başlığı uğurla yeniləndi! 🎉'),
                     backgroundColor: Colors.green,
@@ -1990,8 +1990,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
               final docId = widget.data['id']?.toString() ?? '';
               await ShortsSocialService.reportVideo(shortId: docId, reason: reason);
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Şikayətiniz baxılması üçün qeydə alındı.'), backgroundColor: Colors.green),
+                ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                  const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Şikayətiniz baxılması üçün qeydə alındı.'), backgroundColor: Colors.green),
                 );
               }
             },
@@ -2166,8 +2166,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
                                   InkWell(
                                     onTap: () async {
                                       if (currentUserId.isEmpty) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('Bəyənmək üçün daxil olun')),
+                                        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                                          const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Bəyənmək üçün daxil olun')),
                                         );
                                         return;
                                       }
@@ -2262,8 +2262,8 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
 
                                   final user = FirebaseAuth.instance.currentUser;
                                   if (user == null) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Rəy yazmaq üçün daxil olun.')),
+                                    ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                                      const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Rəy yazmaq üçün daxil olun.')),
                                     );
                                     return;
                                   }
@@ -2391,14 +2391,14 @@ class _ShortVideoItemState extends State<_ShortVideoItem> {
       try {
         await ShortsSocialService.deleteShortVideoCompletely(docId.toString());
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Video uğurla silindi!')),
+          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+            const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Video uğurla silindi!')),
           );
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Silmə xətası: $e')),
+          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+            SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Silmə xətası: $e')),
           );
         }
       }

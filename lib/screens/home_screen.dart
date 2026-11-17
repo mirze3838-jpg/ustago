@@ -3849,8 +3849,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 } catch (_) {}
                                 if (mounted) {
                                   Navigator.pop(ctx);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Paylaşım silindi.')),
+                                  ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                                    const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Paylaşım silindi.')),
                                   );
                                 }
                               }
@@ -4096,14 +4096,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   }, SetOptions(merge: true));
                   _syncUserDataAcrossCollections(uid, newPhotoBase64: '');
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Profil şəkli silindi.')),
+                    ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                      const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Profil şəkli silindi.')),
                     );
                   }
                 } catch (e) {
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Xəta: $e'), backgroundColor: Colors.red),
+                    ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                      SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta: $e'), backgroundColor: Colors.red),
                     );
                   }
                 }
@@ -4136,15 +4136,15 @@ class _HomeScreenState extends State<HomeScreen> {
         _syncUserDataAcrossCollections(uid, newPhotoBase64: base64String);
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Profil şəkli uğurla yeniləndi!'), backgroundColor: Colors.green),
+          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+            const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Profil şəkli uğurla yeniləndi!'), backgroundColor: Colors.green),
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -5038,8 +5038,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             onPressed: () async {
                               final String district = districtController.text.trim();
                               if ((selectedRole == 'usta' || selectedRole == 'worker') && district.isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
+                                ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                                  const SnackBar(duration: Duration(milliseconds: 1300), 
                                     content: Text('Usta və fəhlə üçün kənd / qəsəbə / ərazi göstərmək vacibdir!'),
                                     backgroundColor: Colors.red,
                                   ),
@@ -5110,8 +5110,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
                               if (mounted) {
                                 Navigator.pop(ctx);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Profil məlumatları uğurla yeniləndi! 🎉'), backgroundColor: Colors.green),
+                                ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                                  const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Profil məlumatları uğurla yeniləndi! 🎉'), backgroundColor: Colors.green),
                                 );
                               }
                             },
@@ -5183,8 +5183,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   'bio': newBio,
                 }, SetOptions(merge: true));
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+                  ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                    const SnackBar(duration: Duration(milliseconds: 1300), 
                       content: Text('Haqqımda məlumatı uğurla yeniləndi!'),
                       backgroundColor: Colors.green,
                     ),
@@ -5192,8 +5192,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
+                  ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                    SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
                   );
                 }
               }
@@ -5274,8 +5274,8 @@ class _HomeScreenState extends State<HomeScreen> {
       }, SetOptions(merge: true));
       if (mounted) {
         setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          SnackBar(duration: const Duration(milliseconds: 1300), 
             content: Text(
               'Aktiv profil növünüz "${_roleDisplayName(normalizedTarget)}" olaraq dəyişdirildi.',
             ),
@@ -5285,8 +5285,8 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          SnackBar(duration: const Duration(milliseconds: 1300), 
             content: Text('Profil növü yenilənmədi: $e'),
             backgroundColor: Colors.red.shade700,
           ),
@@ -5608,8 +5608,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 }, SetOptions(merge: true));
 
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+                  ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                    const SnackBar(duration: Duration(milliseconds: 1300), 
                       content: Text('Konum paylaşımı aktivləşdirildi.'),
                       backgroundColor: Color(0xFF059669),
                     ),
@@ -5625,8 +5625,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 }, SetOptions(merge: true));
 
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+                  ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                    const SnackBar(duration: Duration(milliseconds: 1300), 
                       content: Text('Konum paylaşımı söndürüldü və koordinatlar profildən silindi.'),
                       backgroundColor: Color(0xFF334155),
                     ),
@@ -6214,8 +6214,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         }, SetOptions(merge: true));
                         if (ctx.mounted) Navigator.pop(ctx);
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
+                          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                            SnackBar(duration: const Duration(milliseconds: 1300), 
                               content: Text(newStatus
                                   ? 'Status "Hal-hazırda məşğulam" olaraq dəyişdirildi!'
                                   : 'Status "Online (Sərbəstəm)" olaraq dəyişdirildi!'),
@@ -6354,8 +6354,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         await _authService.signOut();
                         if (mounted) {
                           setState(() => _currentUserRole = null);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Hesabdan çıxış edildi.')),
+                          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                            const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Hesabdan çıxış edildi.')),
                           );
                         }
                       }
@@ -6573,8 +6573,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       if (ctx.mounted) {
                         Navigator.pop(ctx);
-                        ScaffoldMessenger.of(parentCtx).showSnackBar(
-                          SnackBar(
+                        ScaffoldMessenger.of(parentCtx)..clearSnackBars()..showSnackBar(
+                          SnackBar(duration: const Duration(milliseconds: 1300), 
                             content: Text('${_cleanTikTokHandle(handle)} TikTok hesabı UstaGo ilə uğurla əlaqələndirildi! 🎉'),
                             backgroundColor: Colors.green,
                           ),
@@ -6673,8 +6673,8 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       Clipboard.setData(ClipboardData(text: text));
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profil məlumatları kopyalandı!'), backgroundColor: Color(0xFF1769D2)),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Profil məlumatları kopyalandı!'), backgroundColor: Color(0xFF1769D2)),
         );
       }
     }
@@ -6796,8 +6796,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+                  ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                    const SnackBar(duration: Duration(milliseconds: 1300), 
                       content: Text('Sosial linklər uğurla yeniləndi!'),
                       backgroundColor: Color(0xFF10B981),
                     ),
@@ -7161,8 +7161,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         'isWorking': newStatus,
                       }, SetOptions(merge: true));
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
+                        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                          SnackBar(duration: const Duration(milliseconds: 1300), 
                             content: Text(newStatus
                                 ? 'Status "Hal-hazırda məşğulam" olaraq dəyişdirildi!'
                                 : 'Status "Sərbəstəm (Online)" olaraq dəyişdirildi!'),
@@ -8313,8 +8313,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                                 'createdAt': FieldValue.serverTimestamp(),
                                                 'bumpedAt': FieldValue.serverTimestamp(),
                                               });
-                                              ScaffoldMessenger.of(rootContext).showSnackBar(
-                                                const SnackBar(content: Text('Elanın müddəti 30 gün uzadıldı! 🚀')),
+                                              ScaffoldMessenger.of(rootContext)..clearSnackBars()..showSnackBar(
+                                                const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Elanın müddəti 30 gün uzadıldı! 🚀')),
                                               );
                                             },
                                             child: Container(
@@ -8343,7 +8343,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           onPressed: () async {
                                             await FirebaseFirestore.instance.collection('market_stores').doc(pDoc.id).delete();
                                             if (rootContext.mounted) {
-                                              ScaffoldMessenger.of(rootContext).showSnackBar(const SnackBar(content: Text('Məhsul silindi.')));
+                                              ScaffoldMessenger.of(rootContext)..clearSnackBars()..showSnackBar(const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Məhsul silindi.')));
                                             }
                                           },
                                         ),
@@ -8643,8 +8643,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                                 'createdAt': FieldValue.serverTimestamp(),
                                                 'bumpedAt': FieldValue.serverTimestamp(),
                                               });
-                                              ScaffoldMessenger.of(rootContext).showSnackBar(
-                                                const SnackBar(content: Text('Elanın müddəti 30 gün uzadıldı! 🚀')),
+                                              ScaffoldMessenger.of(rootContext)..clearSnackBars()..showSnackBar(
+                                                const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Elanın müddəti 30 gün uzadıldı! 🚀')),
                                               );
                                             },
                                             child: Container(
@@ -8673,7 +8673,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           onPressed: () async {
                                             await FirebaseFirestore.instance.collection('market_stores').doc(doc.id).delete();
                                             if (rootContext.mounted) {
-                                              ScaffoldMessenger.of(rootContext).showSnackBar(const SnackBar(content: Text('Elan silindi.')));
+                                              ScaffoldMessenger.of(rootContext)..clearSnackBars()..showSnackBar(const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Elan silindi.')));
                                             }
                                           },
                                         ),
@@ -9640,8 +9640,8 @@ class FullScreenVideoViewerState extends State<FullScreenVideoViewer> {
       } catch (_) {}
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Video uğurla silindi.')),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Video uğurla silindi.')),
         );
       }
     }

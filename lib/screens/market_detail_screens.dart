@@ -174,8 +174,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       _prod['isVip'] = true;
                     });
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
+                      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                        const SnackBar(duration: Duration(milliseconds: 1300), 
                           content: Text('Təbriklər! Elanınız pulsuz 30 günlük VIP statusu qazandı! 👑'),
                           backgroundColor: Color(0xFFD97706),
                         ),
@@ -263,8 +263,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       }).catchError((_) {});
                     }
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
+                      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                        const SnackBar(duration: Duration(milliseconds: 1300), 
                           content: Text('Elanınız uğurla ən ön sıraya qaldırıldı! 🚀'),
                           backgroundColor: Color(0xFF059669),
                         ),
@@ -321,7 +321,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       Share.share(shareText, subject: title);
     } catch (_) {
       Clipboard.setData(ClipboardData(text: shareText));
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Elan linki kopyalandı!')));
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Elan linki kopyalandı!')));
     }
   }
 
@@ -556,8 +556,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                 setState(() {
                                   _prod['createdAt'] = Timestamp.now();
                                 });
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Elanın müddəti 30 gün uzadıldı və ən ön sıraya keçirildi! 🚀')),
+                                ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                                  const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Elanın müddəti 30 gün uzadıldı və ən ön sıraya keçirildi! 🚀')),
                                 );
                               }
                             },
@@ -889,7 +889,7 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
                 Share.share(text, subject: title);
               } catch (_) {
                 Clipboard.setData(ClipboardData(text: text));
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mağaza linki kopyalandı!')));
+                ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Mağaza linki kopyalandı!')));
               }
             },
           ),

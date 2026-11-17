@@ -48,8 +48,8 @@ class _LoginScreenState extends State<LoginScreen> {
         } else if (msg.contains('invalid-email')) {
           msg = 'E-mail ünvanı formatı düzgün deyil.';
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: Colors.red),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          SnackBar(duration: const Duration(milliseconds: 1300), content: Text(msg), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -80,7 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
         } else if (errorStr.contains('network') || errorStr.contains('7')) {
           userFriendlyMsg = 'İnternet bağlantınızı yoxlayın.';
         }
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
           SnackBar(
             content: Text(userFriendlyMsg),
             backgroundColor: Colors.red.shade700,

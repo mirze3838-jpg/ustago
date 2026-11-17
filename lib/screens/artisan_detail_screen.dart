@@ -56,8 +56,8 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
     final clean = phone.replaceAll(RegExp(r'[^\d+]'), '');
     if (clean.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Əlaqə nömrəsi qeyd olunmayıb')),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Əlaqə nömrəsi qeyd olunmayıb')),
         );
       }
       return;
@@ -72,8 +72,8 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
     var clean = phone.replaceAll(RegExp(r'[^\d]'), '');
     if (clean.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('WhatsApp nömrəsi qeyd olunmayıb')),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          const SnackBar(duration: Duration(milliseconds: 1300), content: Text('WhatsApp nömrəsi qeyd olunmayıb')),
         );
       }
       return;
@@ -134,36 +134,25 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
 
     if (confirmed != true) return;
 
-    try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(artisanUid)
-          .collection('reviews')
-          .doc(reviewId)
-          .delete();
+    if (mounted) {
+      ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+        const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Rəyiniz silindi'), backgroundColor: Colors.orange),
+      );
+    }
 
+    try {
       final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser != null) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser.uid)
-            .collection('given_reviews')
-            .doc(reviewId)
-            .delete()
-            .catchError((_) {});
-      }
+      await Future.wait([
+        FirebaseFirestore.instance.collection('users').doc(artisanUid).collection('reviews').doc(reviewId).delete(),
+        if (currentUser != null)
+          FirebaseFirestore.instance.collection('users').doc(currentUser.uid).collection('given_reviews').doc(reviewId).delete().catchError((_) {}),
+      ]);
 
       await _recalculateArtisanRating(artisanUid);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Rəyiniz silindi'), backgroundColor: Colors.orange),
-        );
-      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Silinmə xətası: $e'), backgroundColor: Colors.red),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Silinmə xətası: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -267,13 +256,24 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                 final reviewerName = resolvedName.trim().isEmpty ? 'Müştəri' : resolvedName.trim();
 
                 if (comment.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Zəhmət olmasa rəy mətnini daxil edin')),
+                  ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                    const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Zəhmət olmasa rəy mətnini daxil edin')),
                   );
                   return;
                 }
 
                 Navigator.pop(ctx);
+
+                if (mounted) {
+                  setState(() => _selectedTabIndex = 1);
+                  ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                    SnackBar(
+                      duration: const Duration(milliseconds: 1300),
+                      content: Text(isEdit ? 'Rəyiniz yeniləndi!' : 'Rəyiniz əlavə edildi!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
 
                 try {
                   final reviewsRef = FirebaseFirestore.instance
@@ -329,20 +329,10 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                   }
 
                   await _recalculateArtisanRating(artisanUid);
-
-                  if (mounted) {
-                    setState(() => _selectedTabIndex = 1);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(isEdit ? 'Rəyiniz uğurla yeniləndi!' : 'Rəyiniz uğurla əlavə edildi! Təşəkkür edirik.'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  }
                 } catch (e) {
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
+                    ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                      SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
                     );
                   }
                 }
@@ -1664,8 +1654,8 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                               if (cleanTikTok.isNotEmpty) {
                                 _openExternalLink('https://www.tiktok.com/@$cleanTikTok');
                               } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('İstifadəçi TikTok profilini əlavə etməyib')),
+                                ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                                  const SnackBar(duration: Duration(milliseconds: 1300), content: Text('İstifadəçi TikTok profilini əlavə etməyib')),
                                 );
                               }
                             },

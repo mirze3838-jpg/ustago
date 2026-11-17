@@ -53,8 +53,8 @@ class MarketScreen extends StatefulWidget {
     final user = AuthService().currentUser ?? FirebaseAuth.instance.currentUser;
     if (user == null) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Mağaza açmaq üçün əvvəlcə daxil olmalısınız.')),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Mağaza açmaq üçün əvvəlcə daxil olmalısınız.')),
         );
       }
       return;
@@ -155,8 +155,8 @@ class MarketScreen extends StatefulWidget {
                             setModalState(() => logoBase64 = base64Encode(bytes));
                           }
                         } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Loqo seçilmədi: $e')),
+                          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                            SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Loqo seçilmədi: $e')),
                           );
                         }
                       },
@@ -291,8 +291,8 @@ class MarketScreen extends StatefulWidget {
                               final address = addressCtrl.text.trim();
 
                               if (name.isEmpty || phone.isEmpty || address.isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
+                                ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                                  const SnackBar(duration: Duration(milliseconds: 1300), 
                                     content: Text('Zəhmət olmasa Mağaza adı, Əlaqə nömrəsi və Ünvanı doldurun.'),
                                     backgroundColor: Colors.red,
                                   ),
@@ -327,16 +327,16 @@ class MarketScreen extends StatefulWidget {
                                   await FirebaseFirestore.instance.collection('market_stores').add(payload);
                                 }
                                 Navigator.pop(ctx);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
+                                ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                                  SnackBar(duration: const Duration(milliseconds: 1300), 
                                     content: Text(isEdit ? 'Mağaza yeniləndi!' : 'Təbriklər! Mağazanız uğurla açıldı!'),
                                     backgroundColor: const Color(0xFF059669),
                                   ),
                                 );
                               } catch (e) {
                                 setModalState(() => isSaving = false);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Xəta: $e'), backgroundColor: Colors.red),
+                                ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                                  SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta: $e'), backgroundColor: Colors.red),
                                 );
                               }
                             },
@@ -370,8 +370,8 @@ class MarketScreen extends StatefulWidget {
     final user = AuthService().currentUser ?? FirebaseAuth.instance.currentUser;
     if (user == null) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Elan yerləşdirmək üçün əvvəlcə daxil olmalısınız.')),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Elan yerləşdirmək üçün əvvəlcə daxil olmalısınız.')),
         );
       }
       return;
@@ -491,8 +491,8 @@ class MarketScreen extends StatefulWidget {
                             setModalState(() => imageBase64 = base64Encode(bytes));
                           }
                         } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Şəkil seçilmədi: $e')),
+                          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                            SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Şəkil seçilmədi: $e')),
                           );
                         }
                       },
@@ -681,8 +681,8 @@ class MarketScreen extends StatefulWidget {
                               final address = addressCtrl.text.trim();
 
                               if (title.isEmpty || price.isEmpty || phone.isEmpty || address.isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
+                                ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                                  const SnackBar(duration: Duration(milliseconds: 1300), 
                                     content: Text('Zəhmət olmasa Məhsul adı, Qiymət, Əlaqə nömrəsi və Ünvanı doldurun.'),
                                     backgroundColor: Colors.red,
                                   ),
@@ -720,16 +720,16 @@ class MarketScreen extends StatefulWidget {
                                   await FirebaseFirestore.instance.collection('market_stores').add(payload);
                                 }
                                 Navigator.pop(ctx);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
+                                ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                                  SnackBar(duration: const Duration(milliseconds: 1300), 
                                     content: Text(isEdit ? 'Elan yeniləndi!' : 'Məhsul elanınız uğurla dərc edildi!'),
                                     backgroundColor: const Color(0xFF059669),
                                   ),
                                 );
                               } catch (e) {
                                 setModalState(() => isSaving = false);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Xəta: $e'), backgroundColor: Colors.red),
+                                ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                                  SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta: $e'), backgroundColor: Colors.red),
                                 );
                               }
                             },
@@ -1232,8 +1232,8 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
       try {
         await FirebaseFirestore.instance.collection('market_stores').doc(docId).delete();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+            SnackBar(duration: const Duration(milliseconds: 1300), 
               content: Text(isStore ? 'Mağaza silindi.' : 'Elan silindi.'),
               backgroundColor: const Color(0xFF059669),
             ),
@@ -1241,8 +1241,8 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Silmə xətası: $e'), backgroundColor: Colors.red),
+          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+            SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Silmə xətası: $e'), backgroundColor: Colors.red),
           );
         }
       }
@@ -1661,7 +1661,7 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
         });
       }
     });
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
       SnackBar(
         content: Text('${product['title']} səbətə əlavə edildi'),
         backgroundColor: const Color(0xFF1769D2),

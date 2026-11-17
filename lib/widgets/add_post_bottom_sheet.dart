@@ -157,8 +157,8 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
     } catch (e) {
       debugPrint('pickMultiImage xətası: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Şəkil seçilərkən xəta: $e'), backgroundColor: Colors.red),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Şəkil seçilərkən xəta: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -177,7 +177,7 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
     setState(() {
       _primaryPhotoIndex = index;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
       const SnackBar(
         content: Text('Əsas şəkil təyin edildi ⭐'),
         duration: Duration(seconds: 1),
@@ -358,8 +358,8 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
     }
     if (length > 150 * 1024 * 1024) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          const SnackBar(duration: Duration(milliseconds: 1300), 
             content: Text('Video həcmi 150MB-dan çox olmamalıdır!'),
             backgroundColor: Colors.red,
           ),
@@ -506,14 +506,14 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
       // FOTO PAYLAŞIMI
       final title = _photoTitleController.text.trim();
       if (title.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Zəhmət olmasa işin adını daxil edin!'), backgroundColor: Colors.orange),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Zəhmət olmasa işin adını daxil edin!'), backgroundColor: Colors.orange),
         );
         return;
       }
       if (_photos.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Zəhmət olmasa ən azı bir şəkil seçin!'), backgroundColor: Colors.orange),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Zəhmət olmasa ən azı bir şəkil seçin!'), backgroundColor: Colors.orange),
         );
         return;
       }
@@ -552,8 +552,8 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
 
         if (mounted) {
           Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+            const SnackBar(duration: Duration(milliseconds: 1300), 
               content: Text('Foto işiniz uğurla paylaşıldı! 🎉'),
               backgroundColor: Colors.green,
             ),
@@ -562,8 +562,8 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
       } catch (e) {
         setState(() => _isUploading = false);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
+          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+            SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
           );
         }
       }
@@ -571,8 +571,8 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
       // VİDEO PAYLAŞIMI
       final title = _videoTitleController.text.trim();
       if (title.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Zəhmət olmasa video başlığını daxil edin!'), backgroundColor: Colors.orange),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Zəhmət olmasa video başlığını daxil edin!'), backgroundColor: Colors.orange),
         );
         return;
       }
@@ -645,8 +645,8 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
 
           if (mounted) {
             Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+            ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+              const SnackBar(duration: Duration(milliseconds: 1300), 
                 content: Text('TikTok videonuz uğurla əlavə edildi! 🎉'),
                 backgroundColor: Colors.green,
               ),
@@ -656,8 +656,8 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
         } catch (e) {
           setState(() => _isUploading = false);
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
+            ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+              SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta baş verdi: $e'), backgroundColor: Colors.red),
             );
           }
           return;
@@ -666,8 +666,8 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
 
       // ƏGƏR QALEREYADAN VİDEODURSA
       if (_pickedVideo == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Zəhmət olmasa TikTok linki daxil edin və ya qalereyadan video seçin!'), backgroundColor: Colors.orange),
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Zəhmət olmasa TikTok linki daxil edin və ya qalereyadan video seçin!'), backgroundColor: Colors.orange),
         );
         return;
       }
@@ -760,8 +760,8 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
 
         if (mounted) {
           Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+            SnackBar(duration: const Duration(milliseconds: 1300), 
               content: Text(_isShortsFormat ? 'Shorts video uğurla paylaşıldı! 🎉' : 'Video uğurla paylaşıldı! 🎉'),
               backgroundColor: Colors.green,
             ),
@@ -770,7 +770,7 @@ class _AddPostBottomSheetState extends State<AddPostBottomSheet> {
       } catch (e) {
         setState(() => _isUploading = false);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
             SnackBar(
               content: Text('Video yükləmə xətası: $e'),
               backgroundColor: Colors.red,
