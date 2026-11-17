@@ -100,19 +100,20 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
   Future<void> _showAddReviewDialog(String artisanUid, String artisanName) async {
     int rating = 5;
     final commentController = TextEditingController();
-    final nameController = TextEditingController();
     final currentUser = FirebaseAuth.instance.currentUser;
+    String resolvedName = 'Müştəri';
+    String resolvedPhotoBase64 = '';
     if (currentUser != null) {
-      String resolvedName = currentUser.displayName ?? currentUser.email?.split('@').first ?? 'Müştəri';
+      resolvedName = currentUser.displayName ?? currentUser.email?.split('@').first ?? 'Müştəri';
       try {
         final uDoc = await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get();
         final uData = uDoc.data();
         if (uData != null) {
           final fn = (uData['fullName'] ?? uData['name'] ?? '').toString().trim();
           if (fn.isNotEmpty) resolvedName = fn;
+          resolvedPhotoBase64 = (uData['photoBase64'] ?? '').toString().trim();
         }
       } catch (_) {}
-      nameController.text = resolvedName;
     }
     if (!mounted) return;
 
@@ -159,15 +160,6 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                 ),
                 const SizedBox(height: 12),
                 TextField(
-                  controller: nameController,
-                  decoration: InputDecoration(
-                    labelText: 'Adınız',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
                   controller: commentController,
                   maxLines: 3,
                   decoration: InputDecoration(
@@ -193,7 +185,7 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
               ),
               onPressed: () async {
                 final comment = commentController.text.trim();
-                final reviewerName = nameController.text.trim().isEmpty ? 'Müştəri' : nameController.text.trim();
+                final reviewerName = resolvedName.trim().isEmpty ? 'Müştəri' : resolvedName.trim();
 
                 if (comment.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -214,6 +206,7 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                     'rating': rating,
                     'comment': comment,
                     'reviewerName': reviewerName,
+                    'reviewerPhotoBase64': resolvedPhotoBase64,
                     'reviewerId': currentUser?.uid ?? 'anonymous',
                     'createdAt': FieldValue.serverTimestamp(),
                   });
@@ -1074,6 +1067,24 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                     final revName = (r['reviewerName'] ?? 'Müştəri').toString();
                     final revComment = (r['comment'] ?? '').toString();
                     final revRating = (r['rating'] as num?)?.toInt() ?? 5;
+                    final revId = (r['reviewerId'] ?? '').toString();
+                    final revPhotoB64 = (r['reviewerPhotoBase64'] ?? '').toString();
+                    final directBytes = _decodeB64(revPhotoB64);
+
+                    Widget buildAvatar(Uint8List? bytes) {
+                      return CircleAvatar(
+                        radius: 16,
+                        backgroundColor: const Color(0xFFEFF6FF),
+                        backgroundImage: bytes != null ? MemoryImage(bytes) : null,
+                        child: bytes == null
+                            ? Text(
+                                revName.isNotEmpty ? revName[0].toUpperCase() : 'M',
+                                style: const TextStyle(color: Color(0xFF1769D2), fontWeight: FontWeight.bold, fontSize: 13),
+                              )
+                            : null,
+                      );
+                    }
+
                     return Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
@@ -1087,7 +1098,33 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(revName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    if (directBytes != null)
+                                      buildAvatar(directBytes)
+                                    else if (revId.isNotEmpty && revId != 'anonymous')
+                                      FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                                        future: FirebaseFirestore.instance.collection('users').doc(revId).get(),
+                                        builder: (ctx, uSnap) {
+                                          final fetchedBytes = _decodeB64(uSnap.data?.data()?['photoBase64']?.toString());
+                                          return buildAvatar(fetchedBytes);
+                                        },
+                                      )
+                                    else
+                                      buildAvatar(null),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        revName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                               Row(
                                 children: List.generate(
                                   5,
@@ -1100,7 +1137,7 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 8),
                           Text(revComment, style: const TextStyle(fontSize: 13, color: Color(0xFF334155), height: 1.35)),
                         ],
                       ),

@@ -7385,6 +7385,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     final revName = (r['reviewerName'] ?? 'Müştəri').toString();
                     final revComment = (r['comment'] ?? '').toString();
                     final revRating = (r['rating'] as num?)?.toInt() ?? 5;
+                    final revId = (r['reviewerId'] ?? '').toString();
+                    final revPhotoB64 = (r['reviewerPhotoBase64'] ?? '').toString();
+                    final directBytes = _HomeScreenState._decodeB64(revPhotoB64);
+
+                    Widget buildRevAvatar(Uint8List? bytes) {
+                      return CircleAvatar(
+                        radius: 16,
+                        backgroundColor: const Color(0xFFEFF6FF),
+                        backgroundImage: bytes != null ? MemoryImage(bytes) : null,
+                        child: bytes == null
+                            ? Text(
+                                revName.isNotEmpty ? revName[0].toUpperCase() : 'M',
+                                style: const TextStyle(color: Color(0xFF1769D2), fontWeight: FontWeight.bold, fontSize: 13),
+                              )
+                            : null,
+                      );
+                    }
+
                     return Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
@@ -7398,19 +7416,32 @@ class _HomeScreenState extends State<HomeScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 13,
-                                    backgroundColor: const Color(0xFFEFF6FF),
-                                    child: Text(
-                                      revName.isNotEmpty ? revName[0].toUpperCase() : 'M',
-                                      style: const TextStyle(color: Color(0xFF1769D2), fontWeight: FontWeight.bold, fontSize: 11.5),
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    if (directBytes != null)
+                                      buildRevAvatar(directBytes)
+                                    else if (revId.isNotEmpty && revId != 'anonymous')
+                                      FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                                        future: FirebaseFirestore.instance.collection('users').doc(revId).get(),
+                                        builder: (ctx, uSnap) {
+                                          final fetchedBytes = _HomeScreenState._decodeB64(uSnap.data?.data()?['photoBase64']?.toString());
+                                          return buildRevAvatar(fetchedBytes);
+                                        },
+                                      )
+                                    else
+                                      buildRevAvatar(null),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        revName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(revName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
-                                ],
+                                  ],
+                                ),
                               ),
                               Row(
                                 children: List.generate(
@@ -7424,7 +7455,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 8),
                           Text(revComment, style: const TextStyle(fontSize: 13, color: Color(0xFF334155), height: 1.35)),
                         ],
                       ),
