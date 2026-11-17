@@ -158,8 +158,10 @@ service cloud.firestore {
       match /reviews/{reviewId} {
         allow read: if true;
         allow create: if signedIn()
-          && request.auth.uid != get(/databases/$(database)/documents/market_stores/$(docId)).data.ownerId
-          && request.auth.uid != get(/databases/$(database)/documents/market_stores/$(docId)).data.userId
+          && (!('ownerId' in get(/databases/$(database)/documents/market_stores/$(docId)).data) ||
+              request.auth.uid != get(/databases/$(database)/documents/market_stores/$(docId)).data.ownerId)
+          && (!('userId' in get(/databases/$(database)/documents/market_stores/$(docId)).data) ||
+              request.auth.uid != get(/databases/$(database)/documents/market_stores/$(docId)).data.userId)
           && request.resource.data.reviewerId == request.auth.uid
           && request.resource.data.rating is number
           && request.resource.data.rating >= 1
@@ -168,8 +170,10 @@ service cloud.firestore {
           resource.data.reviewerId == request.auth.uid ||
           isAdmin() ||
           (
-            (get(/databases/$(database)/documents/market_stores/$(docId)).data.ownerId == request.auth.uid ||
-             get(/databases/$(database)/documents/market_stores/$(docId)).data.userId == request.auth.uid) &&
+            (('ownerId' in get(/databases/$(database)/documents/market_stores/$(docId)).data &&
+              get(/databases/$(database)/documents/market_stores/$(docId)).data.ownerId == request.auth.uid) ||
+             ('userId' in get(/databases/$(database)/documents/market_stores/$(docId)).data &&
+              get(/databases/$(database)/documents/market_stores/$(docId)).data.userId == request.auth.uid)) &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerReply', 'repliedAt'])
           )
         );

@@ -35,9 +35,10 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passController.text,
       );
       if (mounted) {
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const HomeScreen()),
+          (route) => false,
         );
       }
     } catch (e) {
@@ -62,9 +63,10 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final cred = await _authService.signInWithGoogle();
       if (cred != null && mounted) {
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const HomeScreen()),
+          (route) => false,
         );
       }
     } catch (e) {
