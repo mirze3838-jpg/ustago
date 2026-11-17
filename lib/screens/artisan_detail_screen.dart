@@ -946,7 +946,7 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => ShortsScreen(targetUserId: uId, initialShortId: item['id']?.toString()),
+                          builder: (_) => ShortsScreen(targetUserId: uId),
                         ),
                       );
                     } else if (imgB64 != null && imgB64.isNotEmpty) {

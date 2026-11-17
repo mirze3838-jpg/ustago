@@ -3163,7 +3163,10 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          border: Border.all(
+            color: prod['isVip'] == true ? const Color(0xFFFBBF24) : const Color(0xFFE2E8F0),
+            width: prod['isVip'] == true ? 1.5 : 1.0,
+          ),
           boxShadow: [
             BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 7, offset: const Offset(0, 3)),
           ],

@@ -128,7 +128,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
               const SizedBox(height: 14),
               Text(
-                alreadyVip ? '👑 Bu Elan Artıq VIP-dir' : '👑 Elanı VIP Et (İndi Pulsuz)',
+                alreadyVip ? 'Bu Elan Artıq VIP-dir' : 'Elanı VIP Et (İndi Pulsuz)',
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
               ),
               const SizedBox(height: 6),
@@ -225,7 +225,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
               const SizedBox(height: 14),
               const Text(
-                '📈 Elanı İrəli Çək (İndi Pulsuz)',
+                'Elanı İrəli Çək (İndi Pulsuz)',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
               ),
               const SizedBox(height: 6),
@@ -369,7 +369,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final String adNumber = '${docId.hashCode.abs() % 9000000 + 1000000}';
 
     // Tarix
-    String formattedDate = '17.Nov.2026';
+    String formattedDate = '17.11.2026';
     int daysLeft = 30;
     bool isExpired = false;
     if (_prod['createdAt'] is Timestamp) {
@@ -486,8 +486,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
                   if (isVip)
                     Positioned(
-                      top: 60,
-                      left: 16,
+                      bottom: 12,
+                      left: 14,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
