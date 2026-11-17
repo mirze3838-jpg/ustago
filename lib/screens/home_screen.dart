@@ -912,13 +912,36 @@ class _HomeScreenState extends State<HomeScreen> {
                   final normQ = CategoryCityService.normalizeAz(rawQuery);
                   final matchingLocations = CategoryCityService.searchLocations(rawQuery);
                   final docs = (uSnap.data ?? _latestUstaSnapshot)?.docs ?? [];
+                  final sc = CategoryCityService.normalizeAz(_selectedCity);
+                  final sv = CategoryCityService.normalizeAz(_selectedVillage);
+                  final String selectedLocLabel = _selectedVillage.isNotEmpty ? '$_selectedCity, $_selectedVillage' : _selectedCity;
+
                   final matchingUstas = docs.where((d) {
                     final data = d.data();
                     final city = CategoryCityService.normalizeAz((data['city'] ?? '').toString());
+                    final district = CategoryCityService.normalizeAz((data['district'] ?? '').toString());
+                    final address = CategoryCityService.normalizeAz((data['address'] ?? '').toString());
+                    final fullLoc = '$city $district $address';
+
+                    // Seçilmiş bölgəyə (Şəhər / Kənd) görə filtr
+                    if (sc.isNotEmpty && sc != 'hamisi') {
+                      if (!fullLoc.contains(sc)) return false;
+                      if (sv.isNotEmpty && sv != 'hamisi' && sv != 'butun erazi') {
+                        if (sv == 'merkez') {
+                          if (!fullLoc.contains('merkez') && district.isNotEmpty) return false;
+                        } else if (!fullLoc.contains(sv)) {
+                          return false;
+                        }
+                      }
+                    }
+
                     final name = CategoryCityService.normalizeAz((data['fullName'] ?? '').toString());
                     final cat = CategoryCityService.normalizeAz((data['category'] ?? '').toString());
+                    final specs = (data['specialties'] is List)
+                        ? CategoryCityService.normalizeAz((data['specialties'] as List).join(' '))
+                        : '';
                     final bio = CategoryCityService.normalizeAz((data['bio'] ?? '').toString());
-                    return city.contains(normQ) || name.contains(normQ) || cat.contains(normQ) || bio.contains(normQ);
+                    return fullLoc.contains(normQ) || name.contains(normQ) || cat.contains(normQ) || specs.contains(normQ) || bio.contains(normQ);
                   }).map((d) {
                     final m = Map<String, dynamic>.from(d.data());
                     m['id'] = d.id;
@@ -926,20 +949,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     return m;
                   }).toList();
 
-                  // Seçilmiş şəhər və kəndi axtarış nəticələrində üst sırada göstər
-                  final sc = CategoryCityService.normalizeAz(_selectedCity);
-                  final sv = CategoryCityService.normalizeAz(_selectedVillage);
                   matchingUstas.sort((a, b) {
-                    final aCity = CategoryCityService.normalizeAz((a['city'] ?? '').toString());
-                    final bCity = CategoryCityService.normalizeAz((b['city'] ?? '').toString());
-                    if (sv.isNotEmpty) {
-                      final aV = aCity.contains(sv);
-                      final bV = bCity.contains(sv);
-                      if (aV != bV) return aV ? -1 : 1;
-                    }
-                    final aCityMatch = aCity.contains(sc);
-                    final bCityMatch = bCity.contains(sc);
-                    if (aCityMatch != bCityMatch) return aCityMatch ? -1 : 1;
                     final double aRat = (a['rating'] is num) ? (a['rating'] as num).toDouble() : 0.0;
                     final double bRat = (b['rating'] is num) ? (b['rating'] as num).toDouble() : 0.0;
                     return bRat.compareTo(aRat);
@@ -1032,19 +1042,43 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Center(
                             child: Column(
                               children: [
-                                Icon(Icons.search_off_rounded, color: Colors.grey.shade400, size: 36),
+                                Icon(Icons.location_off_outlined, color: Colors.orange.shade400, size: 36),
                                 const SizedBox(height: 6),
                                 Text(
-                                  '"$q" üzrə usta, ərazi və ya kateqoriya tapılmadı',
-                                  style: const TextStyle(color: Colors.grey, fontSize: 13),
+                                  'Axtardığınız "$rawQuery" üzrə "$selectedLocLabel" konumunda usta yoxdur',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Color(0xFF334155), fontSize: 13.5, fontWeight: FontWeight.w600),
                                 ),
-                                const SizedBox(height: 2),
+                                const SizedBox(height: 4),
                                 const Text(
-                                  'Rayon, kənd (məs: Maştağa, Quba, Yasamal) və ya peşə daxil edin',
-                                  style: TextStyle(color: Colors.grey, fontSize: 11),
+                                  'Başqa bölgə seçin və ya fərqli peşə adı daxil edin',
+                                  style: TextStyle(color: Colors.grey, fontSize: 11.5),
                                 ),
                               ],
                             ),
+                          ),
+                        )
+                      else if (matchingUstas.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFFBEB),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFFDE68A)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.location_off_rounded, color: Color(0xFFD97706), size: 22),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Axtardığınız "$rawQuery" üzrə "$selectedLocLabel" konumunda usta yoxdur.',
+                                  style: const TextStyle(color: Color(0xFF92400E), fontSize: 13, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
 
