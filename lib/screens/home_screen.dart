@@ -22,6 +22,7 @@ import 'login_screen.dart';
 import 'register_screen.dart';
 import 'shorts_screen.dart';
 import 'market_screen.dart';
+import 'market_detail_screens.dart';
 import 'artisan_detail_screen.dart';
 import 'category_artisans_screen.dart';
 import '../widgets/add_post_bottom_sheet.dart';
@@ -7482,13 +7483,28 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ] else ...[
                         // Mağaza Kartı
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF5F3FF),
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: const Color(0xFFDDD6FE), width: 1.2),
-                          ),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(18),
+                          onTap: () {
+                            Navigator.push(
+                              rootContext,
+                              MaterialPageRoute(
+                                builder: (_) => StoreDetailScreen(
+                                  store: {
+                                    'id': storeId,
+                                    ...?storeData,
+                                  },
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF5F3FF),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(color: const Color(0xFFDDD6FE), width: 1.2),
+                            ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -7548,6 +7564,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ),
                         ),
+                        )
                         const SizedBox(height: 18),
 
                         // Vitrindəki Məhsullar
@@ -7616,9 +7633,21 @@ class _HomeScreenState extends State<HomeScreen> {
                             final pData = pDoc.data();
                             final imgB64 = pData['imageBase64']?.toString();
                             final imgBytes = _HomeScreenState._decodeB64(imgB64);
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              padding: const EdgeInsets.all(10),
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: () {
+                                Navigator.push(
+                                  rootContext,
+                                  MaterialPageRoute(
+                                    builder: (_) => ProductDetailScreen(
+                                      product: {'id': pDoc.id, ...pData},
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(14),
@@ -7690,8 +7719,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                 ],
                               ),
-                            );
-                          }),
+                            ),
+                          );
+                        }),
                       ],
                     ],
                   ),
@@ -7870,14 +7900,26 @@ class _HomeScreenState extends State<HomeScreen> {
                             final city = (data['city'] ?? '').toString();
                             final phone = (data['phone'] ?? '').toString();
 
-                            return Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
-                                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 1))],
-                              ),
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () {
+                                Navigator.push(
+                                  rootContext,
+                                  MaterialPageRoute(
+                                    builder: (_) => ProductDetailScreen(
+                                      product: {'id': doc.id, ...data},
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 1))],
+                                ),
                               child: Row(
                                 children: [
                                   ClipRRect(
@@ -7954,9 +7996,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                 ],
                               ),
-                            );
-                          },
-                        ),
+                            ),
+                          );
+                        },
+                      ),
                 ),
               ],
             );

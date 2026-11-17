@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import '../services/category_city_service.dart';
 import 'login_screen.dart';
+import 'market_detail_screens.dart';
 
 class MarketScreen extends StatefulWidget {
   final VoidCallback? onBackToHome;
@@ -966,6 +967,7 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
       'category': 'Sement',
       'description': 'Yüksək möhkəmlikli M500 marka tikinti sementi (25 kq kisə). Topdan və pərakəndə.',
       'visualType': 'cement',
+      'isVip': true,
     },
     {
       'sampleId': 'prod_kerpic',
@@ -981,6 +983,7 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
       'category': 'Kərpic',
       'description': 'Yüksək istilik və səs izolyasiyalı qırmızı bişmiş tikinti kərpici.',
       'visualType': 'brick',
+      'isVip': true,
     },
     {
       'sampleId': 'prod_armatur',
@@ -2463,7 +2466,14 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
 
     return InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: () => _showStoreDetailSheet(store),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => StoreDetailScreen(store: store),
+          ),
+        );
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(12),
@@ -2753,6 +2763,145 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
           ),
         ),
 
+        
+        // 2. ★ VIP Elanlar & Elanlar Bölmə Başlığı
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _marketStream,
+          initialData: _latestMarketSnapshot,
+          builder: (context, snapshot) {
+            final docs = (snapshot.data ?? _latestMarketSnapshot)?.docs ?? [];
+            final List<Map<String, dynamic>> allVips = [];
+
+            // Firestore-dakı VIP elanlar
+            for (final d in docs) {
+              final data = d.data();
+              if (data['listingType']?.toString() == 'product' && data['isVip'] == true) {
+                final sName = (data['store']?.toString().isNotEmpty == true)
+                    ? data['store'].toString()
+                    : (data['storeName']?.toString().isNotEmpty == true ? data['storeName'].toString() : 'Mağaza');
+                allVips.add({
+                  'id': d.id,
+                  'ownerId': data['ownerId'] ?? data['userId'],
+                  'userId': data['userId'] ?? data['ownerId'],
+                  'title': data['title'] ?? '',
+                  'unit': data['unit'] ?? '1 ədəd',
+                  'price': data['price'] ?? 'Razılaşma',
+                  'store': sName,
+                  'city': data['city'] ?? 'Bakı',
+                  'category': data['category'] ?? 'Tikinti Materialları',
+                  'description': data['description'] ?? '',
+                  'imageBase64': data['imageBase64'] ?? '',
+                  'isVip': true,
+                  'createdAt': data['createdAt'],
+                });
+              }
+            }
+
+            // Nümunə VIP elanlar əlavə edirik
+            for (final p in _sampleProducts) {
+              if (p['isVip'] == true) {
+                allVips.add(Map<String, dynamic>.from(p));
+              }
+            }
+
+            return SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (allVips.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: const [
+                              Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 22),
+                              SizedBox(width: 6),
+                              Text(
+                                'VIP Elanlar',
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0F172A),
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                            ],
+                          ),
+                          InkWell(
+                            onTap: () {
+                              _tabController.animateTo(0); // Mağazalar tabına keçid
+                            },
+                            child: Row(
+                              children: const [
+                                Icon(Icons.storefront_rounded, size: 16, color: Color(0xFF1769D2)),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Mağazalar',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1769D2),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(
+                      height: 215,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        itemCount: allVips.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 10),
+                        itemBuilder: (context, index) {
+                          final p = allVips[index];
+                          return SizedBox(
+                            width: 155,
+                            child: _buildProductGridCard(p),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // "Elanlar" bölmə başlığı
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Elanlar',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A),
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                        Text(
+                          '${_selectedProductCategory == 'Hamısı' ? 'Bütün məhsullar' : _selectedProductCategory}',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+
         // 2. 2 Sütunlu Məhsul Gridi
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: _marketStream,
@@ -2764,6 +2913,9 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
             for (final d in docs) {
               final data = d.data();
               if (data['listingType']?.toString() == 'product') {
+                final sName = (data['store']?.toString().isNotEmpty == true)
+                    ? data['store'].toString()
+                    : (data['storeName']?.toString().isNotEmpty == true ? data['storeName'].toString() : 'Mağaza');
                 firestoreProducts.add({
                   'id': d.id,
                   'ownerId': data['ownerId'] ?? data['userId'],
@@ -2771,9 +2923,8 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                   'title': data['title'] ?? '',
                   'unit': (data['unit']?.toString().isNotEmpty == true) ? data['unit'].toString() : '1 ədəd',
                   'price': (data['price']?.toString().isNotEmpty == true) ? data['price'].toString() : 'Razılaşma',
-                  'store': (data['storeName']?.toString().isNotEmpty == true)
-                      ? data['storeName'].toString()
-                      : (data['address']?.toString().isNotEmpty == true ? data['address'].toString() : 'Mağaza'),
+                  'store': sName,
+                  'storeName': sName,
                   'city': (data['city']?.toString().isNotEmpty == true) ? data['city'].toString() : 'Bakı',
                   'address': data['address'] ?? '',
                   'phone': data['phone'] ?? '',
@@ -2781,6 +2932,11 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                   'category': data['category'] ?? 'Tikinti Materialları',
                   'description': data['description'] ?? '',
                   'imageBase64': data['imageBase64'] ?? '',
+                  'isVip': data['isVip'] == true,
+                  'vipUntil': data['vipUntil'],
+                  'bumpedAt': data['bumpedAt'],
+                  'createdAt': data['createdAt'],
+                  'views': data['views'] ?? 48,
                 });
               }
             }
@@ -2812,6 +2968,17 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
               );
               return hay.contains(q);
             }).toList();
+
+            // VIP və İrəli çəkilmiş elanları ən önə qaldırırıq
+            filtered.sort((a, b) {
+              if (a['isVip'] == true && b['isVip'] != true) return -1;
+              if (b['isVip'] == true && a['isVip'] != true) return 1;
+              final ta = a['bumpedAt'] ?? a['createdAt'];
+              final tb = b['bumpedAt'] ?? b['createdAt'];
+              final ma = ta is Timestamp ? ta.millisecondsSinceEpoch : 0;
+              final mb = tb is Timestamp ? tb.millisecondsSinceEpoch : 0;
+              return mb.compareTo(ma);
+            });
 
             if (filtered.isEmpty) {
               return const SliverToBoxAdapter(
@@ -2952,7 +3119,14 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
 
     return InkWell(
       borderRadius: BorderRadius.circular(14),
-      onTap: () => _showProductDetailSheet(prod),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ProductDetailScreen(product: prod),
+          ),
+        );
+      },
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -2975,6 +3149,7 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
                     child: _buildProductVisual(prod),
                   ),
+                  // Üst-sağ Seçilmişlər düyməsi
                   Positioned(
                     top: 6,
                     right: 6,
@@ -3002,6 +3177,39 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                       ),
                     ),
                   ),
+
+                  // Alt-sol "Mağaza" nişanı (Nümunə Şəkil 1-ə tam uyğun)
+                  if ((prod['store'] ?? prod['storeName'] ?? '').toString().isNotEmpty)
+                    Positioned(
+                      bottom: 6,
+                      left: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1769D2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'Mağaza',
+                          style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+
+                  // Alt-sağ VIP Ulduz nişanı (Nümunə Şəkil 1 & 2-yə tam uyğun)
+                  if (prod['isVip'] == true)
+                    Positioned(
+                      bottom: 6,
+                      right: 6,
+                      child: Container(
+                        padding: const EdgeInsets.all(3.5),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF1769D2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.star_rounded, size: 13, color: Colors.white),
+                      ),
+                    ),
                   if (isOwner)
                     Positioned(
                       top: 6,
@@ -3062,14 +3270,44 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                     const Spacer(),
                     Row(
                       children: [
-                        const Icon(Icons.storefront_rounded, size: 11.5, color: Color(0xFF64748B)),
-                        const SizedBox(width: 3),
                         Expanded(
-                          child: Text(
-                            prod['store']?.toString() ?? '',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 10.5, color: Color(0xFF64748B)),
+                          child: InkWell(
+                            onTap: () {
+                              final sName = (prod['store'] ?? prod['storeName'] ?? 'Mağaza').toString();
+                              final sOwner = (prod['ownerId'] ?? prod['userId'] ?? '').toString();
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => StoreDetailScreen(
+                                    store: {
+                                      'title': sName,
+                                      'ownerId': sOwner,
+                                      'userId': sOwner,
+                                      'phone': prod['phone'] ?? '',
+                                      'whatsapp': prod['whatsapp'] ?? prod['phone'] ?? '',
+                                      'address': prod['address'] ?? prod['city'] ?? 'Bakı',
+                                      'city': prod['city'] ?? 'Bakı',
+                                      'category': prod['category'] ?? 'Tikinti Materialları',
+                                      'description': 'Bu mağazanın aktiv məhsul və elanları.',
+                                    },
+                                  ),
+                                ),
+                              );
+                            },
+                            child: Row(
+                              children: [
+                                const Icon(Icons.storefront_rounded, size: 11.5, color: Color(0xFF1769D2)),
+                                const SizedBox(width: 3),
+                                Expanded(
+                                  child: Text(
+                                    prod['store']?.toString() ?? '',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 10.5, color: Color(0xFF1769D2), fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                         const SizedBox(width: 4),
