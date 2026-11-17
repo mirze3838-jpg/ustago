@@ -438,41 +438,45 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
     required String label,
     required VoidCallback onTap,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: SizedBox(
-          width: 68,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(2.5),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(40),
+      child: Container(
+        width: 74,
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(2.5),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: borderColor, width: 1.8),
+              ),
+              child: Container(
+                width: 50,
+                height: 50,
                 decoration: BoxDecoration(
+                  color: bgColor,
                   shape: BoxShape.circle,
-                  border: Border.all(color: borderColor, width: 2),
                 ),
-                child: CircleAvatar(
-                  radius: 25,
-                  backgroundColor: bgColor,
-                  child: Icon(icon, color: iconColor, size: 24),
-                ),
+                child: Icon(icon, color: iconColor, size: 22),
               ),
-              const SizedBox(height: 6),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1E293B),
-                ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 11,
+                color: Color(0xFF334155),
+                fontWeight: FontWeight.w600,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
