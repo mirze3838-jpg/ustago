@@ -635,7 +635,8 @@ class MarketScreen extends StatefulWidget {
                           }
                         });
                       },
-                    ),
+                    );
+                    }),
                     const SizedBox(height: 12),
                   ],
 
