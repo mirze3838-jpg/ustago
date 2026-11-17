@@ -97,14 +97,24 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
     }
   }
 
-  void _showAddReviewDialog(String artisanUid, String artisanName) {
+  Future<void> _showAddReviewDialog(String artisanUid, String artisanName) async {
     int rating = 5;
     final commentController = TextEditingController();
     final nameController = TextEditingController();
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
-      nameController.text = currentUser.displayName ?? currentUser.email?.split('@').first ?? 'Müştəri';
+      String resolvedName = currentUser.displayName ?? currentUser.email?.split('@').first ?? 'Müştəri';
+      try {
+        final uDoc = await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get();
+        final uData = uDoc.data();
+        if (uData != null) {
+          final fn = (uData['fullName'] ?? uData['name'] ?? '').toString().trim();
+          if (fn.isNotEmpty) resolvedName = fn;
+        }
+      } catch (_) {}
+      nameController.text = resolvedName;
     }
+    if (!mounted) return;
 
     showDialog(
       context: context,
