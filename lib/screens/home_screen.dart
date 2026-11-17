@@ -7645,6 +7645,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             final pData = pDoc.data();
                             final imgB64 = pData['imageBase64']?.toString();
                             final imgBytes = _HomeScreenState._decodeB64(imgB64);
+                            int pDaysLeft = 30;
+                            bool pIsExpired = false;
+                            if (pData['createdAt'] is Timestamp) {
+                              final dt = (pData['createdAt'] as Timestamp).toDate();
+                              final passed = DateTime.now().difference(dt).inDays;
+                              pDaysLeft = (30 - passed).clamp(0, 30);
+                              pIsExpired = passed >= 30;
+                            }
                             return InkWell(
                               borderRadius: BorderRadius.circular(14),
                               onTap: () {
@@ -7715,10 +7723,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        if (isExpired)
+                                        if (pIsExpired)
                                           InkWell(
                                             onTap: () async {
-                                              await FirebaseFirestore.instance.collection('market_stores').doc(doc.id).update({
+                                              await FirebaseFirestore.instance.collection('market_stores').doc(pDoc.id).update({
                                                 'createdAt': FieldValue.serverTimestamp(),
                                                 'bumpedAt': FieldValue.serverTimestamp(),
                                               });
@@ -8045,6 +8053,27 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
+                                        if (isExpired)
+                                          InkWell(
+                                            onTap: () async {
+                                              await FirebaseFirestore.instance.collection('market_stores').doc(doc.id).update({
+                                                'createdAt': FieldValue.serverTimestamp(),
+                                                'bumpedAt': FieldValue.serverTimestamp(),
+                                              });
+                                              ScaffoldMessenger.of(rootContext).showSnackBar(
+                                                const SnackBar(content: Text('Elanın müddəti 30 gün uzadıldı! 🚀')),
+                                              );
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                              margin: const EdgeInsets.only(right: 4),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF10B981),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: const Text('🔄 Uzat', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                            ),
+                                          ),
                                         IconButton(
                                           icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF1769D2)),
                                           onPressed: () {
