@@ -8272,10 +8272,30 @@ class _HomeScreenState extends State<HomeScreen> {
                                           'Əlaqə: ${storeData?['phone'] ?? ''}',
                                           style: const TextStyle(fontSize: 12, color: Color(0xFF10B981), fontWeight: FontWeight.w600),
                                         ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Icon(Icons.visibility_outlined, size: 13, color: Colors.grey.shade600),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '${(storeData?['views'] is num) ? (storeData!['views'] as num).toInt() : 0} baxış',
+                                              style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            const Icon(Icons.star_rounded, size: 14, color: Color(0xFFF59E0B)),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              ((storeData?['rating'] is num) && (storeData!['rating'] as num) > 0)
+                                                  ? '${(storeData['rating'] as num).toDouble().toStringAsFixed(1)} (${storeData['reviewCount'] ?? 0} rəy)'
+                                                  : 'Yeni (${storeData?['reviewCount'] ?? 0} rəy)',
+                                              style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+                                            ),
+                                          ],
+                                        ),
                                       ],
                                     ),
                                   ),
-                                  if (isOwner)
+                                  if (isOwner) ...[
                                     IconButton(
                                       icon: const Icon(Icons.edit_outlined, color: Color(0xFF8B5CF6), size: 20),
                                       tooltip: 'Mağazanı Redaktə Et',
@@ -8288,6 +8308,37 @@ class _HomeScreenState extends State<HomeScreen> {
                                         );
                                       },
                                     ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
+                                      tooltip: 'Mağazanı Sil',
+                                      onPressed: () async {
+                                        final confirm = await showDialog<bool>(
+                                          context: modalCtx,
+                                          builder: (c) => AlertDialog(
+                                            title: const Text('Mağazanı Sil'),
+                                            content: const Text('Bu mağazanı silmək istədiyinizə əminsiniz?'),
+                                            actions: [
+                                              TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Ləğv et')),
+                                              ElevatedButton(
+                                                style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                                                onPressed: () => Navigator.pop(c, true),
+                                                child: const Text('Sil'),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                        if (confirm == true && storeId.isNotEmpty) {
+                                          await FirebaseFirestore.instance.collection('market_stores').doc(storeId).delete();
+                                          if (modalCtx.mounted) Navigator.pop(modalCtx);
+                                          if (rootContext.mounted) {
+                                            ScaffoldMessenger.of(rootContext)..clearSnackBars()..showSnackBar(
+                                              const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Mağazanız silindi.')),
+                                            );
+                                          }
+                                        }
+                                      },
+                                    ),
+                                  ],
                                 ],
                               ),
                               if ((storeData?['description'] ?? '').toString().isNotEmpty) ...[
@@ -8495,6 +8546,115 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           );
                         }),
+                      ],
+                      if (storeId.isNotEmpty) ...[
+                        const SizedBox(height: 18),
+                        const Text(
+                          'Mağaza Rəyləri',
+                          style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                        ),
+                        const SizedBox(height: 8),
+                        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                          stream: FirebaseFirestore.instance
+                              .collection('market_stores')
+                              .doc(storeId)
+                              .collection('reviews')
+                              .orderBy('createdAt', descending: true)
+                              .snapshots(),
+                          builder: (context, revSnap) {
+                            final revs = revSnap.data?.docs ?? [];
+                            if (revs.isEmpty) {
+                              return Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: const Text(
+                                  'Hələlik mağazanıza rəy yazılmayıb.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
+                                ),
+                              );
+                            }
+                            return Column(
+                              children: revs.map((rDoc) {
+                                final rData = rDoc.data();
+                                final int stars = (rData['rating'] is num) ? (rData['rating'] as num).toInt() : 5;
+                                final String rName = (rData['reviewerName'] ?? 'Müştəri').toString();
+                                final String rComment = (rData['comment'] ?? '').toString();
+                                final String ownerReply = (rData['ownerReply'] ?? '').toString();
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(child: Text(rName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                                          ...List.generate(5, (s) => Icon(s < stars ? Icons.star_rounded : Icons.star_border_rounded, size: 13, color: Colors.amber)),
+                                          if (isOwner)
+                                            TextButton(
+                                              onPressed: () async {
+                                                final replyCtrl = TextEditingController(text: ownerReply);
+                                                await showDialog<void>(
+                                                  context: modalCtx,
+                                                  builder: (c) => AlertDialog(
+                                                    title: const Text('Rəyə Cavab Yaz', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                                                    content: TextField(
+                                                      controller: replyCtrl,
+                                                      maxLines: 3,
+                                                      decoration: const InputDecoration(hintText: 'Müştəriyə cavabınız...', border: OutlineInputBorder()),
+                                                    ),
+                                                    actions: [
+                                                      TextButton(onPressed: () => Navigator.pop(c), child: const Text('Ləğv et')),
+                                                      ElevatedButton(
+                                                        onPressed: () async {
+                                                          final txt = replyCtrl.text.trim();
+                                                          if (txt.isEmpty) return;
+                                                          Navigator.pop(c);
+                                                          await rDoc.reference.update({
+                                                            'ownerReply': txt,
+                                                            'repliedAt': FieldValue.serverTimestamp(),
+                                                          });
+                                                        },
+                                                        child: const Text('Göndər'),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                                replyCtrl.dispose();
+                                              },
+                                              child: Text(ownerReply.isEmpty ? 'Cavab yaz' : 'Düzəlt', style: const TextStyle(fontSize: 11.5)),
+                                            ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(rComment, style: const TextStyle(fontSize: 12.5, color: Color(0xFF334155))),
+                                      if (ownerReply.isNotEmpty) ...[
+                                        const SizedBox(height: 6),
+                                        Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(8)),
+                                          child: Text('Cavabınız: $ownerReply', style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B))),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            );
+                          },
+                        ),
                       ],
                     ],
                   ),
@@ -8767,6 +8927,24 @@ class _HomeScreenState extends State<HomeScreen> {
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                               ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Icon(Icons.visibility_outlined, size: 12.5, color: Colors.grey.shade600),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              '${(data['views'] is num) ? (data['views'] as num).toInt() : 0} baxış',
+                                              style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            const Icon(Icons.favorite_rounded, size: 12.5, color: Color(0xFFEF4444)),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              '${(data['likesCount'] is num) ? (data['likesCount'] as num).toInt() : 0} bəyənmə',
+                                              style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
                                             ),
                                           ],
                                         ),

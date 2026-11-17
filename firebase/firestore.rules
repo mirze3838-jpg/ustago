@@ -135,9 +135,46 @@ service cloud.firestore {
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']) &&
           request.resource.data.views is int &&
           (!('views' in resource.data) && request.resource.data.views == 1 ||
-            resource.data.views is int && request.resource.data.views == resource.data.views + 1))
+            resource.data.views is int && request.resource.data.views == resource.data.views + 1)) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount']) &&
+          request.resource.data.likesCount is int &&
+          request.resource.data.likesCount >= 0 &&
+          (!('likesCount' in resource.data) && request.resource.data.likesCount == 1 ||
+            resource.data.likesCount is int && (
+              request.resource.data.likesCount == resource.data.likesCount + 1 ||
+              request.resource.data.likesCount == resource.data.likesCount - 1
+            ))) ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'reviewCount'])
       );
       allow delete: if signedIn() && (resource.data.ownerId == request.auth.uid || resource.data.userId == request.auth.uid || isAdmin());
+
+      // Elan bəyənmələri alt-kolleksiyası
+      match /likes/{userId} {
+        allow read: if true;
+        allow write: if signedIn() && request.auth.uid == userId;
+      }
+
+      // Mağaza rəyləri alt-kolleksiyası (Mağaza sahibi silə bilməz, yalnız cavab yaza bilər)
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create: if signedIn()
+          && request.auth.uid != get(/databases/$(database)/documents/market_stores/$(docId)).data.ownerId
+          && request.auth.uid != get(/databases/$(database)/documents/market_stores/$(docId)).data.userId
+          && request.resource.data.reviewerId == request.auth.uid
+          && request.resource.data.rating is number
+          && request.resource.data.rating >= 1
+          && request.resource.data.rating <= 5;
+        allow update: if signedIn() && (
+          resource.data.reviewerId == request.auth.uid ||
+          isAdmin() ||
+          (
+            (get(/databases/$(database)/documents/market_stores/$(docId)).data.ownerId == request.auth.uid ||
+             get(/databases/$(database)/documents/market_stores/$(docId)).data.userId == request.auth.uid) &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerReply', 'repliedAt'])
+          )
+        );
+        allow delete: if signedIn() && (resource.data.reviewerId == request.auth.uid || isAdmin());
+      }
     }
 
     // ŞİKAYƏT VƏ MODERASİYA SİSTEMİ

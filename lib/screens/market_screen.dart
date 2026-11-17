@@ -44,6 +44,119 @@ class MarketScreen extends StatefulWidget {
 
   static Uint8List? decodeB64(String? b64) => _MarketScreenState._decodeB64(b64);
 
+  static Widget _buildMultiImagePicker({
+    required BuildContext context,
+    required String title,
+    required List<String> images,
+    required VoidCallback onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155))),
+            Text(
+              '${images.length} / 10 şəkil',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: images.length >= 10 ? Colors.orange : const Color(0xFF1769D2),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 100,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: images.length < 10 ? images.length + 1 : 10,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (_, idx) {
+              if (idx == images.length && images.length < 10) {
+                return InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () async {
+                    try {
+                      final pickedList = await ImagePicker().pickMultiImage(
+                        maxWidth: 720,
+                        maxHeight: 720,
+                        imageQuality: 60,
+                      );
+                      if (pickedList.isEmpty) return;
+                      final remaining = 10 - images.length;
+                      for (final p in pickedList.take(remaining)) {
+                        final bytes = await p.readAsBytes();
+                        images.add(base64Encode(bytes));
+                      }
+                      if (pickedList.length > remaining && context.mounted) {
+                        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                          const SnackBar(duration: Duration(milliseconds: 1500), content: Text('Maksimum 10 şəkil yükləmək mümkündür.')),
+                        );
+                      }
+                      onChanged();
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                          SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Şəkil seçilmədi: $e')),
+                        );
+                      }
+                    }
+                  },
+                  child: Container(
+                    width: 96,
+                    height: 96,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.add_photo_alternate_outlined, size: 26, color: Color(0xFF1769D2)),
+                        SizedBox(height: 4),
+                        Text('Şəkil əlavə et', style: TextStyle(fontSize: 10.5, color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              final bytes = decodeB64(images[idx]);
+              return Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: bytes != null
+                        ? Image.memory(bytes, width: 96, height: 96, fit: BoxFit.cover)
+                        : Container(width: 96, height: 96, color: const Color(0xFFE2E8F0)),
+                  ),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: InkWell(
+                      onTap: () {
+                        images.removeAt(idx);
+                        onChanged();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                        child: const Icon(Icons.close, color: Colors.white, size: 13),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   static Future<void> showStoreFormSheet(
     BuildContext context, {
     Map<String, dynamic>? existingStore,
@@ -102,6 +215,15 @@ class MarketScreen extends StatefulWidget {
     String? logoBase64 = existingStore?['logoBase64']?.toString();
     String? logoUrl = existingStore?['logoUrl']?.toString();
     Uint8List? rawPickedLogoBytes;
+    final List<String> storeImages = <String>[];
+    if (existingStore?['images'] is List) {
+      for (final img in (existingStore!['images'] as List)) {
+        final s = img?.toString() ?? '';
+        if (s.isNotEmpty && storeImages.length < 10) storeImages.add(s);
+      }
+    } else if ((existingStore?['imageBase64']?.toString() ?? '').isNotEmpty) {
+      storeImages.add(existingStore!['imageBase64'].toString());
+    }
     bool isSaving = false;
 
     if (!context.mounted) return;
@@ -180,6 +302,13 @@ class MarketScreen extends StatefulWidget {
                               ),
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 14),
+                  _buildMultiImagePicker(
+                    context: context,
+                    title: 'Mağaza Şəkilləri (Maks. 10)',
+                    images: storeImages,
+                    onChanged: () => setModalState(() {}),
                   ),
                   const SizedBox(height: 14),
 
@@ -311,6 +440,8 @@ class MarketScreen extends StatefulWidget {
                                 'address': address,
                                 'description': descCtrl.text.trim(),
                                 'logoBase64': logoBase64,
+                                'images': storeImages,
+                                'imageBase64': storeImages.isNotEmpty ? storeImages.first : '',
                                 'ownerId': user.uid,
                                 'userId': user.uid,
                                 'userEmail': user.email ?? '',
@@ -323,6 +454,9 @@ class MarketScreen extends StatefulWidget {
                                       .doc(existingStore['id'].toString())
                                       .set(payload, SetOptions(merge: true));
                                 } else {
+                                  payload['views'] = 0;
+                                  payload['rating'] = 0.0;
+                                  payload['reviewCount'] = 0;
                                   payload['createdAt'] = FieldValue.serverTimestamp();
                                   await FirebaseFirestore.instance.collection('market_stores').add(payload);
                                 }
@@ -438,7 +572,16 @@ class MarketScreen extends StatefulWidget {
         (myStores.isNotEmpty ? (myStores.first['city']?.toString() ?? 'Bakı') : 'Bakı');
     if (!CategoryCityService.defaultCities.contains(selectedCity)) selectedCity = 'Bakı';
 
-    String? imageBase64 = existingProduct?['imageBase64']?.toString();
+    final List<String> prodImages = <String>[];
+    if (existingProduct?['images'] is List) {
+      for (final img in (existingProduct!['images'] as List)) {
+        final s = img?.toString() ?? '';
+        if (s.isNotEmpty && prodImages.length < 10) prodImages.add(s);
+      }
+    } else if ((existingProduct?['imageBase64']?.toString() ?? '').isNotEmpty) {
+      prodImages.add(existingProduct!['imageBase64'].toString());
+    }
+    String? imageBase64 = prodImages.isNotEmpty ? prodImages.first : existingProduct?['imageBase64']?.toString();
     String? imageUrl = existingProduct?['imageUrl']?.toString();
     Uint8List? rawPickedImageBytes;
     bool isSaving = false;
@@ -477,51 +620,13 @@ class MarketScreen extends StatefulWidget {
                   ),
                   const SizedBox(height: 8),
 
-                  Center(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: () async {
-                        try {
-                          final picked = await ImagePicker().pickImage(
-                            source: ImageSource.gallery,
-                            maxWidth: 800,
-                            maxHeight: 800,
-                            imageQuality: 70,
-                          );
-                          if (picked != null) {
-                            final bytes = await picked.readAsBytes();
-                            rawPickedImageBytes = bytes;
-                            setModalState(() => imageBase64 = base64Encode(bytes));
-                          }
-                        } catch (e) {
-                          ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
-                            SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Şəkil seçilmədi: $e')),
-                          );
-                        }
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        height: 130,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
-                        ),
-                        child: imgBytes != null
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(14),
-                                child: Image.memory(imgBytes, fit: BoxFit.cover),
-                              )
-                            : Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: const [
-                                  Icon(Icons.add_photo_alternate_outlined, size: 34, color: Color(0xFF1769D2)),
-                                  SizedBox(height: 6),
-                                  Text('Məhsulun Şəklini Əlavə Et', style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
-                                ],
-                              ),
-                      ),
-                    ),
+                  _buildMultiImagePicker(
+                    context: context,
+                    title: 'Məhsul Şəkilləri (Maks. 10)',
+                    images: prodImages,
+                    onChanged: () => setModalState(() {
+                      imageBase64 = prodImages.isNotEmpty ? prodImages.first : '';
+                    }),
                   ),
                   const SizedBox(height: 14),
 
@@ -701,6 +806,17 @@ class MarketScreen extends StatefulWidget {
                               }
 
                               setModalState(() => isSaving = true);
+                              final chosenStoreTitle = storeNameCtrl.text.trim();
+                              String chosenStoreId = '';
+                              if (chosenStoreTitle.isNotEmpty) {
+                                final matchStore = myStores.firstWhere(
+                                  (s) => (s['title']?.toString() ?? '') == chosenStoreTitle,
+                                  orElse: () => <String, dynamic>{},
+                                );
+                                chosenStoreId = matchStore['id']?.toString() ?? '';
+                              }
+                              final bool isIndividual = chosenStoreTitle.isEmpty;
+
                               final payload = <String, dynamic>{
                                 'listingType': 'product',
                                 'title': title,
@@ -708,12 +824,16 @@ class MarketScreen extends StatefulWidget {
                                 'unit': unitCtrl.text.trim().isNotEmpty ? unitCtrl.text.trim() : '1 ədəd',
                                 'category': selectedCat,
                                 'city': selectedCity,
-                                'store': storeNameCtrl.text.trim(),
+                                'store': isIndividual ? '' : chosenStoreTitle,
+                                'storeName': isIndividual ? '' : chosenStoreTitle,
+                                'storeId': isIndividual ? '' : chosenStoreId,
+                                'isIndividual': isIndividual,
                                 'phone': phone,
                                 'whatsapp': whatsappCtrl.text.trim().isNotEmpty ? whatsappCtrl.text.trim() : phone,
                                 'address': address,
                                 'description': descCtrl.text.trim(),
-                                'imageBase64': imageBase64,
+                                'images': prodImages,
+                                'imageBase64': prodImages.isNotEmpty ? prodImages.first : (imageBase64 ?? ''),
                                 'ownerId': user.uid,
                                 'userId': user.uid,
                                 'userEmail': user.email ?? '',
@@ -726,6 +846,8 @@ class MarketScreen extends StatefulWidget {
                                       .doc(existingProduct['id'].toString())
                                       .set(payload, SetOptions(merge: true));
                                 } else {
+                                  payload['views'] = 0;
+                                  payload['likesCount'] = 0;
                                   payload['createdAt'] = FieldValue.serverTimestamp();
                                   await FirebaseFirestore.instance.collection('market_stores').add(payload);
                                 }
@@ -1371,9 +1493,13 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                       final bool isStore = (data['listingType']?.toString() ?? 'store') == 'store';
                       final String title = data['title']?.toString() ?? '';
                       final String storeLabel = (data['store'] ?? data['storeName'] ?? '').toString();
+                      final int viewsVal = (data['views'] is num) ? (data['views'] as num).toInt() : 0;
+                      final int likesVal = (data['likesCount'] is num) ? (data['likesCount'] as num).toInt() : 0;
+                      final double storeRating = (data['rating'] is num) ? (data['rating'] as num).toDouble() : 0.0;
+                      final int storeReviews = (data['reviewCount'] is num) ? (data['reviewCount'] as num).toInt() : 0;
                       final String subtitle = isStore
-                          ? '${data['category'] ?? ''} • ${data['address'] ?? ''}'
-                          : '${data['price'] ?? ''} (${data['unit'] ?? '1 ədəd'}) • $storeLabel';
+                          ? '${data['category'] ?? ''} • 👁 $viewsVal baxış • ★ ${storeRating > 0 ? storeRating.toStringAsFixed(1) : 'Yeni'} ($storeReviews)'
+                          : '${data['price'] ?? ''} • 👁 $viewsVal baxış • ❤️ $likesVal bəyənmə${storeLabel.isNotEmpty ? ' • $storeLabel' : ''}';
 
                       return InkWell(
                         borderRadius: BorderRadius.circular(14),
@@ -2496,8 +2622,8 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
             store['userId'] == currentUser.uid ||
             _currentUserRole == 'admin');
 
-    final double ratingVal = (store['rating'] is num) ? (store['rating'] as num).toDouble() : 4.8;
-    final int reviews = (store['reviewCount'] is num) ? (store['reviewCount'] as num).toInt() : 12;
+    final double ratingVal = (store['rating'] is num) ? (store['rating'] as num).toDouble() : 0.0;
+    final int reviews = (store['reviewCount'] is num) ? (store['reviewCount'] as num).toInt() : 0;
     final String phone = store['phone']?.toString() ?? '';
     final String whatsapp = (store['whatsapp']?.toString().isNotEmpty == true) ? store['whatsapp'].toString() : phone;
 
@@ -2975,13 +3101,17 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                   'whatsapp': data['whatsapp'] ?? data['phone'] ?? '',
                   'category': data['category'] ?? 'Tikinti Materialları',
                   'description': data['description'] ?? '',
+                  'images': data['images'] ?? const [],
                   'imageBase64': data['imageBase64'] ?? '',
                   'imageUrl': data['imageUrl'] ?? '',
+                  'storeId': data['storeId'] ?? '',
+                  'isIndividual': data['isIndividual'] == true,
                   'isVip': isVipActive(data),
                   'vipUntil': data['vipUntil'],
                   'bumpedAt': data['bumpedAt'],
                   'createdAt': data['createdAt'],
-                  'views': data['views'] ?? 48,
+                  'views': data['views'] ?? 0,
+                  'likesCount': data['likesCount'] ?? 0,
                 });
               }
             }
@@ -3221,14 +3351,33 @@ class _MarketScreenState extends State<MarketScreen> with SingleTickerProviderSt
                     top: 6,
                     right: 6,
                     child: InkWell(
-                      onTap: () {
+                      onTap: () async {
+                        final willLike = !isFav;
                         setState(() {
-                          if (isFav) {
-                            _favoriteIds.remove(favKey);
-                          } else {
+                          if (willLike) {
                             _favoriteIds.add(favKey);
+                          } else {
+                            _favoriteIds.remove(favKey);
                           }
                         });
+                        if (docId != null && currentUser != null) {
+                          final prodRef = FirebaseFirestore.instance.collection('market_stores').doc(docId);
+                          final likeRef = prodRef.collection('likes').doc(currentUser.uid);
+                          try {
+                            await FirebaseFirestore.instance.runTransaction((tx) async {
+                              final likeSnap = await tx.get(likeRef);
+                              final prodSnap = await tx.get(prodRef);
+                              final curLikes = (prodSnap.data()?['likesCount'] as num?)?.toInt() ?? 0;
+                              if (willLike && !likeSnap.exists) {
+                                tx.set(likeRef, {'userId': currentUser.uid, 'createdAt': FieldValue.serverTimestamp()});
+                                tx.update(prodRef, {'likesCount': curLikes + 1});
+                              } else if (!willLike && likeSnap.exists) {
+                                tx.delete(likeRef);
+                                tx.update(prodRef, {'likesCount': curLikes > 0 ? curLikes - 1 : 0});
+                              }
+                            });
+                          } catch (_) {}
+                        }
                       },
                       child: Container(
                         padding: const EdgeInsets.all(5),

@@ -77,6 +77,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   late Map<String, dynamic> _prod;
   bool _isFavorite = false;
   int _viewsCount = 0;
+  int _currentImgIndex = 0;
   bool _isDescriptionExpanded = false;
 
   @override
@@ -85,12 +86,53 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     _prod = Map<String, dynamic>.from(widget.product);
     _viewsCount = (_prod['views'] is int)
         ? _prod['views'] as int
-        : int.tryParse(_prod['views']?.toString() ?? '') ?? 42;
+        : int.tryParse(_prod['views']?.toString() ?? '') ?? 0;
 
     _incrementViewCount();
+    _loadLikeState();
+  }
+
+  Future<void> _loadLikeState() async {
+    final docId = _prod['id']?.toString();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (docId == null || docId.isEmpty || uid == null) return;
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('market_stores')
+          .doc(docId)
+          .collection('likes')
+          .doc(uid)
+          .get();
+      if (mounted) setState(() => _isFavorite = doc.exists);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleLike() async {
+    final willLike = !_isFavorite;
+    setState(() => _isFavorite = willLike);
+    final docId = _prod['id']?.toString();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (docId == null || docId.isEmpty || uid == null) return;
+    final prodRef = FirebaseFirestore.instance.collection('market_stores').doc(docId);
+    final likeRef = prodRef.collection('likes').doc(uid);
+    try {
+      await FirebaseFirestore.instance.runTransaction((tx) async {
+        final likeSnap = await tx.get(likeRef);
+        final prodSnap = await tx.get(prodRef);
+        final curLikes = (prodSnap.data()?['likesCount'] as num?)?.toInt() ?? 0;
+        if (willLike && !likeSnap.exists) {
+          tx.set(likeRef, {'userId': uid, 'createdAt': FieldValue.serverTimestamp()});
+          tx.update(prodRef, {'likesCount': curLikes + 1});
+        } else if (!willLike && likeSnap.exists) {
+          tx.delete(likeRef);
+          tx.update(prodRef, {'likesCount': curLikes > 0 ? curLikes - 1 : 0});
+        }
+      });
+    } catch (_) {}
   }
 
   void _incrementViewCount() {
+    if (_isOwner) return;
     final docId = _prod['id']?.toString();
     if (docId != null && docId.isNotEmpty) {
       FirebaseFirestore.instance
@@ -276,7 +318,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       color: _isFavorite ? const Color(0xFFEF4444) : const Color(0xFF0F172A),
                       size: 20,
                     ),
-                    onPressed: () => setState(() => _isFavorite = !_isFavorite),
+                    onPressed: _toggleLike,
                   ),
                 ),
               ),
@@ -292,53 +334,71 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
             ],
             flexibleSpace: FlexibleSpaceBar(
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if ((_prod['imageUrl'] ?? '').toString().startsWith('http'))
-                    Image.network(
-                      _prod['imageUrl'].toString(),
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => imgBytes != null
-                          ? Image.memory(imgBytes, fit: BoxFit.cover)
-                          : const SizedBox.shrink(),
-                    )
-                  else if (imgBytes != null)
-                    Image.memory(imgBytes, fit: BoxFit.cover)
-                  else
-                    Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Color(0xFF1E3A8A), Color(0xFF1769D2)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.inventory_2_rounded, size: 68, color: Colors.white70),
-                            const SizedBox(height: 8),
-                            Text(category, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      ),
-                    ),
+              background: Builder(builder: (_) {
+                final List<Uint8List> gallery = [];
+                if (_prod['images'] is List) {
+                  for (final raw in (_prod['images'] as List)) {
+                    final b = decodeBase64Safe(raw?.toString());
+                    if (b != null) gallery.add(b);
+                  }
+                }
+                if (gallery.isEmpty && imgBytes != null) {
+                  gallery.add(imgBytes);
+                }
+                final int totalImgs = gallery.isNotEmpty ? gallery.length : 1;
 
-                  // Şəkil sayı və VIP indikatoru
-                  Positioned(
-                    bottom: 12,
-                    right: 14,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.65),
-                        borderRadius: BorderRadius.circular(16),
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if ((_prod['imageUrl'] ?? '').toString().startsWith('http') && gallery.isEmpty)
+                      Image.network(
+                        _prod['imageUrl'].toString(),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      )
+                    else if (gallery.isNotEmpty)
+                      PageView.builder(
+                        itemCount: gallery.length,
+                        onPageChanged: (idx) => setState(() => _currentImgIndex = idx),
+                        itemBuilder: (_, idx) => Image.memory(gallery[idx], fit: BoxFit.cover),
+                      )
+                    else
+                      Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Color(0xFF1E3A8A), Color(0xFF1769D2)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.inventory_2_rounded, size: 68, color: Colors.white70),
+                              const SizedBox(height: 8),
+                              Text(category, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
                       ),
-                      child: const Text('1/1', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+
+                    // Şəkil sayı və VIP indikatoru
+                    Positioned(
+                      bottom: 12,
+                      right: 14,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.65),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          '${(_currentImgIndex + 1).clamp(1, totalImgs)}/$totalImgs',
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ),
-                  ),
 
                   if (isVip)
                     Positioned(
@@ -364,7 +424,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       ),
                     ),
                 ],
-              ),
+              );
+              }),
             ),
           ),
 
@@ -618,7 +679,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
                   const SizedBox(height: 100), // Alt düymələr üçün boşluq
                 ],
-              ),
+              );
+              }),
             ),
           ),
         ],
@@ -709,6 +771,247 @@ class StoreDetailScreen extends StatefulWidget {
 
 class _StoreDetailScreenState extends State<StoreDetailScreen> {
   bool _isDescriptionExpanded = false;
+  int _selectedTab = 0; // 0 = Məhsullar, 1 = Rəylər
+  int _viewsCount = 0;
+
+  bool get _isStoreOwner {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || uid.isEmpty) return false;
+    final owner = (widget.store['ownerId'] ?? widget.store['userId'] ?? '').toString();
+    return owner == uid;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _viewsCount = (widget.store['views'] is int)
+        ? widget.store['views'] as int
+        : int.tryParse(widget.store['views']?.toString() ?? '') ?? 0;
+    _incrementStoreViewCount();
+  }
+
+  void _incrementStoreViewCount() {
+    if (_isStoreOwner) return;
+    final storeId = widget.store['id']?.toString() ?? '';
+    if (storeId.isNotEmpty) {
+      FirebaseFirestore.instance
+          .collection('market_stores')
+          .doc(storeId)
+          .update({'views': FieldValue.increment(1)})
+          .catchError((_) {});
+      setState(() => _viewsCount++);
+    }
+  }
+
+  Future<void> _recalculateStoreRating(String storeId) async {
+    if (storeId.isEmpty) return;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('market_stores')
+          .doc(storeId)
+          .collection('reviews')
+          .get();
+      if (snap.docs.isEmpty) {
+        await FirebaseFirestore.instance.collection('market_stores').doc(storeId).update({
+          'rating': 0.0,
+          'reviewCount': 0,
+        });
+        return;
+      }
+      double sum = 0;
+      for (final d in snap.docs) {
+        final r = d.data()['rating'];
+        if (r is num) sum += r.toDouble();
+      }
+      final avg = double.parse((sum / snap.docs.length).toStringAsFixed(1));
+      await FirebaseFirestore.instance.collection('market_stores').doc(storeId).update({
+        'rating': avg,
+        'reviewCount': snap.docs.length,
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _showStoreReviewDialog(
+    String storeId,
+    String storeTitle, {
+    String? existingReviewId,
+    int initialRating = 5,
+    String initialComment = '',
+  }) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Rəy yazmaq üçün əvvəlcə daxil olun')),
+        );
+      }
+      return;
+    }
+    if (_isStoreOwner) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+          const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Öz mağazanıza rəy yaza bilməzsiniz')),
+        );
+      }
+      return;
+    }
+
+    int rating = initialRating;
+    final commentCtrl = TextEditingController(text: initialComment);
+    final isEdit = existingReviewId != null;
+
+    String reviewerName = currentUser.displayName ?? currentUser.email?.split('@').first ?? 'Müştəri';
+    String reviewerPhotoBase64 = '';
+    try {
+      final uDoc = await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get();
+      final uData = uDoc.data();
+      if (uData != null) {
+        final fn = (uData['fullName'] ?? uData['name'] ?? '').toString().trim();
+        if (fn.isNotEmpty) reviewerName = fn;
+        reviewerPhotoBase64 = (uData['photoBase64'] ?? '').toString().trim();
+      }
+    } catch (_) {}
+
+    if (!mounted) {
+      commentCtrl.dispose();
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(isEdit ? 'Rəyi Düzəlt' : '$storeTitle - Rəy yaz', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (i) => IconButton(
+                    icon: Icon(i < rating ? Icons.star_rounded : Icons.star_border_rounded, color: Colors.amber, size: 32),
+                    onPressed: () => setDlgState(() => rating = i + 1),
+                  )),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: commentCtrl,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    labelText: 'Rəyiniz',
+                    hintText: 'Mağaza və xidmət haqqında fikriniz...',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Ləğv et')),
+            ElevatedButton(
+              onPressed: () async {
+                final text = commentCtrl.text.trim();
+                if (text.isEmpty) return;
+                Navigator.pop(ctx);
+                final reviewsRef = FirebaseFirestore.instance
+                    .collection('market_stores')
+                    .doc(storeId)
+                    .collection('reviews');
+                try {
+                  if (isEdit) {
+                    await reviewsRef.doc(existingReviewId).update({
+                      'rating': rating,
+                      'comment': text,
+                      'updatedAt': FieldValue.serverTimestamp(),
+                    });
+                  } else {
+                    await reviewsRef.add({
+                      'rating': rating,
+                      'comment': text,
+                      'reviewerName': reviewerName,
+                      'reviewerPhotoBase64': reviewerPhotoBase64,
+                      'reviewerId': currentUser.uid,
+                      'createdAt': FieldValue.serverTimestamp(),
+                    });
+                  }
+                  await _recalculateStoreRating(storeId);
+                  if (mounted) {
+                    setState(() => _selectedTab = 1);
+                    ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                      SnackBar(duration: const Duration(milliseconds: 1300), content: Text(isEdit ? 'Rəyiniz yeniləndi!' : 'Rəyiniz əlavə edildi!'), backgroundColor: Colors.green),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                      SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              },
+              child: Text(isEdit ? 'Yadda saxla' : 'Göndər'),
+            ),
+          ],
+        ),
+      ),
+    );
+    commentCtrl.dispose();
+  }
+
+  Future<void> _showOwnerReplyDialog(String storeId, String reviewId, String initialReply) async {
+    final replyCtrl = TextEditingController(text: initialReply);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Rəyə Cavab Yaz', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: replyCtrl,
+          maxLines: 3,
+          decoration: InputDecoration(
+            labelText: 'Mağaza cavabı',
+            hintText: 'Müştəriyə cavabınızı yazın...',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Ləğv et')),
+          ElevatedButton(
+            onPressed: () async {
+              final text = replyCtrl.text.trim();
+              if (text.isEmpty) return;
+              Navigator.pop(ctx);
+              try {
+                await FirebaseFirestore.instance
+                    .collection('market_stores')
+                    .doc(storeId)
+                    .collection('reviews')
+                    .doc(reviewId)
+                    .update({
+                  'ownerReply': text,
+                  'repliedAt': FieldValue.serverTimestamp(),
+                });
+                if (mounted) {
+                  ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                    const SnackBar(duration: Duration(milliseconds: 1300), content: Text('Cavabınız əlavə edildi!'), backgroundColor: Colors.green),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context)..clearSnackBars()..showSnackBar(
+                    SnackBar(duration: const Duration(milliseconds: 1300), content: Text('Xəta: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            child: const Text('Göndər'),
+          ),
+        ],
+      ),
+    );
+    replyCtrl.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -794,21 +1097,74 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
                               title,
                               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                             ),
-                            const SizedBox(height: 8),
-                            SizedBox(
-                              height: 36,
-                              child: ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF1769D2),
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  elevation: 0,
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Icon(Icons.visibility_outlined, size: 14, color: Colors.grey.shade600),
+                                const SizedBox(width: 4),
+                                Text('$_viewsCount baxış', style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
+                                const SizedBox(width: 12),
+                                const Icon(Icons.star_rounded, size: 15, color: Color(0xFFF59E0B)),
+                                const SizedBox(width: 3),
+                                Text(
+                                  ((store['rating'] is num) && (store['rating'] as num) > 0)
+                                      ? '${(store['rating'] as num).toDouble().toStringAsFixed(1)} (${store['reviewCount'] ?? 0} rəy)'
+                                      : 'Yeni (${store['reviewCount'] ?? 0} rəy)',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
                                 ),
-                                icon: const Icon(Icons.phone_rounded, size: 16),
-                                label: const Text('Zəng et', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
-                                onPressed: () => makePhoneCall(phone),
-                              ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              children: [
+                                SizedBox(
+                                  height: 34,
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF1769D2),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                                    ),
+                                    icon: const Icon(Icons.phone_rounded, size: 15),
+                                    label: const Text('Zəng et', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                                    onPressed: () => makePhoneCall(phone),
+                                  ),
+                                ),
+                                SizedBox(
+                                  height: 34,
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF10B981),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                                    ),
+                                    icon: const Icon(Icons.chat_rounded, size: 15),
+                                    label: const Text('WhatsApp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                                    onPressed: () => openWhatsApp(whatsapp, text: 'Salam, UstaGo-dakı $title mağazanız barədə yazıram.'),
+                                  ),
+                                ),
+                                if (!_isStoreOwner && (store['id']?.toString().isNotEmpty == true))
+                                  SizedBox(
+                                    height: 34,
+                                    child: OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: const Color(0xFFD97706),
+                                        side: const BorderSide(color: Color(0xFFF59E0B)),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                                      ),
+                                      icon: const Icon(Icons.star_outline_rounded, size: 15),
+                                      label: const Text('Rəy yaz', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                                      onPressed: () => _showStoreReviewDialog(store['id'].toString(), title),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ],
                         ),
@@ -854,21 +1210,223 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
                     ),
                   ],
 
+                  // Mağaza qalereya şəkilləri (əgər varsa)
+                  if (store['images'] is List && (store['images'] as List).isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 92,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: (store['images'] as List).length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (_, idx) {
+                          final b = decodeBase64Safe((store['images'] as List)[idx]?.toString());
+                          if (b == null) return const SizedBox.shrink();
+                          return ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.memory(b, width: 120, height: 92, fit: BoxFit.cover),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+
                   const SizedBox(height: 16),
                   const Divider(height: 1),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
 
-                  // Başlıq: "İstifadəçinin bütün elanları"
-                  const Text(
-                    'İstifadəçinin bütün elanları',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                  // Tablar: Məhsullar və Rəylər
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setState(() => _selectedTab = 0),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _selectedTab == 0 ? const Color(0xFF1769D2) : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'Mağazanın elanları',
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: _selectedTab == 0 ? Colors.white : const Color(0xFF475569),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setState(() => _selectedTab = 1),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _selectedTab == 1 ? const Color(0xFF1769D2) : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'Rəylər (${store['reviewCount'] ?? 0})',
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: _selectedTab == 1 ? Colors.white : const Color(0xFF475569),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           ),
 
-          // 2. 2 Sütunlu Məhsul Gridi (Canlı Firestore datası)
+          // 2. Seçilmiş Tab Məzmunu: Məhsullar və ya Mağaza Rəyləri
+          if (_selectedTab == 1)
+            SliverToBoxAdapter(
+              child: (store['id']?.toString().isNotEmpty != true)
+                  ? const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(child: Text('Bu nümunə mağaza üçün rəylər aktiv deyil.')),
+                    )
+                  : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                      stream: FirebaseFirestore.instance
+                          .collection('market_stores')
+                          .doc(store['id'].toString())
+                          .collection('reviews')
+                          .orderBy('createdAt', descending: true)
+                          .snapshots(),
+                      builder: (context, revSnap) {
+                        if (revSnap.connectionState == ConnectionState.waiting && !revSnap.hasData) {
+                          return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()));
+                        }
+                        final revs = revSnap.data?.docs ?? [];
+                        if (revs.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.all(28),
+                            child: Column(
+                              children: [
+                                Icon(Icons.rate_review_outlined, size: 48, color: Colors.grey.shade400),
+                                const SizedBox(height: 8),
+                                const Text('Hələlik bu mağazaya rəy yazılmayıb.', style: TextStyle(color: Color(0xFF64748B))),
+                              ],
+                            ),
+                          );
+                        }
+                        final curUid = FirebaseAuth.instance.currentUser?.uid;
+                        return ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(14),
+                          itemCount: revs.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 10),
+                          itemBuilder: (_, idx) {
+                            final rDoc = revs[idx];
+                            final rData = rDoc.data();
+                            final int stars = (rData['rating'] is num) ? (rData['rating'] as num).toInt() : 5;
+                            final String rName = (rData['reviewerName'] ?? 'Müştəri').toString();
+                            final String rComment = (rData['comment'] ?? '').toString();
+                            final String ownerReply = (rData['ownerReply'] ?? '').toString();
+                            final bool isMyReview = curUid != null && rData['reviewerId'] == curUid;
+                            final photoBytes = decodeBase64Safe(rData['reviewerPhotoBase64']?.toString());
+
+                            return Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 18,
+                                        backgroundColor: const Color(0xFFEFF6FF),
+                                        backgroundImage: photoBytes != null ? MemoryImage(photoBytes) : null,
+                                        child: photoBytes == null ? Text(rName.isNotEmpty ? rName[0].toUpperCase() : 'M', style: const TextStyle(color: Color(0xFF1769D2), fontWeight: FontWeight.bold)) : null,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(rName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
+                                            Row(
+                                              children: List.generate(5, (s) => Icon(s < stars ? Icons.star_rounded : Icons.star_border_rounded, size: 14, color: Colors.amber)),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (isMyReview) ...[
+                                        IconButton(
+                                          icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF1769D2)),
+                                          onPressed: () => _showStoreReviewDialog(
+                                            store['id'].toString(),
+                                            title,
+                                            existingReviewId: rDoc.id,
+                                            initialRating: stars,
+                                            initialComment: rComment,
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                                          onPressed: () async {
+                                            await rDoc.reference.delete();
+                                            await _recalculateStoreRating(store['id'].toString());
+                                          },
+                                        ),
+                                      ] else if (_isStoreOwner)
+                                        TextButton.icon(
+                                          icon: const Icon(Icons.reply_rounded, size: 16),
+                                          label: Text(ownerReply.isEmpty ? 'Cavab yaz' : 'Cavabı düzəlt', style: const TextStyle(fontSize: 12)),
+                                          onPressed: () => _showOwnerReplyDialog(store['id'].toString(), rDoc.id, ownerReply),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(rComment, style: const TextStyle(fontSize: 13, color: Color(0xFF334155), height: 1.35)),
+                                  if (ownerReply.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF1F5F9),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('$title (Mağaza cavabı):', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF1769D2))),
+                                          const SizedBox(height: 2),
+                                          Text(ownerReply, style: const TextStyle(fontSize: 12.5, color: Color(0xFF1E293B))),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+            )
+          else
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: FirebaseFirestore.instance
                 .collection('market_stores')
@@ -883,16 +1441,20 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
               for (final d in allDocs) {
                 final data = d.data();
                 final isProduct = data['listingType'] == 'product';
+                // Fərdi Elan (Mağazasız) HEÇ VAXT mağazanın içinə düşməməlidir!
+                if (data['isIndividual'] == true) continue;
                 final docStoreId = data['storeId']?.toString() ?? '';
+                final docStoreName = (data['store'] ?? data['storeName'] ?? '').toString().trim();
+                if (docStoreId.isEmpty && docStoreName.isEmpty) continue;
+
                 final isMatchStoreId = storeId.isNotEmpty && docStoreId.isNotEmpty && docStoreId == storeId;
-                final isMatchOwner = docStoreId.isEmpty && ownerId.isNotEmpty && (data['ownerId'] == ownerId || data['userId'] == ownerId);
-                final isMatchStoreName = docStoreId.isEmpty && title.isNotEmpty && (data['store'] == title || data['storeName'] == title);
+                final isMatchStoreName = docStoreId.isEmpty && title.isNotEmpty && docStoreName == title;
 
                 final createdTs = data['createdAt'];
                 final isExpired = createdTs is Timestamp &&
                     DateTime.now().difference(createdTs.toDate()).inDays >= 30;
 
-                if (isProduct && !isExpired && (isMatchStoreId || isMatchOwner || isMatchStoreName)) {
+                if (isProduct && !isExpired && (isMatchStoreId || isMatchStoreName)) {
                   storeProducts.add({'id': d.id, ...data});
                 }
               }
