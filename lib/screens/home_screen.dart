@@ -7323,6 +7323,121 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  Widget _buildOwnProfileReviewsTab(String userId, String ratingStr) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('reviews')
+          .orderBy('createdAt', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final docs = snapshot.data?.docs ?? [];
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.star_rounded, color: Colors.amber, size: 34),
+                    const SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$ratingStr / 5.0',
+                          style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                        ),
+                        Text(
+                          'Ümumi ${docs.length} müştəri rəyi',
+                          style: const TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (docs.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 28),
+                  child: Text(
+                    'Hələlik sizin haqqınızda rəy yazılmayıb.',
+                    style: TextStyle(color: Color(0xFF64748B), fontSize: 13.5),
+                  ),
+                )
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: docs.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (context, idx) {
+                    final r = docs[idx].data();
+                    final revName = (r['reviewerName'] ?? 'Müştəri').toString();
+                    final revComment = (r['comment'] ?? '').toString();
+                    final revRating = (r['rating'] as num?)?.toInt() ?? 5;
+                    return Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 13,
+                                    backgroundColor: const Color(0xFFEFF6FF),
+                                    child: Text(
+                                      revName.isNotEmpty ? revName[0].toUpperCase() : 'M',
+                                      style: const TextStyle(color: Color(0xFF1769D2), fontWeight: FontWeight.bold, fontSize: 11.5),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(revName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
+                                ],
+                              ),
+                              Row(
+                                children: List.generate(
+                                  5,
+                                  (i) => Icon(
+                                    i < revRating ? Icons.star_rounded : Icons.star_border_rounded,
+                                    color: Colors.amber,
+                                    size: 16,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(revComment, style: const TextStyle(fontSize: 13, color: Color(0xFF334155), height: 1.35)),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   /// Ustanın ixtisasına uyğun peşəkar xidmət teqləri (seçilmiş maksimum 4 ixtisas əsasında)
   List<Widget> _buildServiceChips(String category, Map<String, dynamic>? userData) {
     List<String> rawSkills = [];
