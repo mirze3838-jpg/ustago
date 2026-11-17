@@ -7564,8 +7564,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ),
                         ),
-                        )
-                        const SizedBox(height: 18),
+                      ),
+                      const SizedBox(height: 18),
 
                         // Vitrindəki Məhsullar
                         Row(
