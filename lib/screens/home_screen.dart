@@ -30,6 +30,7 @@ import '../services/tiktok_service.dart';
 import '../widgets/tiktok_embed_view.dart';
 
 class HomeScreen extends StatefulWidget {
+  static void Function(int)? onSwitchTab;
   final int initialTabIndex;
   const HomeScreen({super.key, this.initialTabIndex = 0});
 
@@ -92,6 +93,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _currentIndex = widget.initialTabIndex;
+    HomeScreen.onSwitchTab = (int idx) {
+      if (mounted) {
+        setState(() => _currentIndex = idx);
+      }
+    };
     _unreadNotifications = _authService.currentUser != null ? 3 : 0;
     _shortsStream = FirebaseFirestore.instance
         .collection('shorts')

@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/category_city_service.dart';
 import 'shorts_screen.dart';
 import 'market_detail_screens.dart';
+import 'home_screen.dart';
 
 class ArtisanDetailScreen extends StatefulWidget {
   final Map<String, dynamic> artisanData;
@@ -1812,6 +1813,64 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
             ],
           );
         },
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: 5,
+          onTap: (idx) {
+            Navigator.of(context).popUntil((route) => route.isFirst);
+            HomeScreen.onSwitchTab?.call(idx);
+          },
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.white,
+          selectedItemColor: const Color(0xFF1769D2),
+          unselectedItemColor: const Color(0xFF94A3B8),
+          selectedFontSize: 10.5,
+          unselectedFontSize: 10,
+          elevation: 0,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_outlined),
+              activeIcon: Icon(Icons.home_filled),
+              label: 'Ana səhifə',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.play_circle_outline),
+              activeIcon: Icon(Icons.play_circle_fill),
+              label: 'Shorts',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.storefront_outlined),
+              activeIcon: Icon(Icons.storefront_rounded),
+              label: 'Alış-Satış',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.map_outlined),
+              activeIcon: Icon(Icons.map_rounded),
+              label: 'Xəritə',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.chat_bubble_outline),
+              activeIcon: Icon(Icons.chat_bubble),
+              label: 'Mesajlar',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline),
+              activeIcon: Icon(Icons.person),
+              label: 'Profil',
+            ),
+          ],
+        ),
       ),
     );
   }
