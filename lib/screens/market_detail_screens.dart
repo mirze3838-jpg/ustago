@@ -679,8 +679,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
                   const SizedBox(height: 100), // Alt düymələr üçün boşluq
                 ],
-              );
-              }),
+              ),
             ),
           ),
         ],

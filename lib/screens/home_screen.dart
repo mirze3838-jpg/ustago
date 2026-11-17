@@ -8327,7 +8327,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                             ],
                                           ),
                                         );
-                                        if (confirm == true && storeId.isNotEmpty) {
+                                        if (confirm == true && storeId != null && storeId.isNotEmpty) {
                                           await FirebaseFirestore.instance.collection('market_stores').doc(storeId).delete();
                                           if (modalCtx.mounted) Navigator.pop(modalCtx);
                                           if (rootContext.mounted) {
@@ -8547,7 +8547,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         }),
                       ],
-                      if (storeId.isNotEmpty) ...[
+                      if (storeId != null && storeId.isNotEmpty) ...[
                         const SizedBox(height: 18),
                         const Text(
                           'Mağaza Rəyləri',
