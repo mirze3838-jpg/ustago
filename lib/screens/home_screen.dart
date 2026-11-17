@@ -6966,11 +6966,18 @@ class _HomeScreenState extends State<HomeScreen> {
                                       icon: Icons.play_circle_outline_rounded,
                                       iconColor: const Color(0xFFFE2C55),
                                     ),
-                                    _buildUstaStatItem(
-                                      count: cleanRating,
-                                      label: 'reytinq',
-                                      icon: Icons.star_rounded,
-                                      iconColor: const Color(0xFFF59E0B),
+                                    InkWell(
+                                      onTap: () => setState(() => _ustaProfileGalleryTab = 1),
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        child: _buildUstaStatItem(
+                                          count: cleanRating,
+                                          label: 'reytinq',
+                                          icon: Icons.star_rounded,
+                                          iconColor: const Color(0xFFF59E0B),
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 );
@@ -7209,32 +7216,104 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
-                // Instagram Üslubunda Tək Şəbəkə (Grid) İndikatoru
-                Container(
-                  margin: const EdgeInsets.only(top: 8),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    border: Border(
-                      top: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
-                      bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
-                    ),
-                  ),
-                  child: const Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 10),
-                      child: Icon(
-                        Icons.grid_on_rounded,
-                        color: Color(0xFF0F172A),
-                        size: 24,
+                // İşlər və Müştəri Rəyləri Tabları
+                StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance.collection('users').doc(user.uid).collection('reviews').snapshots(),
+                  builder: (context, revCountSnap) {
+                    final int revCount = revCountSnap.data?.docs.length ?? 0;
+                    return Container(
+                      margin: const EdgeInsets.only(top: 8),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        border: Border(
+                          top: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
+                          bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
+                        ),
                       ),
-                    ),
-                  ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => setState(() => _ustaProfileGalleryTab = 0),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 11),
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: _ustaProfileGalleryTab == 0 ? const Color(0xFF1769D2) : Colors.transparent,
+                                      width: 2.5,
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.grid_on_rounded,
+                                      color: _ustaProfileGalleryTab == 0 ? const Color(0xFF1769D2) : const Color(0xFF64748B),
+                                      size: 19,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'İşlər',
+                                      style: TextStyle(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: _ustaProfileGalleryTab == 0 ? const Color(0xFF1769D2) : const Color(0xFF64748B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => setState(() => _ustaProfileGalleryTab = 1),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 11),
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: _ustaProfileGalleryTab == 1 ? const Color(0xFFF59E0B) : Colors.transparent,
+                                      width: 2.5,
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.star_rounded,
+                                      color: _ustaProfileGalleryTab == 1 ? const Color(0xFFF59E0B) : const Color(0xFF64748B),
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Rəylər ($revCount)',
+                                      style: TextStyle(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: _ustaProfileGalleryTab == 1 ? const Color(0xFFD97706) : const Color(0xFF64748B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
 
                 const SizedBox(height: 6),
 
-                // Vahid Qalereya (Foto və Videolar bir yerdə)
-                _buildUstaUnifiedGrid(user.uid, displayName, userRole),
+                if (_ustaProfileGalleryTab == 0)
+                  _buildUstaUnifiedGrid(user.uid, displayName, userRole)
+                else
+                  _buildOwnProfileReviewsTab(user.uid, rating.replaceAll('★', '').trim()),
 
                 const SizedBox(height: 30),
               ],

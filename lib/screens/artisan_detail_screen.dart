@@ -222,6 +222,7 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                   }, SetOptions(merge: true));
 
                   if (mounted) {
+                    setState(() => _selectedTabIndex = 1);
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Rəyiniz uğurla əlavə edildi! Təşəkkür edirik.'),
@@ -1314,7 +1315,14 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                                       children: [
                                         _buildStatItem(count: '$totalCount', label: 'göndəri', icon: Icons.grid_on_rounded, iconColor: const Color(0xFF1769D2)),
                                         _buildStatItem(count: '$shortCount', label: 'video', icon: Icons.play_circle_outline_rounded, iconColor: const Color(0xFFFE2C55)),
-                                        _buildStatItem(count: cleanRating, label: 'reytinq', icon: Icons.star_rounded, iconColor: const Color(0xFFF59E0B)),
+                                        InkWell(
+                                          onTap: () => setState(() => _selectedTabIndex = 1),
+                                          borderRadius: BorderRadius.circular(10),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            child: _buildStatItem(count: cleanRating, label: 'reytinq', icon: Icons.star_rounded, iconColor: const Color(0xFFF59E0B)),
+                                          ),
+                                        ),
                                       ],
                                     );
                                   },
@@ -1505,62 +1513,98 @@ class _ArtisanDetailScreenState extends State<ArtisanDetailScreen> {
                       ),
                     ),
 
-                    // Tab Bar (Grid vs Rəylər)
-                    Container(
-                      margin: const EdgeInsets.only(top: 6),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        border: Border(
-                          top: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
-                          bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: InkWell(
-                              onTap: () => setState(() => _selectedTabIndex = 0),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 11),
-                                decoration: BoxDecoration(
-                                  border: Border(
-                                    bottom: BorderSide(
-                                      color: _selectedTabIndex == 0 ? const Color(0xFF0F172A) : Colors.transparent,
-                                      width: 2,
+                    // Tab Bar (İşlər vs Rəylər - Aydın yazı və say ilə)
+                    StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                      stream: userId.isNotEmpty
+                          ? FirebaseFirestore.instance.collection('users').doc(userId).collection('reviews').snapshots()
+                          : const Stream.empty(),
+                      builder: (context, revCountSnap) {
+                        final int revCount = revCountSnap.data?.docs.length ?? 0;
+                        return Container(
+                          margin: const EdgeInsets.only(top: 6),
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            border: Border(
+                              top: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
+                              bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () => setState(() => _selectedTabIndex = 0),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 11),
+                                    decoration: BoxDecoration(
+                                      border: Border(
+                                        bottom: BorderSide(
+                                          color: _selectedTabIndex == 0 ? const Color(0xFF1769D2) : Colors.transparent,
+                                          width: 2.5,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.grid_on_rounded,
+                                          color: _selectedTabIndex == 0 ? const Color(0xFF1769D2) : const Color(0xFF64748B),
+                                          size: 19,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'İşlər',
+                                          style: TextStyle(
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.bold,
+                                            color: _selectedTabIndex == 0 ? const Color(0xFF1769D2) : const Color(0xFF64748B),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
-                                child: Icon(
-                                  Icons.grid_on_rounded,
-                                  color: _selectedTabIndex == 0 ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
-                                  size: 22,
-                                ),
                               ),
-                            ),
-                          ),
-                          Expanded(
-                            child: InkWell(
-                              onTap: () => setState(() => _selectedTabIndex = 1),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 11),
-                                decoration: BoxDecoration(
-                                  border: Border(
-                                    bottom: BorderSide(
-                                      color: _selectedTabIndex == 1 ? const Color(0xFF0F172A) : Colors.transparent,
-                                      width: 2,
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () => setState(() => _selectedTabIndex = 1),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 11),
+                                    decoration: BoxDecoration(
+                                      border: Border(
+                                        bottom: BorderSide(
+                                          color: _selectedTabIndex == 1 ? const Color(0xFFF59E0B) : Colors.transparent,
+                                          width: 2.5,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.star_rounded,
+                                          color: _selectedTabIndex == 1 ? const Color(0xFFF59E0B) : const Color(0xFF64748B),
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Rəylər ($revCount)',
+                                          style: TextStyle(
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.bold,
+                                            color: _selectedTabIndex == 1 ? const Color(0xFFD97706) : const Color(0xFF64748B),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
-                                child: Icon(
-                                  Icons.star_outline_rounded,
-                                  color: _selectedTabIndex == 1 ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
-                                  size: 24,
-                                ),
                               ),
-                            ),
+                            ],
                           ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
 
                     const SizedBox(height: 4),
